@@ -1,4 +1,4 @@
-// dot 2.36.0 on Linux 3.16.0-51-generic
+// dot 2.36.0 on Linux 3.16.0-57-generic
 // SchemaSpy rev 590
 digraph "export_task" {
   graph [
@@ -22,6 +22,7 @@ digraph "export_task" {
     <TABLE BORDER="0" CELLBORDER="1" CELLSPACING="0" BGCOLOR="#ffffff">
       <TR><TD COLSPAN="3" BGCOLOR="#9bab96" ALIGN="CENTER">export_task</TD></TR>
       <TR><TD PORT="pk" COLSPAN="3" BGCOLOR="#bed1b8" ALIGN="LEFT">pk</TD></TR>
+      <TR><TD PORT="device_name" COLSPAN="3" BGCOLOR="#f4f7da" ALIGN="LEFT">device_name</TD></TR>
       <TR><TD PORT="exporter_id" COLSPAN="3" BGCOLOR="#f4f7da" ALIGN="LEFT">exporter_id</TD></TR>
       <TR><TD PORT="scheduled_time" COLSPAN="3" BGCOLOR="#f4f7da" ALIGN="LEFT">scheduled_time</TD></TR>
       <TR><TD PORT="series_iuid" COLSPAN="3" BGCOLOR="#f4f7da" ALIGN="LEFT">series_iuid</TD></TR>

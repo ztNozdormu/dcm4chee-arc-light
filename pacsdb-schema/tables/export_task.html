@@ -101,10 +101,21 @@ src="http://pagead2.googlesyndication.com/pagead/show_ads.js">
 </tr>
 </thead>
 <tbody valign='top'>
-<tr class='even'>
+<tr class='odd'>
  <td class='primaryKey' title='Primary Key'>pk</td>
  <td class='detail'>int8</td>
  <td class='detail' align='right'>19</td>
+ <td class='detail' align='center'></td>
+ <td class='detail' align='center'></td>
+ <td class='detail'></td>
+ <td class='detail'></td>
+ <td class='detail'> </td>
+ <td class='comment detail'></td>
+</tr>
+<tr class='even'>
+ <td class='indexedColumn' title='Indexed'>device_name</td>
+ <td class='detail'>varchar</td>
+ <td class='detail' align='right'>255</td>
  <td class='detail' align='center'></td>
  <td class='detail' align='center'></td>
  <td class='detail'></td>
@@ -179,7 +190,7 @@ src="http://pagead2.googlesyndication.com/pagead/show_ads.js">
  <td class='comment detail'></td>
 </tr>
 </table>
-<p title='7 columns'>Table contained 0 rows at Fr Nov 06 23:38 MEZ 2015<p/>
+<p title='8 columns'>Table contained 0 rows at Sat Dec 26 00:22 CET 2015<p/>
 </td></tr></table>
 <div class='indent'>
 <b>Indexes:</b>
@@ -206,10 +217,10 @@ src="http://pagead2.googlesyndication.com/pagead/show_ads.js">
   <td class='constraint' style='text-align:left;'>uk_aoqbyfnen6evu73ltc1osexfr</td>
  </tr>
  <tr>
-  <td class='indexedColumn'>scheduled_time</td>
+  <td class='indexedColumn'>device_name + scheduled_time</td>
   <td class='detail'>Performance</td>
-  <td class='detail' style='text-align:left;'><span title='Ascending'>Asc</span></td>
-  <td class='constraint' style='text-align:left;'>uk_j1t0mj3vlmf5xwt4fs5xida1r</td>
+  <td class='detail' style='text-align:left;'><span title='Ascending'>Asc</span>/<span title='Ascending'>Asc</span></td>
+  <td class='constraint' style='text-align:left;'>uk_cxaqwh62doxvy1itpdi43c681</td>
  </tr>
 </table>
 </div>

@@ -1,5 +1,5 @@
 <?xml version="1.0" encoding="UTF-8" standalone="no"?>
-<database name="pacsdb" schema="public" type="PostgreSQL - 9.3.10">
+<database name="pacsdb" schema="public" type="PostgreSQL - 9.4.5">
    <tables>
       <table name="code" numRows="0" remarks="" schema="public" type="TABLE">
          <column autoUpdated="false" digits="0" id="0" name="pk" nullable="false" remarks="" size="19" type="int8">
@@ -74,12 +74,13 @@
       </table>
       <table name="export_task" numRows="0" remarks="" schema="public" type="TABLE">
          <column autoUpdated="false" digits="0" id="0" name="pk" nullable="false" remarks="" size="19" type="int8"/>
-         <column autoUpdated="false" digits="0" id="1" name="exporter_id" nullable="false" remarks="" size="255" type="varchar"/>
-         <column autoUpdated="false" digits="6" id="2" name="scheduled_time" nullable="false" remarks="" size="29" type="timestamp"/>
-         <column autoUpdated="false" digits="0" id="3" name="series_iuid" nullable="false" remarks="" size="255" type="varchar"/>
-         <column autoUpdated="false" digits="0" id="4" name="sop_iuid" nullable="false" remarks="" size="255" type="varchar"/>
-         <column autoUpdated="false" digits="0" id="5" name="study_iuid" nullable="false" remarks="" size="255" type="varchar"/>
-         <column autoUpdated="false" digits="0" id="6" name="version" nullable="true" remarks="" size="19" type="int8"/>
+         <column autoUpdated="false" digits="0" id="1" name="device_name" nullable="false" remarks="" size="255" type="varchar"/>
+         <column autoUpdated="false" digits="0" id="2" name="exporter_id" nullable="false" remarks="" size="255" type="varchar"/>
+         <column autoUpdated="false" digits="6" id="3" name="scheduled_time" nullable="false" remarks="" size="29" type="timestamp"/>
+         <column autoUpdated="false" digits="0" id="4" name="series_iuid" nullable="false" remarks="" size="255" type="varchar"/>
+         <column autoUpdated="false" digits="0" id="5" name="sop_iuid" nullable="false" remarks="" size="255" type="varchar"/>
+         <column autoUpdated="false" digits="0" id="6" name="study_iuid" nullable="false" remarks="" size="255" type="varchar"/>
+         <column autoUpdated="false" digits="0" id="7" name="version" nullable="true" remarks="" size="19" type="int8"/>
          <primaryKey column="pk" sequenceNumberInPK="1"/>
          <index name="export_task_pkey" unique="true">
             <column ascending="true" name="pk"/>
@@ -90,7 +91,8 @@
             <column ascending="true" name="series_iuid"/>
             <column ascending="true" name="sop_iuid"/>
          </index>
-         <index name="uk_j1t0mj3vlmf5xwt4fs5xida1r" unique="false">
+         <index name="uk_cxaqwh62doxvy1itpdi43c681" unique="false">
+            <column ascending="true" name="device_name"/>
             <column ascending="true" name="scheduled_time"/>
          </index>
       </table>
