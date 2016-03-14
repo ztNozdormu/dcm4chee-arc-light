@@ -218,14 +218,6 @@ public class AuditServiceUtils {
         }
     }
 
-    public static void deleteFile(Path file) {
-        try {
-            Files.delete(file);
-        } catch (IOException e) {
-            LOG.warn("Failed to delete Audit Spool File - {}", file, e);
-        }
-    }
-
     public static class PatientStudyInfo {
         public static final int REMOTE_HOSTNAME = 0;
         public static final int CALLING_AET = 1;
