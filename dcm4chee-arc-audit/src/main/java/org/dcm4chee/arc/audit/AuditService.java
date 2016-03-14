@@ -185,10 +185,9 @@ public class AuditService {
             boolean append = Files.exists(file);
             if (!append)
                 Files.createDirectories(dir);
-            try (BufferedWriter writer = Files.newBufferedWriter(file, StandardCharsets.UTF_8,
-                    StandardOpenOption.APPEND)) {
-                writer.write(new AuditServiceUtils.DeleteInfo(ctx).toString());
-                writer.newLine();
+            try (LineWriter writer = new LineWriter(Files.newBufferedWriter(file, StandardCharsets.UTF_8,
+                    StandardOpenOption.APPEND))) {
+                writer.writeLine(new AuditServiceUtils.DeleteInfo(ctx));
                 HashMap<String, HashSet<String>> sopClassMap = new HashMap<>();
                 for (Attributes studyRef : attrs.getSequence(Tag.CurrentRequestedProcedureEvidenceSequence)) {
                     for (Attributes seriesRef : studyRef.getSequence(Tag.ReferencedSeriesSequence)) {
@@ -204,8 +203,8 @@ public class AuditService {
                     }
                 }
                 for (Map.Entry<String, HashSet<String>> entry : sopClassMap.entrySet()) {
-                    writer.write(new AuditServiceUtils.DeleteStudyInfo(entry.getKey(), String.valueOf(entry.getValue().size())).toString());
-                    writer.newLine();
+                    writer.writeLine(new AuditServiceUtils.DeleteStudyInfo(
+                            entry.getKey(), String.valueOf(entry.getValue().size())));
                 }
             }
             if (!auditAggregate)
@@ -227,10 +226,9 @@ public class AuditService {
             boolean append = Files.exists(file);
             if (!append)
                 Files.createDirectories(dir);
-            try (BufferedWriter writer = Files.newBufferedWriter(file, StandardCharsets.UTF_8,
-                    StandardOpenOption.APPEND)) {
-                writer.write(new AuditServiceUtils.PermanentDeletionInfo(ctx).toString());
-                writer.newLine();
+            try (LineWriter writer = new LineWriter(Files.newBufferedWriter(file, StandardCharsets.UTF_8,
+                    StandardOpenOption.APPEND))) {
+                writer.writeLine(new AuditServiceUtils.PermanentDeletionInfo(ctx));
                 HashMap<String, HashSet<String>> sopClassMap = new HashMap<>();
                 for (org.dcm4chee.arc.entity.Instance i : ctx.getInstances()) {
                     String cuid = i.getSopClassUID();
@@ -242,8 +240,8 @@ public class AuditService {
                     iuids.add(i.getSopInstanceUID());
                 }
                 for (Map.Entry<String, HashSet<String>> entry : sopClassMap.entrySet()) {
-                    writer.write(new AuditServiceUtils.DeleteStudyInfo(entry.getKey(), String.valueOf(entry.getValue().size())).toString());
-                    writer.newLine();
+                    writer.writeLine(new AuditServiceUtils.DeleteStudyInfo(
+                            entry.getKey(), String.valueOf(entry.getValue().size())));
                 }
             }
             if (!auditAggregate)
@@ -346,10 +344,9 @@ public class AuditService {
             boolean append = Files.exists(file);
             if (!append)
                 Files.createDirectories(dir);
-            try (BufferedWriter writer = Files.newBufferedWriter(file, StandardCharsets.UTF_8,
-                    StandardOpenOption.APPEND)) {
-                writer.write(new AuditServiceUtils.ConnectionRejectedInfo(conn, s, e).toString());
-                writer.newLine();
+            try (LineWriter writer = new LineWriter(Files.newBufferedWriter(file, StandardCharsets.UTF_8,
+                    StandardOpenOption.APPEND))) {
+                writer.writeLine(new AuditServiceUtils.ConnectionRejectedInfo(conn, s, e));
             }
             if (!auditAggregate)
                 aggregateAuditMessage(file);
@@ -477,14 +474,12 @@ public class AuditService {
         try {
             if (!append)
                 Files.createDirectories(dir);
-            try (BufferedWriter writer = Files.newBufferedWriter(file, StandardCharsets.UTF_8,
-                    append ? StandardOpenOption.APPEND : StandardOpenOption.CREATE_NEW)) {
+            try (LineWriter writer = new LineWriter(Files.newBufferedWriter(file, StandardCharsets.UTF_8,
+                    append ? StandardOpenOption.APPEND : StandardOpenOption.CREATE_NEW))) {
                 if (!append) {
-                    writer.write(new AuditServiceUtils.PatientStudyInfo(ctx, attrs).toString());
-                    writer.newLine();
+                    writer.writeLine(new AuditServiceUtils.PatientStudyInfo(ctx, attrs));
                 }
-                writer.write(new AuditServiceUtils.InstanceInfo(ctx, attrs).toString());
-                writer.newLine();
+                writer.writeLine(new AuditServiceUtils.InstanceInfo(ctx, attrs));
             }
             if (!auditAggregate)
                 aggregateAuditMessage(file);
@@ -511,14 +506,12 @@ public class AuditService {
         try {
             if (!append)
                 Files.createDirectories(dir);
-            try (BufferedWriter writer = Files.newBufferedWriter(file, StandardCharsets.UTF_8,
-                    append ? StandardOpenOption.APPEND : StandardOpenOption.CREATE_NEW)) {
+            try (LineWriter writer = new LineWriter(Files.newBufferedWriter(file, StandardCharsets.UTF_8,
+                    append ? StandardOpenOption.APPEND : StandardOpenOption.CREATE_NEW))) {
                 if (!append) {
-                    writer.write(new AuditServiceUtils.PatientStudyInfo(ctx, attrs).toString());
-                    writer.newLine();
+                    writer.writeLine(new AuditServiceUtils.PatientStudyInfo(ctx, attrs));
                 }
-                writer.write(new AuditServiceUtils.InstanceInfo(ctx, attrs).toString());
-                writer.newLine();
+                writer.writeLine(new AuditServiceUtils.InstanceInfo(ctx, attrs));
             }
             if (!auditAggregate)
                 aggregateAuditMessage(file);
@@ -615,14 +608,12 @@ public class AuditService {
             boolean append = Files.exists(file);
             if (!append)
                 Files.createDirectories(dir);
-            try (BufferedWriter writer = Files.newBufferedWriter(file, StandardCharsets.UTF_8,
-                    StandardOpenOption.APPEND)) {
-                writer.write(new AuditServiceUtils.RetrieveInfo(ctx).toString());
-                writer.newLine();
+            try (LineWriter writer = new LineWriter(Files.newBufferedWriter(file, StandardCharsets.UTF_8,
+                    StandardOpenOption.APPEND))) {
+                writer.writeLine(new AuditServiceUtils.RetrieveInfo(ctx));
                 for (InstanceLocations il : ctx.getMatches()) {
                     Attributes attrs = il.getAttributes();
-                    writer.write(new AuditServiceUtils.RetrieveStudyInfo(attrs).toString());
-                    writer.newLine();
+                    writer.writeLine(new AuditServiceUtils.RetrieveStudyInfo(attrs));
                 }
             }
             if (!auditAggregate)
