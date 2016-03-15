@@ -296,12 +296,8 @@ public class AuditService {
         AuditServiceUtils.DeleteInfo deleteInfo;
         try (BufferedReader reader = Files.newBufferedReader(path, StandardCharsets.UTF_8)) {
             deleteInfo = new AuditServiceUtils.DeleteInfo(reader.readLine());
-            String altUserID = (deleteInfo.getField(AuditServiceUtils.DeleteInfo.REMOTEAET) != null)
-                                ? AuditMessages.alternativeUserIDForAETitle(
-                                    deleteInfo.getField(AuditServiceUtils.DeleteInfo.REMOTEAET))
-                                : null;
             apList.add(AuditMessages.createActiveParticipant(
-                    deleteInfo.getField(AuditServiceUtils.DeleteInfo.REMOTEHOST), altUserID, null, eventType.isSource,
+                    deleteInfo.getField(AuditServiceUtils.DeleteInfo.REMOTEAET), null, null, eventType.isSource,
                     deleteInfo.getField(AuditServiceUtils.DeleteInfo.REMOTEHOST),
                     AuditMessages.NetworkAccessPointTypeCode.IPAddress, null));
             apList.add(AuditMessages.createActiveParticipant(
@@ -416,12 +412,8 @@ public class AuditService {
         AuditServiceUtils.QueryInfo qrInfo;
         try (InputStream in = new BufferedInputStream(Files.newInputStream(file))) {
             qrInfo = new AuditServiceUtils.QueryInfo(new DataInputStream(in).readUTF());
-            String altUserID = (qrInfo.getField(AuditServiceUtils.QueryInfo.CALLING_AET) != null)
-                    ? AuditMessages.alternativeUserIDForAETitle(
-                    qrInfo.getField(AuditServiceUtils.QueryInfo.CALLING_AET))
-                    : null;
-            apList.add(AuditMessages.createActiveParticipant(qrInfo.getField(AuditServiceUtils.QueryInfo.REMOTE_HOST),
-                    altUserID, null, eventType.isSource, qrInfo.getField(AuditServiceUtils.QueryInfo.REMOTE_HOST),
+            apList.add(AuditMessages.createActiveParticipant(qrInfo.getField(AuditServiceUtils.QueryInfo.CALLING_AET),
+                    null, null, eventType.isSource, qrInfo.getField(AuditServiceUtils.QueryInfo.REMOTE_HOST),
                     AuditMessages.NetworkAccessPointTypeCode.IPAddress, null, eventType.source));
             apList.add(AuditMessages.createActiveParticipant(qrInfo.getField(AuditServiceUtils.QueryInfo.CALLED_AET),
                     AuditLogger.processID(), null, eventType.isDest, getLocalHostName(),
@@ -561,11 +553,8 @@ public class AuditService {
                                                    Calendar eventTime, AuditServiceUtils.EventType eventType, String outcomeDesc) {
         List<ActiveParticipant> apList = new ArrayList<>();
         List<ParticipantObjectIdentification> poiList = new ArrayList<>();
-        String altUserID = (patientStudyInfo.getField(AuditServiceUtils.PatientStudyInfo.CALLING_AET) != null)
-                           ? AuditMessages.alternativeUserIDForAETitle(patientStudyInfo.getField(AuditServiceUtils.PatientStudyInfo.CALLING_AET))
-                            : null;
-        apList.add(AuditMessages.createActiveParticipant(patientStudyInfo.getField(AuditServiceUtils.PatientStudyInfo.REMOTE_HOSTNAME),
-                altUserID, null, eventType.isSource, patientStudyInfo.getField(AuditServiceUtils.PatientStudyInfo.REMOTE_HOSTNAME),
+        apList.add(AuditMessages.createActiveParticipant(patientStudyInfo.getField(AuditServiceUtils.PatientStudyInfo.CALLING_AET),
+                null, null, eventType.isSource, patientStudyInfo.getField(AuditServiceUtils.PatientStudyInfo.REMOTE_HOSTNAME),
                 AuditMessages.NetworkAccessPointTypeCode.IPAddress, null, eventType.source));
         apList.add(AuditMessages.createActiveParticipant(
                 patientStudyInfo.getField(AuditServiceUtils.PatientStudyInfo.CALLED_AET), AuditLogger.processID(),
@@ -639,12 +628,12 @@ public class AuditService {
                     ri.getField(AuditServiceUtils.RetrieveInfo.LOCALAET), AuditLogger.processID(),
                     null, eventType.isSource, getLocalHostName(),
                     AuditMessages.NetworkAccessPointTypeCode.IPAddress, null, eventType.source));
-            apList.add(AuditMessages.createActiveParticipant(ri.getField(AuditServiceUtils.RetrieveInfo.DESTHOST),
-                    AuditMessages.alternativeUserIDForAETitle(ri.getField(AuditServiceUtils.RetrieveInfo.DESTAET)), null, eventType.isDest,
+            apList.add(AuditMessages.createActiveParticipant(ri.getField(AuditServiceUtils.RetrieveInfo.DESTAET),
+                    null, null, eventType.isDest,
                     ri.getField(AuditServiceUtils.RetrieveInfo.DESTNAPID), ri.getField(AuditServiceUtils.RetrieveInfo.DESTNAPCODE), null, eventType.destination));
             if (eventType.isOther)
-                apList.add(AuditMessages.createActiveParticipant(ri.getField(AuditServiceUtils.RetrieveInfo.REQUESTORHOST),
-                        AuditMessages.alternativeUserIDForAETitle(ri.getField(AuditServiceUtils.RetrieveInfo.MOVEAET)), null, eventType.isOther,
+                apList.add(AuditMessages.createActiveParticipant(ri.getField(AuditServiceUtils.RetrieveInfo.MOVEAET),
+                        null, null, eventType.isOther,
                         ri.getField(AuditServiceUtils.RetrieveInfo.REQUESTORHOST), AuditMessages.NetworkAccessPointTypeCode.IPAddress, null));
             String line;
             HashMap<String, AuditServiceUtils.AccessionNumSopClassInfo> study_accNumSOPClassInfo = new HashMap<>();

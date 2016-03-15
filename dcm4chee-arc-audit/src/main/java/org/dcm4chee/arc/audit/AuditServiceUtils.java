@@ -233,9 +233,11 @@ public class AuditServiceUtils {
         public PatientStudyInfo(StoreContext ctx, Attributes attrs) {
             StoreSession session = ctx.getStoreSession();
             String outcome = (null != ctx.getException()) ? ctx.getException().getMessage(): null;
+            String callingAET = ctx.getStoreSession().getCallingAET() != null ? ctx.getStoreSession().getCallingAET()
+                                : ctx.getStoreSession().getRemoteHostName();
             fields = new String[] {
                     session.getRemoteHostName(),
-                    session.getCallingAET(),
+                    callingAET,
                     session.getCalledAET(),
                     ctx.getStudyInstanceUID(),
                     attrs.getString(Tag.AccessionNumber),
@@ -249,7 +251,7 @@ public class AuditServiceUtils {
             String outcome = (null != ctx.getException()) ? ctx.getException().getMessage(): null;
             fields = new String[] {
                     ctx.getHttpRequest().getRemoteAddr(),
-                    null,
+                    ctx.getHttpRequest().getRemoteAddr(),
                     ctx.getLocalAETitle(),
                     ctx.getStudyInstanceUIDs()[0],
                     attrs.getString(Tag.AccessionNumber),
@@ -383,24 +385,21 @@ public class AuditServiceUtils {
 
     public static class RetrieveInfo {
         public static final int LOCALAET = 0;
-        public static final int DESTHOST = 1;
-        public static final int DESTAET = 2;
-        public static final int DESTNAPID = 3;
-        public static final int DESTNAPCODE = 4;
-        public static final int REQUESTORHOST = 5;
-        public static final int MOVEAET = 6;
-        public static final int OUTCOME = 7;
+        public static final int DESTAET = 1;
+        public static final int DESTNAPID = 2;
+        public static final int DESTNAPCODE = 3;
+        public static final int REQUESTORHOST = 4;
+        public static final int MOVEAET = 5;
+        public static final int OUTCOME = 6;
 
         private final String[] fields;
 
         public RetrieveInfo(RetrieveContext ctx) {
             String outcome = (null != ctx.getException()) ? ctx.getException().getMessage() : null;
-            String destHost = (null != ctx.getDestinationHostName()) ? ctx.getDestinationHostName() : ctx.getDestinationAETitle();
             String destNapID = (null != ctx.getDestinationHostName()) ? ctx.getDestinationHostName() : null;
             String destNapCode = (null != ctx.getDestinationHostName()) ? AuditMessages.NetworkAccessPointTypeCode.IPAddress : null;
             fields = new String[] {
                     ctx.getLocalAETitle(),
-                    destHost,
                     ctx.getDestinationAETitle(),
                     destNapID,
                     destNapCode,
@@ -439,10 +438,12 @@ public class AuditServiceUtils {
             String outcomeDesc = (ctx.getException() != null)
                     ? ctx.getRejectionNote().getRejectionNoteCode().getCodeMeaning() + " - " + ctx.getException().getMessage()
                     : ctx.getRejectionNote().getRejectionNoteCode().getCodeMeaning();
+            String callingAET = ctx.getStoreSession().getCallingAET() != null ? ctx.getStoreSession().getCallingAET()
+                               : ctx.getStoreSession().getRemoteHostName();
             fields = new String[]{
                     ctx.getStoreSession().getCalledAET(),
                     ctx.getStoreSession().getRemoteHostName(),
-                    ctx.getStoreSession().getCallingAET(),
+                    callingAET,
                     ctx.getStudyInstanceUID(),
                     ctx.getAttributes().getString(Tag.PatientID, noValue),
                     StringUtils.maskEmpty(ctx.getAttributes().getString(Tag.PatientName), null),
@@ -565,8 +566,9 @@ public class AuditServiceUtils {
                     : null;
             String patientID = (ctx.getQueryKeys() != null && ctx.getQueryKeys().getString(Tag.PatientID) != null)
                     ? ctx.getQueryKeys().getString(Tag.PatientID) : noValue;
+            String callingAET = ctx.getCallingAET() != null ? ctx.getCallingAET() : ctx.getRemoteHostName();
             fields = new String[] {
-                    ctx.getCallingAET(),
+                    callingAET,
                     ctx.getRemoteHostName(),
                     ctx.getCalledAET(),
                     ctx.getSOPClassUID(),
