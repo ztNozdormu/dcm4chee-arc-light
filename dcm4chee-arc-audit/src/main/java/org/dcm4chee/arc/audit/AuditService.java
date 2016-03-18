@@ -273,7 +273,15 @@ public class AuditService {
                         dsi.getField(AuditServiceUtils.DeleteStudyInfo.SOPCLASSUID),
                         Integer.parseInt(dsi.getField(AuditServiceUtils.DeleteStudyInfo.NUMINSTANCES))));
             }
-            poiList.add(AuditMessages.createParticipantObjectIdentification(
+            if (pdi.getField(AuditServiceUtils.PermanentDeletionInfo.STUDY_DATE) != null)
+                poiList.add(AuditMessages.createParticipantObjectIdentification(
+                    pdi.getField(AuditServiceUtils.PermanentDeletionInfo.STUDY_UID),
+                    AuditMessages.ParticipantObjectIDTypeCode.StudyInstanceUID, null, null,
+                    AuditMessages.ParticipantObjectTypeCode.SystemObject, AuditMessages.ParticipantObjectTypeCodeRole.Report,
+                    null, null, null, acc, null, sopC, null, null, pocs, AuditMessages.createParticipantObjectDetail(
+                                "StudyDate", pdi.getField(AuditServiceUtils.PermanentDeletionInfo.STUDY_DATE).getBytes())));
+            else
+                poiList.add(AuditMessages.createParticipantObjectIdentification(
                     pdi.getField(AuditServiceUtils.PermanentDeletionInfo.STUDY_UID),
                     AuditMessages.ParticipantObjectIDTypeCode.StudyInstanceUID, null, null,
                     AuditMessages.ParticipantObjectTypeCode.SystemObject, AuditMessages.ParticipantObjectTypeCodeRole.Report,
@@ -316,7 +324,15 @@ public class AuditService {
                         dsi.getField(AuditServiceUtils.DeleteStudyInfo.SOPCLASSUID),
                         Integer.parseInt(dsi.getField(AuditServiceUtils.DeleteStudyInfo.NUMINSTANCES))));
             }
-            poiList.add(AuditMessages.createParticipantObjectIdentification(
+            if (deleteInfo.getField(AuditServiceUtils.DeleteInfo.STUDY_DATE) != null)
+                poiList.add(AuditMessages.createParticipantObjectIdentification(
+                    deleteInfo.getField(AuditServiceUtils.DeleteInfo.STUDYUID), AuditMessages.ParticipantObjectIDTypeCode.StudyInstanceUID,
+                    null, null, AuditMessages.ParticipantObjectTypeCode.SystemObject,
+                    AuditMessages.ParticipantObjectTypeCodeRole.Report, null, null, null, null, null, sopC, null, null,
+                        pocs, AuditMessages.createParticipantObjectDetail("StudyDate", deleteInfo.getField(
+                                AuditServiceUtils.DeleteInfo.STUDY_DATE).getBytes())));
+            else
+                poiList.add(AuditMessages.createParticipantObjectIdentification(
                     deleteInfo.getField(AuditServiceUtils.DeleteInfo.STUDYUID), AuditMessages.ParticipantObjectIDTypeCode.StudyInstanceUID,
                     null, null, AuditMessages.ParticipantObjectTypeCode.SystemObject,
                     AuditMessages.ParticipantObjectTypeCodeRole.Report, null, null, null, null, null, sopC, null, null, pocs));
@@ -571,7 +587,15 @@ public class AuditService {
             sopC.add(AuditMessages.createSOPClass(entry.getKey(), entry.getValue().size()));
         ParticipantObjectContainsStudy pocs = new ParticipantObjectContainsStudy();
         pocs.getStudyIDs().add(AuditMessages.createStudyIDs(patientStudyInfo.getField(AuditServiceUtils.PatientStudyInfo.STUDY_UID)));
-        poiList.add(AuditMessages.createParticipantObjectIdentification(
+        if (patientStudyInfo.getField(AuditServiceUtils.PatientStudyInfo.STUDY_DATE) != null)
+            poiList.add(AuditMessages.createParticipantObjectIdentification(
+                patientStudyInfo.getField(AuditServiceUtils.PatientStudyInfo.STUDY_UID),
+                AuditMessages.ParticipantObjectIDTypeCode.StudyInstanceUID, null, null,
+                AuditMessages.ParticipantObjectTypeCode.SystemObject, AuditMessages.ParticipantObjectTypeCodeRole.Report,
+                null, null, null, acc, mpps, sopC, null, null, pocs, AuditMessages.createParticipantObjectDetail(
+                            "StudyDate", patientStudyInfo.getField(AuditServiceUtils.PatientStudyInfo.STUDY_DATE).getBytes())));
+        else
+            poiList.add(AuditMessages.createParticipantObjectIdentification(
                 patientStudyInfo.getField(AuditServiceUtils.PatientStudyInfo.STUDY_UID),
                 AuditMessages.ParticipantObjectIDTypeCode.StudyInstanceUID, null, null,
                 AuditMessages.ParticipantObjectTypeCode.SystemObject, AuditMessages.ParticipantObjectTypeCodeRole.Report,
@@ -639,6 +663,7 @@ public class AuditService {
             HashMap<String, AuditServiceUtils.AccessionNumSopClassInfo> study_accNumSOPClassInfo = new HashMap<>();
             String pID = noValue;
             String pName = null;
+            String studyDate = null;
             while ((line = reader.readLine()) != null) {
                 AuditServiceUtils.RetrieveStudyInfo rInfo = new AuditServiceUtils.RetrieveStudyInfo(line);
                 String studyInstanceUID = rInfo.getField(AuditServiceUtils.RetrieveStudyInfo.STUDYUID);
@@ -651,6 +676,7 @@ public class AuditService {
                 study_accNumSOPClassInfo.put(studyInstanceUID, accessionNumSopClassInfo);
                 pID = rInfo.getField(AuditServiceUtils.RetrieveStudyInfo.PATIENTID);
                 pName = rInfo.getField(AuditServiceUtils.RetrieveStudyInfo.PATIENTNAME);
+                studyDate = rInfo.getField(AuditServiceUtils.RetrieveStudyInfo.STUDY_DATE);
             }
             HashSet<Accession> acc = new HashSet<>();
             HashSet<SOPClass> sopC = new HashSet<>();
@@ -661,7 +687,14 @@ public class AuditService {
                     sopC.add(AuditMessages.createSOPClass(sopClassMap.getKey(), sopClassMap.getValue().size()));
                 ParticipantObjectContainsStudy pocs = new ParticipantObjectContainsStudy();
                 pocs.getStudyIDs().add(AuditMessages.createStudyIDs(entry.getKey()));
-                poiList.add(AuditMessages.createParticipantObjectIdentification(
+                if (studyDate != null)
+                    poiList.add(AuditMessages.createParticipantObjectIdentification(
+                        entry.getKey(), AuditMessages.ParticipantObjectIDTypeCode.StudyInstanceUID, null, null,
+                        AuditMessages.ParticipantObjectTypeCode.SystemObject,
+                        AuditMessages.ParticipantObjectTypeCodeRole.Report, null, null, null, acc, null, sopC, null,
+                            null, pocs, AuditMessages.createParticipantObjectDetail("StudyDate", studyDate.getBytes())));
+                else
+                    poiList.add(AuditMessages.createParticipantObjectIdentification(
                         entry.getKey(), AuditMessages.ParticipantObjectIDTypeCode.StudyInstanceUID, null, null,
                         AuditMessages.ParticipantObjectTypeCode.SystemObject,
                         AuditMessages.ParticipantObjectTypeCodeRole.Report, null, null, null, acc, null, sopC, null, null, pocs));

@@ -227,6 +227,7 @@ public class AuditServiceUtils {
         public static final int PATIENT_ID = 5;
         public static final int PATIENT_NAME = 6;
         public static final int OUTCOME = 7;
+        public static final int STUDY_DATE = 8;
 
         private final String[] fields;
 
@@ -243,7 +244,8 @@ public class AuditServiceUtils {
                     attrs.getString(Tag.AccessionNumber),
                     attrs.getString(Tag.PatientID, noValue),
                     attrs.getString(Tag.PatientName),
-                    outcome
+                    outcome,
+                    attrs.getString(Tag.StudyDate)
             };
         }
 
@@ -359,6 +361,7 @@ public class AuditServiceUtils {
         public static final int SOPINSTANCEUID = 3;
         public static final int PATIENTID = 4;
         public static final int PATIENTNAME = 5;
+        public static final int STUDY_DATE = 6;
 
         private final String[] fields;
         public RetrieveStudyInfo(Attributes attrs) {
@@ -368,7 +371,8 @@ public class AuditServiceUtils {
                     attrs.getString(Tag.SOPClassUID),
                     attrs.getString(Tag.SOPInstanceUID),
                     attrs.getString(Tag.PatientID, noValue),
-                    StringUtils.maskEmpty(attrs.getString(Tag.PatientName), null)
+                    StringUtils.maskEmpty(attrs.getString(Tag.PatientName), null),
+                    attrs.getString(Tag.StudyDate)
             };
         }
         public RetrieveStudyInfo(String s) {
@@ -431,6 +435,7 @@ public class AuditServiceUtils {
         public static final int PATIENTID = 4;
         public static final int PATIENTNAME = 5;
         public static final int OUTCOME = 6;
+        public static final int STUDY_DATE = 7;
 
         private final String[] fields;
 
@@ -447,7 +452,8 @@ public class AuditServiceUtils {
                     ctx.getStudyInstanceUID(),
                     ctx.getAttributes().getString(Tag.PatientID, noValue),
                     StringUtils.maskEmpty(ctx.getAttributes().getString(Tag.PatientName), null),
-                    outcomeDesc
+                    outcomeDesc,
+                    ctx.getAttributes().getString(Tag.StudyDate)
             };
         }
 
@@ -494,6 +500,7 @@ public class AuditServiceUtils {
         public static final int PATIENT_ID = 2;
         public static final int PATIENT_NAME = 3;
         public static final int OUTCOME_DESC = 4;
+        public static final int STUDY_DATE = 5;
 
         private final String[] fields;
 
@@ -502,12 +509,14 @@ public class AuditServiceUtils {
             String patientName = (null != ctx.getPatient().getPatientName())
                                     ? ctx.getPatient().getPatientName().toString() : null;
             String accessionNo = (ctx.getStudy().getAccessionNumber() != null) ? ctx.getStudy().getAccessionNumber() : null;
+            String studyDate = ctx.getStudy().getStudyDate() != null ? ctx.getStudy().getStudyDate() : null;
             fields = new String[] {
                     ctx.getStudy().getStudyInstanceUID(),
                     accessionNo,
                     ctx.getPatient().getPatientID().getID(),
                     patientName,
-                    outcomeDesc
+                    outcomeDesc,
+                    studyDate
             };
         }
         public PermanentDeletionInfo(String s) {
