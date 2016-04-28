@@ -2,8 +2,8 @@
 
 myApp.directive("editArea",function(cfpLoadingBar, $log, DeviceService, $compile, schemas, $select){
     var execute = function(scope,elm,attr){
-                scope.dynamic_schema    = {};
-                scope.dynamic_form      = [];
+                // scope.dynamic_schema    = {};
+                // scope.dynamic_form      = [];
               if(scope.selectedElement === "device"){
                 cfpLoadingBar.set(cfpLoadingBar.status()+(0.1));
 
@@ -50,6 +50,7 @@ myApp.directive("editArea",function(cfpLoadingBar, $log, DeviceService, $compile
                     DeviceService.getForm(scope);
                     scope.form[scope.selectedElement] = scope.form[scope.selectedElement] || {};
                     scope.dynamic_form = scope.form[scope.selectedElement]["form"];
+                    console.log("informEditARea scheas=",schemas);
                     var timeout = 300;
                     var wait = setInterval(function(){
                             var checkItemsProperties = (

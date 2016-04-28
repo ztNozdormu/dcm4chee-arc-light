@@ -229,7 +229,7 @@ myApp.constant("$select",
       
       },
       "dcmStorage":{
-        "title" : "Storage Descriptor",
+        "title" : "Storage",
         "optionRef" : ["dcmArchiveDevice","dcmStorage"],
         "optionValue": "dcmStorageID",
         "type": "array",

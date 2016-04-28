@@ -248,10 +248,17 @@ myApp.factory('DeviceService', function($log, cfpLoadingBar, $http, $compile, sc
         for (var i in o) {
             if (i != selectedElement) {
                 if (o[i] !== null && typeof(o[i]) == "object") {
+                    // console.log("oi",o[i]);
                     traverse(o[i], selectedElement, newSchema);
                 }
             } else {
+                // console.log("selectedElement",selectedElement);
+                // console.log("i",i);
+                // console.log("o",o);
+                // console.log("o[i]",o[i]);
+                // console.log("newSchema",angular.copy(newSchema));
                 newSchema[selectedElement] = o[i];
+                // console.log("newSchema",angular.copy(newSchema));
             }
         }
         return newSchema;
@@ -265,21 +272,32 @@ myApp.factory('DeviceService', function($log, cfpLoadingBar, $http, $compile, sc
                         method: 'GET',
                         url: 'schema/' + schema[i]
                     }).then(function successCallback(response) {
+                        console.log("schema0",angular.copy(schema));
                         if ($select[selectedElement].optionRef.length > 1) {
                             if (parent === "items" && grandpa != "properties") {
+                                console.log("0grandpa",grandpa);
                                 schema[grandpa] = response.data;
                             } else {
+                                console.log("02parent",parent);
                                 schema[parent] = response.data;
                             }
+                            console.log("schema1",angular.copy(schema));
                             delete schema[i];
                         } else {
                             if (parent === "items" && grandpa != "properties") {
+                                console.log("1parent",grandpa);
+                                console.log("data",response.data);
                                 schema[grandpa] = response.data;
+                                console.log("schema after init",angular.copy(schema));
                             } else {
+                                console.log("12parent",parent);
+                                console.log("data",response.data);
                                 schema[parent] = response.data;
                             }
+                            console.log("schema2",angular.copy(schema));
                             delete schema[i];
                         }
+                        console.log("schema3",angular.copy(schema));
                     }, function errorCallback(response) {
                         $log.error("Error loading schema ref", response);
                     });
@@ -880,25 +898,37 @@ myApp.factory('DeviceService', function($log, cfpLoadingBar, $http, $compile, sc
                             traverse(localSchema2, $select[selectedElement].optionRef[1], schemas[$select[selectedElement].optionRef[1]]);
                             replaceRef(schemas[$select[selectedElement].optionRef[1]], selectedElement, "", "");
                            	removeChilde(selectedElement);
+                            console.log("0selectedElement=",selectedElement);
+                            console.log("schemas=",schemas);
                             return schemas[selectedElement];
                         }
                     }, 10);
                 } else {
                     removeChilde(selectedElement);
+                    console.log("1selectedElement=",selectedElement);
+                    console.log("schemas=",schemas);
                     return schemas[selectedElement];
                 }
             } else {
                 schemas[selectedElement] = schemas[selectedElement] || {};
                 if (Object.keys(schemas[selectedElement]).length < 1) {
                     angular.copy(schemas.device, localSchema);
+                    console.log("vor travers schemas=",angular.copy(schemas));
                     traverse(localSchema, selectedElement, schemas[selectedElement]);
+                    console.log("after travers schemas=",angular.copy(schemas));
                     replaceRef(schemas[selectedElement], selectedElement, "", "");
+                    console.log("2selectedElement=",selectedElement);
+                    console.log("after replace schemas=",angular.copy(schemas));
+                    console.log("after replace schemas=",angular.copy(schemas));
                     return schemas[selectedElement];
                 } else {
+                    console.log("3selectedElement=",selectedElement);
+                    console.log("schemas=",schemas);
                     return schemas[selectedElement];
                 }
 
             }
+
         },
 
         setFormModel: function(scope) {

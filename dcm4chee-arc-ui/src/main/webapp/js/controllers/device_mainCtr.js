@@ -265,9 +265,7 @@ myApp.controller("DeviceController", function($scope, $http, $timeout, $log, cfp
                         $scope.selectedPart.dicomNetworkConnection = null;
                         $scope.lastBorder                     = "";
 
-                        //TODO Check references and delete them to
                         $scope.wholeDevice    = DeviceService.clearReference(toDeleteKey, $scope.wholeDevice);
-                        // $scope.networkAeForm  = DeviceService.getFormNetworkAe($scope.selectedNetworkConnection);
                     }
                 } else {
                     //TODO replace it with an bautiful messaging
