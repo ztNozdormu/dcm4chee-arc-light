@@ -46,6 +46,7 @@ myApp.directive("editArea",function(cfpLoadingBar, $log, DeviceService, $compile
                 cfpLoadingBar.set(cfpLoadingBar.status()+(0.2));
                 scope.dynamic_form = DeviceService.getDeviceForm();
             }else{
+                    DeviceService.getSchemaAndForm(scope);
                     DeviceService.getSchema(scope.selectedElement);
                     DeviceService.getForm(scope);
                     scope.form[scope.selectedElement] = scope.form[scope.selectedElement] || {};
@@ -58,6 +59,13 @@ myApp.directive("editArea",function(cfpLoadingBar, $log, DeviceService, $compile
                                 schemas[scope.selectedElement][scope.selectedElement] &&
                                 schemas[scope.selectedElement][scope.selectedElement]["items"] &&
                                 schemas[scope.selectedElement][scope.selectedElement]["items"]["properties"] 
+                                );
+                            var checkItemsProperties2 = (
+                                schemas[scope.selectedElement] &&
+                                schemas[scope.selectedElement][scope.selectedElement] &&
+                                schemas[scope.selectedElement][scope.selectedElement][scope.selectedElement] &&
+                                schemas[scope.selectedElement][scope.selectedElement][scope.selectedElement]["items"] &&
+                                schemas[scope.selectedElement][scope.selectedElement][scope.selectedElement]["items"]["properties"] 
                                 );
                             var checkItems = (
                                 schemas[scope.selectedElement] &&
@@ -76,7 +84,7 @@ myApp.directive("editArea",function(cfpLoadingBar, $log, DeviceService, $compile
                                 schemas[scope.selectedElement][scope.selectedElement] &&
                                 schemas[scope.selectedElement][scope.selectedElement]["properties"]
                             );
-                        if(checkItems || checkProp|| checkPropShort || checkItemsProperties){
+                        if(checkItems || checkProp|| checkPropShort || checkItemsProperties || checkItemsProperties2){
                             clearInterval(wait);
                             if($select[scope.selectedElement].parentOf){
                                 angular.forEach($select[scope.selectedElement].parentOf,function(m,i){
@@ -150,6 +158,7 @@ myApp.directive("editArea",function(cfpLoadingBar, $log, DeviceService, $compile
         link: function(scope,elm,attr) {
 
             // DeviceService.addEmptyArrayFields(scope);
+            DeviceService.getSchemaAndForm(scope);
             scope.changeNameWarning = false;
             scope.$watch("[selectedElement,selectedPart]",function(newValue,oldValue) {
                 if(newValue[0]!=""){

@@ -244,6 +244,79 @@ myApp.factory('DeviceService', function($log, cfpLoadingBar, $http, $compile, sc
         }
     };
 
+    var traverseSchemas = function(element, tree, father, grandfather, x, form){
+        // console.log("#############tree=",tree,"element=",element, "father=",father,"grandfather",grandfather);
+        for (var i in tree) {
+            if (tree[i] !== null && typeof(tree[i]) === "object") {
+                // console.log("****tree   =",tree);
+                // console.log("    i      =",i);
+                // console.log("    tree[i]=",tree[i]);
+                // console.log("    father=",father);
+                // console.log("    grandfather=",grandfather);
+                var check0 = false;
+                angular.forEach($select[element].optionRef, function(m, j){
+                    if(i === m || grandfather === m || father === m || i === "item" || i === "properties" || i === "required"){
+                        check0 = true;
+                    }
+                });
+                if(check0){
+                    traverseSchemas(element, tree[i], i , father, grandfather , form);
+                }else{
+                    // console.warn("about to delete");
+                    // console.log("****tree   =",tree);
+                    // console.log("    i      =",i);
+                    // console.log("    tree[i]=",tree[i]);
+                    // console.log("    father =",father);
+                    // console.log("    grandfather =",grandfather);
+                   delete tree[i];
+                }
+            }else{
+                // console.log("----tree   =",tree);
+                console.log("    i   =",i);
+                if(i === "$ref" && tree[i].toString().indexOf(".json") > -1){
+                    var check = false;
+                    angular.forEach($select[element].optionRef, function(m, j){
+                        if(father === m || grandfather === m){
+                            check = true;
+                        }
+                    });
+
+                    if(check){
+                        $http({
+                            method: 'GET',
+                            url: 'schema/' + tree[i]
+                        }).then(function successCallback(response) {
+
+                            // console.log("+++++++$ref=",tree[i]);
+                            // console.log("       father",father);
+                            // console.log("       grandfather",grandfather);
+                            if (father === "items" && grandfather != "properties") {
+                                tree[grandfather] = response.data;
+                            } else {
+                                tree[father] = response.data;
+                            }
+                            delete tree[i];
+                            // console.log("tree=",tree);
+                        }, function errorCallback(response) {
+                            $log.error("Error loading schema ref", response);
+                        });
+                    }else{
+                        // console.log("-------$ref=",tree[i]);
+                        // console.log("       father",father);
+                        // console.log("       grandfather",grandfather);
+                        // if (father === "items" && grandfather != "properties") {
+                        //     delete fatherobject[grandfather];
+                        // }else{
+                        //     delete fatherobject[father];
+                        // }
+
+                    }
+                }
+            }
+        }
+        return {tree: tree, form:form};
+    };
+    
     var traverse = function(o, selectedElement, newSchema) {
         for (var i in o) {
             if (i != selectedElement) {
@@ -864,6 +937,21 @@ myApp.factory('DeviceService', function($log, cfpLoadingBar, $http, $compile, sc
                         clearInterval(waitforschema);
                     }
                 }, 10);
+        },
+        getSchemaAndForm: function($scope){
+            console.log("in getschemaandform selectedElement=",$scope.selectedElement);
+            console.log("schemas",schemas);
+            var tree = schemas.device;
+            var form = [];
+            if($scope.selectedElement != "device"){                
+                console.log("$select[$scope.selectedElement].optionRef=",$select[$scope.selectedElement].optionRef);
+                    tree = traverseSchemas($scope.selectedElement, tree, "", "", "", form);
+                // angular.forEach($select[$scope.selectedElement].optionRef, function(m, i){
+                //     console.log("m=",m);
+                //     console.log("i=",i);
+                // });
+                    console.log("tree am ende=",tree);
+            }
         },
         getSchema: function(selectedElement) {
             var localSchema = {};
