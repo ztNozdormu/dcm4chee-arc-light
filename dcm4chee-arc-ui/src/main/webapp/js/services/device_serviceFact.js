@@ -243,11 +243,67 @@ myApp.factory('DeviceService', function($log, cfpLoadingBar, $http, $compile, sc
             scope.dynamic_model = addEmptyArrayToModel(scope.dynamic_model, scope.dynamic_schema.properties);
         }
     };
+    var getFormFromSchema = function(schema, scope){
+        var endArray = [];
+        angular.forEach(schema, function(m, i) {
 
-    var traverseSchemas = function(element, tree, father, grandfather, x, form){
+            if (i === "dicomNetworkConnectionReference") {
+                var connObject = [];
+                angular.forEach(scope.wholeDevice.dicomNetworkConnection, function(m, k) {
+                    var path = {
+                        value: "/dicomNetworkConnection/" + k,
+                        name: m.cn
+                    };
+                    // path["/dicomNetworkConnection/"+k] = m.cn;
+
+                    connObject.push(path);
+                });
+                endArray.push("select");
+                var temp = {
+                    "key": "dicomNetworkConnectionReference",
+                    "type": "checkboxes",
+                    "titleMap": angular.copy(connObject)
+                };
+                endArray.push(temp);
+            } else {
+
+                if (m.type === "array") {
+                    endArray.push({
+                        "key": i,
+                        "add": "Add",
+                        "itmes": [
+                            i + "[]"
+                        ]
+                    });
+                } else {
+                    // if (i === "dicomInstalled") {
+                    if (m.type === "boolean") {
+                        endArray.push({
+                            // "key": "dicomInstalled",
+                            "key": i,
+                            "type": "radios",
+                            "titleMap": [{
+                                "value": true,
+                                "name": "True"
+                            }, {
+                                "value": false,
+                                "name": "False"
+                            }]
+                        });
+                    } else {
+                        endArray.push(i);
+                    }
+
+                }
+            }
+        });
+        return endArray;
+    };
+
+    var traverseSchemas = function($scope, element, tree, father, grandfather, form, test){
         // console.log("#############tree=",tree,"element=",element, "father=",father,"grandfather",grandfather);
         for (var i in tree) {
-            if (tree[i] !== null && typeof(tree[i]) === "object") {
+            if (tree[i] != null && typeof(tree[i]) === "object") {
                 // console.log("****tree   =",tree);
                 // console.log("    i      =",i);
                 // console.log("    tree[i]=",tree[i]);
@@ -260,7 +316,7 @@ myApp.factory('DeviceService', function($log, cfpLoadingBar, $http, $compile, sc
                     }
                 });
                 if(check0){
-                    traverseSchemas(element, tree[i], i , father, grandfather , form);
+                    traverseSchemas($scope, element, tree[i], i , father , form, test);
                 }else{
                     // console.warn("about to delete");
                     // console.log("****tree   =",tree);
@@ -272,7 +328,8 @@ myApp.factory('DeviceService', function($log, cfpLoadingBar, $http, $compile, sc
                 }
             }else{
                 // console.log("----tree   =",tree);
-                console.log("    i   =",i);
+                // console.log("    i   =",i);
+                // console.log("    tree[i]",tree[i]);
                 if(i === "$ref" && tree[i].toString().indexOf(".json") > -1){
                     var check = false;
                     angular.forEach($select[element].optionRef, function(m, j){
@@ -282,6 +339,7 @@ myApp.factory('DeviceService', function($log, cfpLoadingBar, $http, $compile, sc
                     });
 
                     if(check){
+                        // console.log("tree",tree[i]);
                         $http({
                             method: 'GET',
                             url: 'schema/' + tree[i]
@@ -291,8 +349,29 @@ myApp.factory('DeviceService', function($log, cfpLoadingBar, $http, $compile, sc
                             // console.log("       father",father);
                             // console.log("       grandfather",grandfather);
                             if (father === "items" && grandfather != "properties") {
+                                // console.log("$select[element].optionRef",$select[element].optionRef);
+                                if($select[element].optionRef[$select[element].optionRef.length-1] === grandfather){
+                                    // console.log("0in if granfather der letzte ",$select[element].optionRef[$select[element].optionRef.length-1]);
+                                    test[grandfather] = {};
+                                    test[grandfather]["schema"] = response.data;
+                                    test[grandfather]["form"] = Object.keys(response.data.properties);
+                                    // console.log("    0in if father",father);
+                                    // console.log("    0test",test);
+                                    // $scope.dynamic_schema = response.data;
+                                    // $scope.dynamic_form = getFormFromSchema(response.data.properties, $scope);
+                                }
                                 tree[grandfather] = response.data;
                             } else {
+                                // console.log("$select[element].optionRef",$select[element].optionRef);
+                                if($select[element].optionRef[$select[element].optionRef.length-1] === father){
+                                    test[father] = {};
+                                    test[father]["schema"] = response.data;
+                                    test[father]["form"] = Object.keys(response.data.properties);
+                                    // console.log("    1in if father",father);
+                                    // console.log("    test",test);
+                                    // $scope.dynamic_schema = response.data;
+                                    // $scope.dynamic_form = getFormFromSchema(response.data.properties, $scope);
+                                }
                                 tree[father] = response.data;
                             }
                             delete tree[i];
@@ -314,7 +393,7 @@ myApp.factory('DeviceService', function($log, cfpLoadingBar, $http, $compile, sc
                 }
             }
         }
-        return {tree: tree, form:form};
+        return {tree: tree, form:form, test:test};
     };
     
     var traverse = function(o, selectedElement, newSchema) {
@@ -943,9 +1022,10 @@ myApp.factory('DeviceService', function($log, cfpLoadingBar, $http, $compile, sc
             console.log("schemas",schemas);
             var tree = schemas.device;
             var form = [];
+            var test = {};
             if($scope.selectedElement != "device"){                
                 console.log("$select[$scope.selectedElement].optionRef=",$select[$scope.selectedElement].optionRef);
-                    tree = traverseSchemas($scope.selectedElement, tree, "", "", "", form);
+                    tree = traverseSchemas($scope, $scope.selectedElement, tree, "", "", "", form, test);
                 // angular.forEach($select[$scope.selectedElement].optionRef, function(m, i){
                 //     console.log("m=",m);
                 //     console.log("i=",i);
