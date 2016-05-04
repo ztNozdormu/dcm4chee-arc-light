@@ -33,6 +33,14 @@
         "description": "DICOM PS3.18",
         "url": "http://dicom.nema.org/medical/dicom/current/output/html/part18.html"
       }
+    },
+    {
+      "name": "STOW-RS",
+      "description": "Storage over the Web of DICOM Objects by RESTful Services",
+      "externalDocs": {
+        "description": "DICOM PS3.18",
+        "url": "http://dicom.nema.org/medical/dicom/current/output/html/part18.html"
+      }
     }
   ],
   "paths": {
@@ -1690,6 +1698,47 @@
             "name": "transferSyntax",
             "in": "query",
             "description": "Transfer Syntax UID",
+            "type": "string"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "object",
+            "schema": {
+              "type": "file"
+            }
+          },
+          "404": {
+            "description": "object not found"
+          },
+          "default": {
+            "description": "unexpected error"
+          }
+        }
+      }
+    },
+    "/aets/{aet}/rs/studies/": {
+      "put": {
+        "tags": [
+          "STOW-RS"
+        ],
+        "summary": "Store Instances",
+        "operationId": "Store Instances",
+        "consumes": [
+          "multipart/related;type=application/dicom;boundary={messageBoundary}",
+          "multipart/related;type=application/dicom+xml;boundary={messageBoundary}",
+          "multipart/related;type=application/json;boundary={messageBoundary}"
+        ],
+        "produces": [
+          "multipart/related;type=application/dicom+xml",
+          "multipart/related;type=application/json"
+        ],
+        "parameters": [
+          {
+            "name": "aet",
+            "in": "path",
+            "description": "Archive AE Title",
+            "required": true,
             "type": "string"
           }
         ],

@@ -477,7 +477,6 @@ myApp.controller("DeviceController", function($scope, $http, $timeout, $log, cfp
 
             $http({
                 method: 'GET',
-                // url: 'json/devices.json'
                 url: '../aets'
             }).then(function successCallback(response) {
                 $scope.aets = response.data;
@@ -677,6 +676,143 @@ myApp.controller("DeviceController", function($scope, $http, $timeout, $log, cfp
         }else{
           $scope.selectModel[key] = $scope.wholeDevice[value.optionRef[0]];
         }
+      }
+    };
+
+    $scope.cloneDevice = function(){
+      cfpLoadingBar.start();
+      var html =$compile(
+        '<lable>Select device to clone:</label>'+
+        '<select tabindex="1"'+
+            'id="init_select"'+
+            'class="form-control"'+
+            'name="device"'+
+            'ng-model="devicename"'+
+            'ng-options="obj.dicomDeviceName as obj.dicomDeviceName for obj in devices"'+
+            'on-device-change required>'+
+        '</select>'+
+        '<label>set the name for the new devace</label>'+
+        '<input type="text" ng-model="clonename" required/>'
+      )($scope);
+      vex.dialog.open({
+        message: 'Clone device',
+        input: html,
+        buttons: [
+          $.extend({}, vex.dialog.buttons.YES, {
+            text: 'Clone'
+          }), $.extend({}, vex.dialog.buttons.NO, {
+            text: 'Cancle'
+          })
+        ],
+        callback: function(data) {
+          if (data === false) {
+            cfpLoadingBar.complete();
+            return console.log('Cancelled');
+          }else{
+              var isAlreadyThere = false;
+              angular.forEach($scope.devices, function(m){
+                  if(m.dicomDeviceName === $scope.clonename){
+                      isAlreadyThere = true;
+                  }
+              });
+              if(!isAlreadyThere && $scope.devicename != undefined && $scope.devicename != "" && $scope.clonename != undefined && $scope.clonename != ""){
+                $http({
+                        method: 'GET',
+                        url: '../devices/'+$scope.devicename
+                        }).then(function successCallback(response) {
+                          cfpLoadingBar.set(cfpLoadingBar.status()+(0.5));
+                          var device = response.data;
+                          device.dicomDeviceName = $scope.clonename;
+                          $http.put("../devices/" + $scope.clonename, device)
+                              .success(function(data, status, headers, config) {
+                                  DeviceService.msg($scope, {
+                                      "title": "Info",
+                                      "text": "Clone created successfully!",
+                                      "status": "info"
+                                  });
+                                  $scope.devices.push({
+                                    dicomDeviceName : $scope.clonename,
+                                    dicomInstalled: false
+                                  });
+                                  $scope.devicename = "";
+                                  $scope.clonename = "";
+                                  cfpLoadingBar.complete();
+                              })
+                              .error(function(data, status, headers, config) {
+                                  $log.error("Error sending data on put!", status);
+                                  addEmptyArrayFieldsPrivate($scope);
+                                  DeviceService.msg($scope, {
+                                      "title": "error",
+                                      "text": "Error, clone could not be created!",
+                                      "status": "error"
+                                  });
+                                  cfpLoadingBar.complete();
+                              });
+                      }, function errorCallback(response) {
+                          DeviceService.msg($scope, {
+                              "title": "Error",
+                              "text": response.status+":"+response.statusText,
+                              "status": "error"
+                          });
+                          $log.error("Error",response);
+                          cfpLoadingBar.complete();
+                      });
+              }else{
+                $scope.$apply(function() {
+                  if(isAlreadyThere){
+                      DeviceService.msg($scope, {
+                          "title": "Error",
+                          "text": "Name need to be unique!",
+                          "status": "error"
+                      });
+                  }else{
+                    
+                      DeviceService.msg($scope, {
+                          "title": "Error",
+                          "text": "Error, fealds required",
+                          "status": "error"
+                      });
+                  }
+                  cfpLoadingBar.complete();
+                });
+              }
+          }
+        }
+      });
+    };
+
+    $scope.clonePart = function(part){
+      cfpLoadingBar.start();
+      if($scope.selectedPart[part]){
+        var html = $compile(
+                      '<input type="text" ng-model="newCloneName" required/>'
+                    )($scope);
+        vex.dialog.open({
+          message: 'Set the new name to clone "'+$scope.selectedPart[part]+'"!',
+          input: html,
+          buttons: [
+            $.extend({}, vex.dialog.buttons.YES, {
+              text: 'Clone'
+            }), $.extend({}, vex.dialog.buttons.NO, {
+              text: 'Cancle'
+            })
+          ],
+          callback: function(data) {
+            if (data === false) {
+              cfpLoadingBar.complete();
+              return console.log('Cancelled');
+            }else{
+              DeviceService.clonePart($scope, part, $scope.selectedPart);
+            }
+          }
+        });
+      }else{
+          DeviceService.msg($scope, {
+              "title": "Error",
+              "text": "Select first a "+$select[part].title,
+              "status": "error"
+          });
+          cfpLoadingBar.complete();
       }
     };
 });

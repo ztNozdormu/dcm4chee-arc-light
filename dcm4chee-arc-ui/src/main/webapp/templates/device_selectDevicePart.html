@@ -29,8 +29,10 @@
 		<create-delete-button 
 			ng-if="value.type==='array'"
 			part="{{key}}" 
-			create-text="Create new network dicomNetworkConnection" 
-			delete-text="Delete selected network dicomNetworkConnection">
+			create-text="Create new {{value.title}}" 
+			delete-text="Delete selected {{value.title}}"
+			clone-text="Clone {{value.title}}"
+			>
 		</create-delete-button>
 	</div>
 	<div id="endLoadSelect"></div>

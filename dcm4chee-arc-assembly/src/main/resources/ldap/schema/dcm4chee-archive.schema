@@ -65,8 +65,7 @@ attributetype ( 1.2.40.0.13.1.15.110.3.11 NAME 'dcmInstanceAvailability'
   SINGLE-VALUE )
 
 attributetype ( 1.2.40.0.13.1.15.110.3.12 NAME 'dcmQueryMatchUnknown'
-  DESC 'Indicates if missing Attributes or zero-length Attribute values in stored entities shall considered unknown and all matching against it shall be considered a successful match; enabled if absent'
-  OBSOLETE
+  DESC 'NO LONGER USED - MAY BE DECLARED OBSOLATE IN FUTURE VERSION'
   EQUALITY booleanMatch
   SYNTAX 1.3.6.1.4.1.1466.115.121.1.7
   SINGLE-VALUE )
@@ -467,6 +466,12 @@ attributetype ( 1.2.40.0.13.1.15.110.3.78 NAME 'dcmAttributeUpdatePolicy'
   SYNTAX 1.3.6.1.4.1.1466.115.121.1.26
   SINGLE-VALUE)
 
+attributetype ( 1.2.40.0.13.1.15.110.3.79 NAME 'dcmWadoSpoolDirectory'
+  DESC 'Path to Wado-RS spool directory used to aggregate uncompressed frames. If absent, aggregation done in temp directory.'
+  EQUALITY caseExactMatch
+  SYNTAX 1.3.6.1.4.1.1466.115.121.1.15
+  SINGLE-VALUE )
+
 objectclass ( 1.2.40.0.13.1.15.110.4.4 NAME 'dcmArchiveDevice'
   DESC 'DICOM Archive Device related information'
   SUP top AUXILIARY
@@ -510,10 +515,11 @@ objectclass ( 1.2.40.0.13.1.15.110.4.4 NAME 'dcmArchiveDevice'
     dcmAuditPollingInterval $
     dcmAuditAggregateDuration $
     dcmStowSpoolDirectory $
+    dcmWadoSpoolDirectory $
     hl7PatientUpdateTemplateURI $
     dcmUnzipVendorDataToURI $
     dcmPurgeQueueMessagePollingInterval $
-    dcmPurgeQueueMessageFetchSize) )
+    dcmPurgeQueueMessageFetchSize ) )
 
 objectclass ( 1.2.40.0.13.1.15.110.4.5 NAME 'dcmArchiveNetworkAE'
   DESC 'DICOM Archive Network AE related information'
