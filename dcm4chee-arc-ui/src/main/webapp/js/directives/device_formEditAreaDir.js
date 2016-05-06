@@ -20,7 +20,12 @@ myApp.directive("editArea",function(cfpLoadingBar, $log, DeviceService, $compile
                         if(timeOut > 100){  //If the program is waiting more than 10 sec than break up and show alert
                             clearInterval(waitForShema);
                             $log.error("Timeout error!");
-                            vex.dialog.alert("Timeout error, can't get device information, please reload the page and try again!");
+                            // vex.dialog.alert("Timeout error, can't get device information, please reload the page and try again!");
+                            DeviceService.msg($scope, {
+                                "title": "Error",
+                                "text": "Timeout error, can't get device information, please reload the page and try again!",
+                                "status": "error"
+                            });
                         }
                         timeOut++;
                     }, 100);
@@ -36,7 +41,11 @@ myApp.directive("editArea",function(cfpLoadingBar, $log, DeviceService, $compile
                         if(timeOut > 100){  //If the program is waiting more than 10 sec than break up and show alert
                             clearInterval(waitForWholeDevice);
                             $log.error("Timeout error!");
-                            vex.dialog.alert("Timeout error, can't get device information, please reload the page and try again!");
+                            DeviceService.msg($scope, {
+                                "title": "Error",
+                                "text": "Timeout error, can't get device information, please reload the page and try again!",
+                                "status": "error"
+                            });
                         }
                         timeOut++;
                     }, 100);

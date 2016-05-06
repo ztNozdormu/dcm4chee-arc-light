@@ -300,7 +300,7 @@ myApp.factory('DeviceService', function($log, cfpLoadingBar, $http, $compile, sc
         return endArray;
     };
 
-    var traverseSchemas = function($scope, element, tree, father, grandfather, form, test){
+    var traverseSchemas = function($scope, element, tree, father, grandfather, grandgrandfather, form, schemaForm){
         // console.log("#############tree=",tree,"element=",element, "father=",father,"grandfather",grandfather);
         for (var i in tree) {
             if (tree[i] != null && typeof(tree[i]) === "object") {
@@ -311,12 +311,12 @@ myApp.factory('DeviceService', function($log, cfpLoadingBar, $http, $compile, sc
                 // console.log("    grandfather=",grandfather);
                 var check0 = false;
                 angular.forEach($select[element].optionRef, function(m, j){
-                    if(i === m || grandfather === m || father === m || i === "item" || i === "properties" || i === "required"){
+                    if(i === m || grandfather === m || father === m || grandgrandfather === m || i === "item" || i === "properties" || i === "required"){
                         check0 = true;
                     }
                 });
                 if(check0){
-                    traverseSchemas($scope, element, tree[i], i , father , form, test);
+                    traverseSchemas($scope, element, tree[i], i , father, grandgrandfather, form, schemaForm);
                 }else{
                     // console.warn("about to delete");
                     // console.log("****tree   =",tree);
@@ -330,13 +330,13 @@ myApp.factory('DeviceService', function($log, cfpLoadingBar, $http, $compile, sc
                 // console.log("----tree   =",tree);
                 // console.log("    i   =",i);
                 // console.log("    tree[i]",tree[i]);
+                var check = false;
+                angular.forEach($select[element].optionRef, function(m, j){
+                    if(father === m || grandfather === m || grandgrandfather === m){
+                        check = true;
+                    }
+                });
                 if(i === "$ref" && tree[i].toString().indexOf(".json") > -1){
-                    var check = false;
-                    angular.forEach($select[element].optionRef, function(m, j){
-                        if(father === m || grandfather === m){
-                            check = true;
-                        }
-                    });
 
                     if(check){
                         // console.log("tree",tree[i]);
@@ -352,28 +352,42 @@ myApp.factory('DeviceService', function($log, cfpLoadingBar, $http, $compile, sc
                                 // console.log("$select[element].optionRef",$select[element].optionRef);
                                 if($select[element].optionRef[$select[element].optionRef.length-1] === grandfather){
                                     // console.log("0in if granfather der letzte ",$select[element].optionRef[$select[element].optionRef.length-1]);
-                                    test[grandfather] = {};
-                                    test[grandfather]["schema"] = response.data;
-                                    test[grandfather]["form"] = Object.keys(response.data.properties);
-                                    // console.log("    0in if father",father);
-                                    // console.log("    0test",test);
+                                    schemaForm[grandfather] = {};
+                                    schemaForm[grandfather]["schema"] = response.data;
+                                    schemaForm[grandfather]["form"] = Object.keys(response.data.properties);
+                                    // console.log("    0in if grandfather",grandfather);
+                                    // console.log("     father=",father);
+                                    // console.log("     grandgrandfather=",grandgrandfather);
+                                    // console.log("     0schemaForm",schemaForm);
                                     // $scope.dynamic_schema = response.data;
                                     // $scope.dynamic_form = getFormFromSchema(response.data.properties, $scope);
                                 }
+                                // console.log("*****grandfather",grandfather);
                                 tree[grandfather] = response.data;
+                                if(element != father && element != grandfather && element != grandgrandfather){
+                                    traverseSchemas($scope, element, tree[grandfather], grandfather , grandfather, grandgrandfather , form, schemaForm);
+                                }
                             } else {
                                 // console.log("$select[element].optionRef",$select[element].optionRef);
                                 if($select[element].optionRef[$select[element].optionRef.length-1] === father){
-                                    test[father] = {};
-                                    test[father]["schema"] = response.data;
-                                    test[father]["form"] = Object.keys(response.data.properties);
+                                    schemaForm[father] = {};
+                                    schemaForm[father]["schema"] = response.data;
+                                    schemaForm[father]["form"] = Object.keys(response.data.properties);
                                     // console.log("    1in if father",father);
-                                    // console.log("    test",test);
+                                    // console.log("     father=",father);
+                                    // console.log("     grandgrandfather=",grandgrandfather);
+                                    // console.log("     schemaForm",schemaForm);
+                                    // console.log("    schemaForm",schemaForm);
                                     // $scope.dynamic_schema = response.data;
                                     // $scope.dynamic_form = getFormFromSchema(response.data.properties, $scope);
                                 }
+                                // console.log("*****father",father);
                                 tree[father] = response.data;
+                                if(element != father && element != grandfather && element != grandgrandfather){
+                                    traverseSchemas($scope, element, tree[father], father , father ,grandfather, form, schemaForm);
+                                }
                             }
+                            // console.log("------about to delete",tree[i]);
                             delete tree[i];
                             // console.log("tree=",tree);
                         }, function errorCallback(response) {
@@ -390,10 +404,20 @@ myApp.factory('DeviceService', function($log, cfpLoadingBar, $http, $compile, sc
                         // }
 
                     }
+                }else{
+                    if(check){
+                        schemaForm[element] = {};
+                        schemaForm[element]["schema"] = tree;
+                        // console.log("~~~~~  else");
+                        // console.log("       tree=",tree);
+                        // console.log("       father",father);
+                        // console.log("       grandfather",grandfather);
+                        // console.log("       grandgrandfather",grandgrandfather);
+                    }
                 }
             }
         }
-        return {tree: tree, form:form, test:test};
+        return {tree: tree, form:form, schemaForm:schemaForm};
     };
     
     var traverse = function(o, selectedElement, newSchema) {
@@ -1095,17 +1119,18 @@ myApp.factory('DeviceService', function($log, cfpLoadingBar, $http, $compile, sc
         getSchemaAndForm: function($scope){
             console.log("in getschemaandform selectedElement=",$scope.selectedElement);
             console.log("schemas",schemas);
-            var tree = schemas.device;
+            var tree = {};
+            angular.copy(schemas.device, tree);
             var form = [];
-            var test = {};
+            var schemaForm = {};
             if($scope.selectedElement != "device"){                
                 console.log("$select[$scope.selectedElement].optionRef=",$select[$scope.selectedElement].optionRef);
-                    tree = traverseSchemas($scope, $scope.selectedElement, tree, "", "", "", form, test);
+                    tree = traverseSchemas($scope, $scope.selectedElement, tree, "", "", "", form, schemaForm);
                 // angular.forEach($select[$scope.selectedElement].optionRef, function(m, i){
                 //     console.log("m=",m);
                 //     console.log("i=",i);
                 // });
-                    console.log("tree am ende=",tree);
+                console.log("tree am ende=",tree);
             }
         },
         getSchema: function(selectedElement) {
