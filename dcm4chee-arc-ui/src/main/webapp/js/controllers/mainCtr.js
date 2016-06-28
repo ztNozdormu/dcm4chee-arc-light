@@ -7,6 +7,8 @@ myApp.controller('MainController', function ($scope, $location, $http) {
   $scope.visibleHeaderIndex     = 0;
   vex.defaultOptions.className  = 'vex-theme-os';
 	$scope.getClass = function (path) {
+    console.log("path",path);
+    console.log("$location.path().substr(0, path.length)",$location.path().substr(0, path.length));
 		if($location.path().substr(0, path.length) === path) {
 		    return 'active';
 		} else {

@@ -24,6 +24,11 @@ myApp.config(function ($routeProvider) {
         controller: 'DeviceController'
         // controller: 'DeviceListController'
     })
+    .when('/devicelist2', {
+        templateUrl: 'templates/devicelist2.html',
+        controller: 'DeviceController'
+        // controller: 'DeviceListController'
+    })
     .otherwise({
         redirectTo: '/studies'
     });

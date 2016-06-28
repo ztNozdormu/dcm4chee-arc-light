@@ -598,7 +598,7 @@ myApp.controller("DeviceController", function($scope, $http, $timeout, $log, cfp
     };
 
     /*
-    *If the editMode is active and form is not valid show the block_layer (div element that over the rest of the app but the form)
+    *If the editMode is active and form is not valid show the block_layer (div element that hover the rest of the app but the form)
     */
     $scope.showBlockLayer = function(){
       return ($scope.editMode && !$scope.validForm);
@@ -983,9 +983,11 @@ myApp.controller("DeviceController", function($scope, $http, $timeout, $log, cfp
                 addEffect("right",".devicelist_block", "hide");
                 setTimeout(function(){
                     addEffect("left",".deviceedit_block", "show");
+                    // addEffect("left",".partedit_block", "show");
                 },301);
             },1000);
     };
+
     var addEffect = function(direction, selector, display){
         var element = angular.element(selector);
             element.removeClass('fadeInRight').removeClass('fadeInLeft');
@@ -1057,6 +1059,58 @@ myApp.controller("DeviceController", function($scope, $http, $timeout, $log, cfp
             $scope.filter[i] = "";
         });
         searchDevices();
+    };
+    //Device list 2
+    $scope.editDeviceList2 = function(devicename) {
+        $scope.devicename       = devicename;
+        $scope.currentDevice    = $scope.devicename;
+        $scope.form             = {};
+        cfpLoadingBar.start();
+        if($scope.devicename){
+            cfpLoadingBar.set(cfpLoadingBar.status()+(0.1));
+            setTimeout(function(){ 
+                $scope.showDropdownLoader = true;
+                $scope.showFormLoader   = true;
+            });
+            $scope.selectedElement = "device";
+            cfpLoadingBar.set(cfpLoadingBar.status()+(0.1));
+            DeviceService
+            .addDirectiveToDom(
+                $scope, 
+                "add_dropdowns",
+                "<div select-device-part></div>"
+            );
+            cfpLoadingBar.set(cfpLoadingBar.status()+(0.2));
+            //Wait a little bit so the angularjs has time to render the first directive otherwise some input fields are not showing
+            window.setTimeout(function() {
+            DeviceService
+            .addDirectiveToDom(
+              $scope, 
+              "add_edit_area",
+              "<div edit-area></div>"
+            );
+            cfpLoadingBar.set(cfpLoadingBar.status()+(0.1));
+            }, 100);
+        }else{
+            cfpLoadingBar.complete();
+            vex.dialog.alert("Select device");
+        }
+        setTimeout(function(){
+            DeviceService.warnEvent($scope);
+            addEffect("right",".devicelist_block", "hide");
+            setTimeout(function(){
+                // addEffect("left",".deviceedit_block", "show");
+                addEffect("left",".partedit_block", "show");
+            },301);
+        },1000);
+    };
+    $scope.goBackToDeviceList2 = function(){
+        // addEffect("left",".deviceedit_block", "hide");
+        addEffect("left",".partedit_block", "hide");
+        setTimeout(function(){
+            addEffect("right",".devicelist_block", "show");
+            cancel();
+        },301);
     };
 });
 
