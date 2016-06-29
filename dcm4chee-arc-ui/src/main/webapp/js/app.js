@@ -24,7 +24,7 @@ myApp.config(function ($routeProvider) {
         controller: 'DeviceController'
         // controller: 'DeviceListController'
     })
-    .when('/devicelist2', {
+    .when('/2devicelist', {
         templateUrl: 'templates/devicelist2.html',
         controller: 'DeviceController'
         // controller: 'DeviceListController'

@@ -619,6 +619,7 @@ myApp.factory('DeviceService', function($log, cfpLoadingBar, $http, $compile, sc
                         "status": "info"
                     });
                     angular.element("#add_dropdowns").html("");
+                    angular.element("#add_dropdowns2").html("");
                     angular.element("#editDevice").html("");
                     cfpLoadingBar.complete();
                     return true;
@@ -749,6 +750,22 @@ myApp.factory('DeviceService', function($log, cfpLoadingBar, $http, $compile, sc
 
             switch (element) {
                 case "add_dropdowns":
+
+                    $scope.showDropdownLoader = true;
+                    $scope.middleBorder = "";
+                    addDirective($scope, element, markup, true);
+
+                    var watchDropdownLoader = setInterval(function() {
+                        if (angular.element(document.getElementById('endLoadSelect')).length > 0) {
+                            clearInterval(watchDropdownLoader);
+                            $scope.middleBorder = "active_border";
+                            $scope.showDropdownLoader = false;
+                            angular.element(document.getElementById(element)).show();
+                        }
+                    }, 100);
+
+                    break;
+                case "add_dropdowns2":
 
                     $scope.showDropdownLoader = true;
                     $scope.middleBorder = "";

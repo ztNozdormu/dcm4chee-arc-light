@@ -168,6 +168,12 @@ myApp.controller("DeviceController", function($scope, $http, $timeout, $log, cfp
                 "add_dropdowns",
                 "<div select-device-part></div>"
             );
+            DeviceService
+            .addDirectiveToDom(
+                $scope, 
+                "add_dropdowns2",
+                "<div select-device-part2></div>"
+            );
             cfpLoadingBar.set(cfpLoadingBar.status()+(0.2));
             //Wait a little bit so the angularjs has time to render the first directive otherwise some input fields are not showing
             window.setTimeout(function() {
@@ -230,6 +236,12 @@ myApp.controller("DeviceController", function($scope, $http, $timeout, $log, cfp
                 $scope,
                 "add_dropdowns",
                 "<div select-device-part></div>"
+        );
+        DeviceService
+        .addDirectiveToDom(
+                $scope,
+                "add_dropdowns2",
+                "<div select-device-part2></div>"
         );
         //Wait a little bit so the angularjs has time to render the first directive otherwise some input fields are not showing
         window.setTimeout(function() {
@@ -575,6 +587,7 @@ myApp.controller("DeviceController", function($scope, $http, $timeout, $log, cfp
                 $scope.wholeDevice      = {};
                 $scope.showSave         = false;
                 angular.element(document.getElementById("add_dropdowns")).html("");
+                angular.element(document.getElementById("add_dropdowns2")).html("");
                 angular.element(document.getElementById("add_edit_area")).html("");
         }else{
                 DeviceService.cancle($scope);
@@ -963,6 +976,12 @@ myApp.controller("DeviceController", function($scope, $http, $timeout, $log, cfp
                     "add_dropdowns",
                     "<div select-device-part></div>"
                 );
+                DeviceService
+                .addDirectiveToDom(
+                    $scope, 
+                    "add_dropdowns2",
+                    "<div select-device-part2></div>"
+                );
                 cfpLoadingBar.set(cfpLoadingBar.status()+(0.2));
                 //Wait a little bit so the angularjs has time to render the first directive otherwise some input fields are not showing
                 window.setTimeout(function() {
@@ -1080,6 +1099,12 @@ myApp.controller("DeviceController", function($scope, $http, $timeout, $log, cfp
                 "add_dropdowns",
                 "<div select-device-part></div>"
             );
+            DeviceService
+            .addDirectiveToDom(
+                $scope, 
+                "add_dropdowns2",
+                "<div select-device-part2></div>"
+            );
             cfpLoadingBar.set(cfpLoadingBar.status()+(0.2));
             //Wait a little bit so the angularjs has time to render the first directive otherwise some input fields are not showing
             window.setTimeout(function() {
@@ -1112,6 +1137,191 @@ myApp.controller("DeviceController", function($scope, $http, $timeout, $log, cfp
             cancel();
         },301);
     };
+    $scope.goBackToPartList2 = function(){
+        // addEffect("left",".deviceedit_block", "hide");
+        addEffect("left",".deviceedit_block", "hide");
+        setTimeout(function(){
+            addEffect("right",".partedit_block", "show");
+            // cancel();
+        },301);
+    };
+    $scope.selectElement2 = function(element) {
+        var checkDevice = element === "device";
+        angular.forEach($select, function(m, j){
+            //Differentiate between array elements and not array elements becouse just the array elements (Select element) has selectedPart model
+            if(m.type==="array"){
+              if(element === j && $scope.selectedPart[j]  != undefined ){
+                checkDevice = true;
+              }
+            }else{
+              if(element === j){
+                checkDevice = true;
+              }
+            }
+        });
+        
+        if(
+            (
+              checkDevice
+            ) 
+              &&
+            (
+                element != $scope.selectedElement ||
+                $scope.devicename == "CHANGE_ME"
+            )&&
+                $scope.validForm
+        ) {
+            cfpLoadingBar.start();
+            //TODO Make this generic
+            if(element === 'dicomNetworkAE'){
+              $scope.selectedPart.dicomTransferCapability  = null;
+            }
+            $scope.selectedElement  = element;
+            if($scope.selectedElement === "device"){
+                $scope.dynamic_schema = DeviceService.getDeviceSchema();
+                $scope.dynamic_model  = $scope.wholeDevice;
+            }else{
+                if(!schemas[$scope.selectedElement] || !schemas[$scope.selectedElement][$scope.selectedElement]){
+                  DeviceService.getSchema($scope.selectedElement);
+                }
+                DeviceService.setFormModel($scope);
+            }
+            $scope.lastBorder       = "active_border";
+            $scope.showSave         = true;
+            cfpLoadingBar.complete();
+        }
+        addEffect("right",".partedit_block", "hide");
+        setTimeout(function(){
+            // addEffect("left",".deviceedit_block", "show");
+            addEffect("left",".deviceedit_block", "show");
+        },301);
+    };
+    $scope.changeElement2 = function(element){
+            var checkDevice = element === "device";
+            angular.forEach($select, function(m, j){
+              if(element === j && $scope.selectedPart[j]  != undefined ){
+                checkDevice = true;
+              }
+            });
+
+            cfpLoadingBar.start();
+            if(
+                (
+                    checkDevice
+                ) 
+                  &&
+                (
+                    element != $scope.selectedElement ||
+                    $scope.devicename === "CHANGE_ME"
+                )&&
+                    $scope.validForm
+            ){
+                cfpLoadingBar.start();
+                if(element === 'dicomNetworkAE'){
+                  $scope.selectedPart.dicomTransferCapability  = null;
+                }
+                $scope.selectedElement  = element;
+                $scope.lastBorder       = "active_border";
+                $scope.showSave         = true;
+
+                if($scope.selectedElement === "device"){
+                    $scope.dynamic_model  = $scope.wholeDevice;
+                }else{
+
+                    DeviceService.setFormModel($scope);
+                    $scope.dynamic_model = $scope.form[$scope.selectedElement].model;
+                }
+            }
+            if($scope.devicename === "CHANGE_ME"){
+                  DeviceService
+                  .addDirectiveToDom(
+                      $scope, 
+                      "add_edit_area",
+                      "<div edit-area></div>"
+                  );
+            }
+            addEffect("right",".partedit_block", "hide");
+            setTimeout(function(){
+                // addEffect("left",".deviceedit_block", "show");
+                addEffect("left",".deviceedit_block", "show");
+            },301);
+            cfpLoadingBar.complete();
+    };
+        $scope.createPart2 = function(element) {
+                $scope.dynamic_model = {};
+                var validProcess = DeviceService.checkValidProcess($scope, element);
+                if(validProcess.valid){
+                  $scope.selectedElement = element;
+                  $scope.activeMenu      = element;
+                  $scope.form[$scope.selectedElement] = $scope.form[$scope.selectedElement] || {};
+                  $scope.dynamic_model   = {};
+                  if(!schemas[$scope.selectedElement]){
+                    DeviceService.getSchema($scope.selectedElement);
+                    var wait = setInterval(function(){
+                          var checkItemsProperties = (
+                                            schemas[$scope.selectedElement] && 
+                                            schemas[$scope.selectedElement][$scope.selectedElement] && 
+                                            schemas[$scope.selectedElement][$scope.selectedElement]["items"] && 
+                                            schemas[$scope.selectedElement][$scope.selectedElement]["items"]["properties"]
+                                            );
+                          var checkItems = (
+                                            schemas[$scope.selectedElement] && 
+                                            schemas[$scope.selectedElement][$scope.selectedElement] && 
+                                            schemas[$scope.selectedElement][$scope.selectedElement]["items"] && 
+                                            schemas[$scope.selectedElement][$scope.selectedElement]["items"][$scope.selectedElement]
+                                            );
+                          var checkProp = (
+                                            schemas[$scope.selectedElement] && 
+                                            schemas[$scope.selectedElement][$scope.selectedElement] && 
+                                            schemas[$scope.selectedElement][$scope.selectedElement][$scope.selectedElement]
+                                          );
+                          if(checkItems || checkProp || checkItemsProperties){
+                            clearInterval(wait);
+                            // DeviceService.setFormModel($scope);
+                            if(checkItems){
+                              $scope.form[$scope.selectedElement]["schema"] = schemas[$scope.selectedElement][$scope.selectedElement]["items"][$scope.selectedElement];
+                            }else{
+                              if(checkProp){
+                                $scope.form[$scope.selectedElement]["schema"] = schemas[$scope.selectedElement][$scope.selectedElement][$scope.selectedElement];
+                              }else{
+                                $scope.form[$scope.selectedElement]["schema"] = schemas[$scope.selectedElement][$scope.selectedElement]["items"]["properties"];
+                              }
+                            }
+                            if($select[$scope.selectedElement].parentOf){
+                                angular.forEach($select[$scope.selectedElement].parentOf,function(m,i){
+                                    delete $scope.form[$scope.selectedElement]["schema"].properties[$select[$scope.selectedElement].parentOf[i]];
+                                });
+                            }
+                            DeviceService.createPart($scope);
+                        }
+                    },100);
+                  }else{
+                      DeviceService.createPart($scope);
+                  }
+                  $scope.showCancel = true;
+                  $scope.showSave   = true;
+                  $scope.lastBorder = "active_border";
+                  $scope.editMode   = true;
+                  $scope.validForm  = false;
+                    addEffect("right",".partedit_block", "hide");
+                    setTimeout(function(){
+                    // addEffect("left",".deviceedit_block", "show");
+                    addEffect("left",".deviceedit_block", "show");
+                    },301);
+                  setTimeout(function(){ 
+                      $scope.$apply();
+                  });
+              }else{
+                DeviceService.msg($scope, {
+                    "title": "Warning",
+                    "text": validProcess.message,
+                    "status": "warning"
+                });
+              }
+       
+
+    };
+
 });
 
 //http://localhost:8080/dcm4chee-arc/devices/dcm4chee-arc

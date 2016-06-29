@@ -2637,6 +2637,35 @@ table.j4care-table{
 		border-radius:0;
 	}
 }
+.partedit_block{
+	.togglblock{
+		position:relative;
+		&:hover{
+			cursor: pointer;
+		}
+		ul.blocklist{
+			z-index: 99999;
+			background: white none repeat scroll 0 0;
+		    border: 1px solid #ccc;
+		    box-shadow: 4px 4px 16px -7px black;
+		    display: block;
+		    list-style: outside none none;
+		    max-height: 300px;
+		    overflow-y: auto;
+		    position: absolute;
+		    top: 21px;
+		    width: 551px;
+		    padding-left:0;
+		    li{
+		    	text-indent: 10px;
+				&:hover{
+					background: #ccc;
+					cursor: pointer;
+				}
+		    }
+		}
+	}
+}
 .dummyinput{
 	display:block;
 	height:30px;
