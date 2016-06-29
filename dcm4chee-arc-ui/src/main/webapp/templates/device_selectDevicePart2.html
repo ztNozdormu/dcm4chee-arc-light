@@ -1,0 +1,136 @@
+<div id="selects_part">
+<!-- 	<pre>
+		selectModel: {{selectModel | json}}
+	</pre> -->
+<!-- 	<div class="header">
+		<h3>Select device part to edit</h3>
+		<label>Edit device credentials</label>
+		<div id="showDeviceForm" class="btn ng-cloak" ng-class="{active_dropbox:selectedElement == 'device'}" ng-click='selectElement2("device")' ng-cloak>{{wholeDevice.dicomDeviceName}}</div>
+	</div>
+	<div ng-repeat="(key, value) in selectObject | testFilter:selectedElement:selectedPart" ng-class="{child:value.optionRef.length > 1}">
+		<label>Select dicom {{value.title}} to edit or delete:</label>
+		{{splitStringToObject(value,key)}}
+		<select 
+			ng-if="value.type==='array'"
+			class="form-control" 
+			ng-class="{active_dropbox:selectedElement === '{{key}}',active_menu:activeMenu === '{{key}}'}" 
+			ng-click='selectElement2(key)' 
+			name="{{key}}"
+			ng-model="selectedPart[key]" 
+			ng-change='changeElement2(key)'
+			ng-options="obj[value.optionValue] as obj[value.optionValue]  for obj in selectModel[key] track by obj[value.optionValue]">
+		</select>
+		<button
+			ng-if="value.type!='array'"
+			ng-click='selectElement2(key)' 
+			name="{{key}}"
+			class="form-control" 
+			ng-class="{active_dropbox:selectedElement === '{{key}}',active_menu:activeMenu === '{{key}}'}" 
+		>
+			{{key}}
+		</button>
+		<create-delete-button 
+			ng-if="value.type==='array'"
+			part="{{key}}" 
+			create-text="Create new {{value.title}}" 
+			delete-text="Delete selected {{value.title}}"
+			clone-text="Clone {{value.title}}"
+			>
+		</create-delete-button>
+	</div> -->
+	<div id="endLoadSelect"></div>
+	<!-- <div id="SelectDicomTransferCapability"></div> -->
+</div>
+
+<table class="j4care-table">
+	<thead>
+		<tr>
+			<th>Partname</th>
+			<th></th>
+			<th></th>
+		</tr>
+	</thead>
+	<tbody>
+		<tr>
+			<td>
+				<div id="showDeviceForm" class="btn ng-cloak" ng-class="{active_dropbox:selectedElement == 'device'}" ng-click='selectElement2("device")' ng-cloak>
+					device credentials
+				</div>
+			</td>
+			<td class="buttons_td">
+				<!-- <span class="numbers">{{key+1}}.</span> -->
+<!-- 				<a class="table_btn" title="Edit device" href="" ng-click="editDeviceList2(value.dicomDeviceName)">
+					<span class="glyphicon glyphicon-pencil"></span>
+				</a>
+				<a class="table_btn" title="Delete device" href="" ng-click="deleteDeviceList(value.dicomDeviceName)">
+					<span class="glyphicon glyphicon-remove"></span>
+				</a>
+				<a class="table_btn" title="Clone device" href="" ng-click="cloneDeviceDeviceList(value.dicomDeviceName)">
+					<span class="glyphicon glyphicon-duplicate"></span>
+				</a> -->
+			</td>
+			<td>
+				
+			</td>
+		</tr>
+		<tr ng-repeat="(key, value) in selectObject | testFilter:selectedElement:selectedPart">
+			<td>
+				{{splitStringToObject(value,key)}}
+<!-- 				<button
+					ng-if="value.type!='array'"
+					ng-click='selectElement2(key)' 
+					name="{{key}}"
+					ng-class="{active_dropbox:selectedElement === '{{key}}',active_menu:activeMenu === '{{key}}'}" 
+				>
+					{{value.title}}
+				</button>
+				<div ng-if="value.type==='array'">
+				</div> -->
+					{{value.title}}
+			</td>
+			<td class="buttons_td">
+				<create-delete-button2 
+					ng-if="value.type==='array'"
+					part="{{key}}" 
+					create-text="Create new {{value.title}}" 
+					delete-text="Delete selected {{value.title}}"
+					clone-text="Clone {{value.title}}"
+					>
+				</create-delete-button2>
+			</td>
+			<td>
+				<div ng-class="{child:value.optionRef.length > 1}">
+<!-- 					<select 
+						ng-if="value.type==='array'"
+						class="form-control" 
+						ng-class="{active_dropbox:selectedElement === '{{key}}',active_menu:activeMenu === '{{key}}'}" 
+						ng-click='selectElement2(key)' 
+						name="{{key}}"
+						ng-model="selectedPart[key]" 
+						ng-change='changeElement2(key)'
+						ng-options="obj[value.optionValue] as obj[value.optionValue]  for obj in selectModel[key] track by obj[value.optionValue]">
+					</select> -->
+					<div class="togglblock" ng-init="showmore['key'] = false" ng-if="value.type==='array'">
+						<div class="togglebutton" ng-click="showmore['key'] = !showmore['key']"><span class="glyphicon glyphicon-pencil"></span></div>
+						<ul class="blocklist ng-hide" ng-show="showmore['key']">
+							<li ng-repeat="(k, v) in selectModel[key]" ng-click="selectedPart[key] = v[value.optionValue];changeElement2(key);showmore['key'] = false">{{v[value.optionValue]}}</li>
+						</ul>
+					</div>
+					<div ng-if="value.type!='array'">
+						<div class="togglebutton" ng-click="selectElement2(key);showmore['key'] = !showmore['key']"><span class="glyphicon glyphicon-pencil"></span></div>
+					</div>
+<!-- 					<button
+						ng-if="value.type!='array'"
+						ng-click='selectElement2(key)' 
+						name="{{key}}"
+						class="form-control" 
+						ng-class="{active_dropbox:selectedElement === '{{key}}',active_menu:activeMenu === '{{key}}'}" 
+					>
+						{{key}}
+					</button> -->
+				</div>
+			</td>
+
+		</tr>
+	</tbody>
+</table>

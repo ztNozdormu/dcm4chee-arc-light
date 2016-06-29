@@ -1945,28 +1945,60 @@ table.j4care-table {
     padding: 3px 12px;
     border-radius: 0; }
 
-.partedit_block .togglblock {
-  position: relative; }
-  .partedit_block .togglblock:hover {
-    cursor: pointer; }
-  .partedit_block .togglblock ul.blocklist {
-    z-index: 99999;
+.partedit_block {
+  display: none; }
+  .partedit_block .togglblock {
+    position: relative; }
+    .partedit_block .togglblock:hover {
+      cursor: pointer; }
+    .partedit_block .togglblock ul.blocklist {
+      z-index: 99999;
+      background: white none repeat scroll 0 0;
+      border: 1px solid #ccc;
+      box-shadow: 4px 4px 16px -7px black;
+      display: block;
+      list-style: outside none none;
+      max-height: 300px;
+      overflow-y: auto;
+      position: absolute;
+      top: 21px;
+      width: 551px;
+      padding-left: 0; }
+      .partedit_block .togglblock ul.blocklist li {
+        text-indent: 10px; }
+        .partedit_block .togglblock ul.blocklist li:hover {
+          background: #ccc;
+          cursor: pointer; }
+
+.state {
+  display: table;
+  margin: 0 auto; }
+  .state .dot {
     background: white none repeat scroll 0 0;
-    border: 1px solid #ccc;
-    box-shadow: 4px 4px 16px -7px black;
+    border: 1px solid black;
+    border-radius: 9px;
     display: block;
-    list-style: outside none none;
-    max-height: 300px;
-    overflow-y: auto;
-    position: absolute;
-    top: 21px;
-    width: 551px;
-    padding-left: 0; }
-    .partedit_block .togglblock ul.blocklist li {
-      text-indent: 10px; }
-      .partedit_block .togglblock ul.blocklist li:hover {
-        background: #ccc;
-        cursor: pointer; }
+    float: left;
+    height: 12px;
+    width: 12px; }
+    .state .dot.active:after {
+      background: white none repeat scroll 0 0;
+      border-radius: 11px;
+      box-shadow: 0 0 7px 5px #144d76 inset;
+      display: block;
+      height: 8px;
+      margin-left: 1px;
+      margin-top: 1px;
+      width: 8px;
+      content: ""; }
+  .state .line {
+    background: white none repeat scroll 0 0;
+    box-shadow: 0 0 1px 1px #3b6b8c inset;
+    display: block;
+    float: left;
+    height: 2px;
+    margin-top: 5px;
+    width: 94px; }
 
 .dummyinput {
   display: block;
