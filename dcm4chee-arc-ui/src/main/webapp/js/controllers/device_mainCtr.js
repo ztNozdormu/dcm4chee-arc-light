@@ -15,6 +15,8 @@ myApp.controller("DeviceController", function($scope, $http, $timeout, $log, cfp
     $scope.selectedPart           = {};
     $scope.selectObject           = $select;
     $scope.schemas                = schemas;
+    $scope.activeTab              = "devicelist_block";
+    
     setTimeout(function(){
       $scope.$apply(function(){
         $scope.activeMenu         = "";
@@ -591,8 +593,10 @@ myApp.controller("DeviceController", function($scope, $http, $timeout, $log, cfp
                 angular.element(document.getElementById("add_edit_area")).html("");
         }else{
                 DeviceService.cancle($scope);
-                $scope.form[$scope.selectedElement].model  = {};
-                DeviceService.removeEmptyPart($scope.wholeDevice[$scope.selectedElement], [$select[$scope.selectedElement].optionValue]);
+                if($scope.selectedElement){
+                    $scope.form[$scope.selectedElement].model  = {};
+                    DeviceService.removeEmptyPart($scope.wholeDevice[$scope.selectedElement], [$select[$scope.selectedElement].optionValue]);
+                }
         }
 
         $scope.selectedElement  = "device";
@@ -1008,6 +1012,14 @@ myApp.controller("DeviceController", function($scope, $http, $timeout, $log, cfp
     };
 
     var addEffect = function(direction, selector, display){
+        console.log("selector",selector);
+        console.log("selectorre",selector.replace(/./g,""));
+        setTimeout(function(){ 
+            $scope.$apply(function(){
+                $scope.activeTab = selector;
+            });
+        });
+        console.log("activeTab",$scope.activeTab);
         var element = angular.element(selector);
             element.removeClass('fadeInRight').removeClass('fadeInLeft');
             if(display === "hide"){
@@ -1134,7 +1146,21 @@ myApp.controller("DeviceController", function($scope, $http, $timeout, $log, cfp
         addEffect("left",".partedit_block", "hide");
         setTimeout(function(){
             addEffect("right",".devicelist_block", "show");
-            cancel();
+                addEffect("left",".deviceedit_block", "hide");
+                cancel();
+                setTimeout(function(){
+                    // addEffect("right",".partedit_block", "show");
+                    // $scope.$apply(function(){
+                    //     $scope.selectedPart[$scope.selectedElement] = "";
+                    //     $scope.selectedElement = "";
+                    // });
+                    $scope.$apply(function(){
+                        $scope.devicename = "";
+                        $scope.selectedPart[$scope.selectedElement] = "";
+                        $scope.selectedElement = "";
+                    });
+                    // cancel();
+                },301);
         },301);
     };
     $scope.goBackToPartList2 = function(){
@@ -1142,6 +1168,10 @@ myApp.controller("DeviceController", function($scope, $http, $timeout, $log, cfp
         addEffect("left",".deviceedit_block", "hide");
         setTimeout(function(){
             addEffect("right",".partedit_block", "show");
+            // $scope.$apply(function(){
+            //     $scope.selectedPart[$scope.selectedElement] = "";
+            //     $scope.selectedElement = "";
+            // });
             // cancel();
         },301);
     };

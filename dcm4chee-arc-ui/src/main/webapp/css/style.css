@@ -1776,6 +1776,27 @@ table.j4care-table {
             float: right;
             width: 32.5%;
             color: #777; }
+        .deviceedit_block bootstrap-decorator > .schema-form-array > ol > li.list-group-item sf-decorator .schema-form-number {
+          margin: 0;
+          width: 90.7%;
+          padding-left: 3px; }
+          .deviceedit_block bootstrap-decorator > .schema-form-array > ol > li.list-group-item sf-decorator .schema-form-number label {
+            display: none; }
+          .deviceedit_block bootstrap-decorator > .schema-form-array > ol > li.list-group-item sf-decorator .schema-form-number input {
+            width: 100%;
+            float: left;
+            border-color: #ccc;
+            border-style: solid;
+            border-width: 1px;
+            border-radius: 0;
+            padding: 3px 12px;
+            height: 26px;
+            margin-top: 3px; }
+          .deviceedit_block bootstrap-decorator > .schema-form-array > ol > li.list-group-item sf-decorator .schema-form-number .help-block {
+            display: none;
+            float: right;
+            width: 32.5%;
+            color: #777; }
         .deviceedit_block bootstrap-decorator > .schema-form-array > ol > li.list-group-item .help-block {
           float: left;
           margin: 10px 11px 16px;
@@ -1799,7 +1820,9 @@ table.j4care-table {
         width: 70px; }
     .deviceedit_block bootstrap-decorator > .schema-form-array > .help-block {
       margin-bottom: 0px;
-      margin-top: 0px; }
+      margin-top: 0px;
+      float: left;
+      width: 40%; }
     .deviceedit_block bootstrap-decorator > .schema-form-radios, .deviceedit_block bootstrap-decorator > .schema-form-checkboxes {
       padding: 10px 20px 0px 20px; }
       .deviceedit_block bootstrap-decorator > .schema-form-radios label, .deviceedit_block bootstrap-decorator > .schema-form-radios label span, .deviceedit_block bootstrap-decorator > .schema-form-checkboxes label, .deviceedit_block bootstrap-decorator > .schema-form-checkboxes label span {
@@ -1969,10 +1992,22 @@ table.j4care-table {
         .partedit_block .togglblock ul.blocklist li:hover {
           background: #ccc;
           cursor: pointer; }
+  .partedit_block .back {
+    color: #777;
+    left: -16px;
+    position: relative;
+    top: -7px;
+    font-size: 15px;
+    font-weight: bold; }
+    .partedit_block .back:hover {
+      color: #3b6b8c; }
 
 .state {
   display: table;
-  margin: 0 auto; }
+  left: 50%;
+  margin-left: -200px;
+  position: relative;
+  top: 15px; }
   .state .dot {
     background: white none repeat scroll 0 0;
     border: 1px solid black;
@@ -1991,6 +2026,17 @@ table.j4care-table {
       margin-top: 1px;
       width: 8px;
       content: ""; }
+  .state .text {
+    float: left;
+    font-size: 11px;
+    font-style: italic;
+    left: -95px;
+    position: relative;
+    width: 629px; }
+    .state .text > span {
+      float: left;
+      text-align: center;
+      width: 33.3%; }
   .state .line {
     background: white none repeat scroll 0 0;
     box-shadow: 0 0 1px 1px #3b6b8c inset;
@@ -1998,7 +2044,7 @@ table.j4care-table {
     float: left;
     height: 2px;
     margin-top: 5px;
-    width: 94px; }
+    width: 200px; }
 
 .dummyinput {
   display: block;

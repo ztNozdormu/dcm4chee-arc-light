@@ -1,9 +1,24 @@
-<div class="state">
-    <span class="dot active"></span>
-    <span class="line"></span>
-    <span class="dot"></span>
-   	<span class="line"></span>
-    <span class="dot"></span>
+<div class="state" ng-show="devicename || selectedElement">
+	<div class="text">
+
+		<span>
+			<span ng-show="devicename">Device name : </span>{{devicename}}
+		</span>
+		<span>
+			{{selectedElement}}<span ng-show="selectedPart[selectedElement]"> : </span>{{selectedPart[selectedElement]}}
+		</span>
+		<span>
+			<i class="glyphicon glyphicon-list-alt"></i>
+		</span>
+	</div>
+	<div class="breatcrumb">
+	    <span ng-click="goBackToDeviceList2()" class="dot" ng-class="{active: activeTab==='.devicelist_block'}"></span>
+	    <span class="line"></span>
+	    <span ng-click="goBackToPartList2()" class="dot" ng-class="{active: activeTab==='.partedit_block'}"></span>
+	   	<span class="line"></span>
+	    <span class="dot"  ng-class="{active: activeTab==='.deviceedit_block'}">
+	    </span>
+	</div>
 </div>
 <div class="devicelist_block">
 	<h2>Device list</h2>
@@ -99,7 +114,7 @@
 						<span class="glyphicon glyphicon-duplicate"></span>
 					</a>
 				</td>
-				<td><a class="listlink" ng-click="editDeviceList(value.dicomDeviceName)"  title="Edit device">{{value.dicomDeviceName}}</a></td>
+				<td><a class="listlink" ng-click="editDeviceList2(value.dicomDeviceName)"  title="Edit device">{{value.dicomDeviceName}}</a></td>
 				<td>{{value.dicomInstitutionDepartmentName[0]}}</td>
 				<td>{{value.dicomDescription}}</td>
 				<td>{{value.dicomManufacturer}}</td>

@@ -815,7 +815,7 @@ myApp.factory('DeviceService', function($log, cfpLoadingBar, $http, $compile, sc
         removeEmptyPart: function(element, key) {
             if (element) {
                 angular.forEach(element, function(k, i) {
-                    if (!k || (k && (!k[key] || k[key] === ""))) {
+                    if ((!k || (k && (!k[key] || k[key] === ""))) && element[i]) {
                         element.splice(i, 1);
                     }
                 });
@@ -1156,7 +1156,7 @@ myApp.factory('DeviceService', function($log, cfpLoadingBar, $http, $compile, sc
             addEmptyArrayFieldsPrivate($scope);
         },
         cancle: function($scope) {
-            if ($select[$scope.selectedElement].optionRef.length > 1) {
+            if ($scope.selectedElement && $select[$scope.selectedElement].optionRef.length > 1) {
                 if ($select[$select[$scope.selectedElement].optionRef[0]].type === "array") {
                     angular.forEach($scope.wholeDevice[$select[$scope.selectedElement].optionRef[0]], function(k, i) {
                         if (k[$select[$select[$scope.selectedElement].optionRef[0]].optionValue] === $scope.selectedPart[$select[$scope.selectedElement].optionRef[0]]) {
@@ -1179,7 +1179,7 @@ myApp.factory('DeviceService', function($log, cfpLoadingBar, $http, $compile, sc
                     }
                 }
             } else {
-                if ($select[$select[$scope.selectedElement].optionRef[0]].type === "array") {
+                if ($scope.selectedElement && $select[$select[$scope.selectedElement].optionRef[0]].type === "array") {
                     angular.forEach($scope.wholeDevice[$select[$scope.selectedElement].optionRef[0]], function(k, i) {
                         if (k[$select[$select[$scope.selectedElement].optionRef[0]].optionValue] === $scope.dynamic_model[$select[$select[$scope.selectedElement].optionRef[0]].optionValue]) {
                             $scope.wholeDevice[$select[$scope.selectedElement].optionRef[0]].splice(i, 1);

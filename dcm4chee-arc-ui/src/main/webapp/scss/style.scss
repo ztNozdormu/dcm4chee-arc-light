@@ -2411,6 +2411,41 @@ table.j4care-table{
 
 							}
 				    	}
+				    	.schema-form-number{
+				    		margin: 0;
+							width: 90.7%;
+							padding-left: 3px;
+				    		label {
+				    			display: none;
+							    // color: black !important;
+							    // float: left;
+							    // padding-bottom: 0;
+							    // padding-right: 15px;
+							    // text-align: right;
+							    // width: 49.4%;
+							    // height: 32px;
+    							// line-height: 32px;
+    							// margin-bottom: 0;
+							}
+						    input{
+						    	width: 100%;
+							    float: left;
+						    	border-color: #ccc;
+							    border-style: solid;
+							    border-width: 1px;
+							    border-radius:0;
+							    padding: 3px 12px;
+							    height: 26px;
+			    				margin-top: 3px;
+						    }
+							.help-block {
+								display: none;
+								float: right;
+    							width: 32.5%;
+    							color: #777;
+
+							}
+				    	}
 				    }
 				    .help-block{
 				    	float: left;
@@ -2444,6 +2479,8 @@ table.j4care-table{
 			& > .help-block{
 				margin-bottom: 0px;
 				margin-top: 0px;
+				float:left;
+				width: 40%;
 			}
 	    }
 	    & > .schema-form-radios , & > .schema-form-checkboxes{
@@ -2666,10 +2703,24 @@ table.j4care-table{
 		    }
 		}
 	}
+	.back{
+		color: #777;
+	    left: -16px;
+	    position: relative;
+	    top: -7px;
+	    font-size: 15px;
+	    font-weight: bold;
+	    &:hover{
+	    	color: #3b6b8c;
+	    }
+	}
 }
 .state {
     display: table;
-    margin: 0 auto;
+    left: 50%;
+    margin-left: -200px;
+    position: relative;
+    top: 15px;
     .dot {
 	   	background: white none repeat scroll 0 0;
 	    border: 1px solid black;
@@ -2690,14 +2741,27 @@ table.j4care-table{
 		    content: "";
 	    }
 	}
+	.text {
+	    float: left;
+	    font-size: 11px;
+	    font-style: italic;
+	    left: -95px;
+	    position: relative;
+	    width: 629px;
+		& > span {
+		    float: left;
+		    text-align: center;
+		    width: 33.3%;
+		}
+	}
 	.line {
-	    background: white none repeat scroll 0 0;
+	   	background: white none repeat scroll 0 0;
 	    box-shadow: 0 0 1px 1px #3b6b8c inset;
 	    display: block;
 	    float: left;
 	    height: 2px;
 	    margin-top: 5px;
-	    width: 94px;
+	    width: 200px;
 	}
 }
 .dummyinput{
