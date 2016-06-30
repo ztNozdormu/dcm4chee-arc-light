@@ -1970,6 +1970,8 @@ table.j4care-table {
 
 .partedit_block {
   display: none; }
+  .partedit_block .more_menu {
+    background: none; }
   .partedit_block .togglblock {
     position: relative; }
     .partedit_block .togglblock:hover {

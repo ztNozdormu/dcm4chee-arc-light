@@ -113,7 +113,11 @@
 					<div class="togglblock" ng-init="showmore['key'] = false" ng-if="value.type==='array'">
 						<div class="togglebutton" ng-click="showmore['key'] = !showmore['key']"><span class="glyphicon glyphicon-pencil"></span></div>
 						<ul class="blocklist ng-hide" ng-show="showmore['key']">
-							<li ng-repeat="(k, v) in selectModel[key]" ng-click="selectedPart[key] = v[value.optionValue];changeElement2(key);showmore['key'] = false">{{v[value.optionValue]}}</li>
+							<li ng-repeat="(k, v) in selectModel[key]">
+								<span ng-click="selectedPart[key] = v[value.optionValue];changeElement2(key);showmore['key'] = false">{{v[value.optionValue]}}</span>
+								<span class="glyphicon glyphicon-duplicate" ng-click="selectedPart[key] = v[value.optionValue];clonePart2(key)"></span>
+								<span class="glyphicon glyphicon-remove" ng-click="selectedPart[key] = v[value.optionValue];deletePart(key)"></span>
+							</li>
 						</ul>
 					</div>
 					<div ng-if="value.type!='array'">

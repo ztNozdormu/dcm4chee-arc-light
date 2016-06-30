@@ -1352,6 +1352,43 @@ myApp.controller("DeviceController", function($scope, $http, $timeout, $log, cfp
 
     };
 
+    $scope.clonePart2 = function(part){
+        console.log("in cloneparr2");
+        console.log("part",part);
+        console.log("$scope.selectedPart",$scope.selectedPart);
+      cfpLoadingBar.start();
+      if($scope.selectedPart[part]){
+        var html = $compile(
+                      '<input type="text" ng-model="newCloneName" required/>'
+                    )($scope);
+        vex.dialog.open({
+          message: 'Set the new name to clone "'+$scope.selectedPart[part]+'"!',
+          input: html,
+          buttons: [
+            $.extend({}, vex.dialog.buttons.YES, {
+              text: 'Clone'
+            }), $.extend({}, vex.dialog.buttons.NO, {
+              text: 'Cancle'
+            })
+          ],
+          callback: function(data) {
+            if (data === false) {
+              cfpLoadingBar.complete();
+              return console.log('Cancelled');
+            }else{
+              DeviceService.clonePart($scope, part, $scope.selectedPart);
+            }
+          }
+        });
+      }else{
+          DeviceService.msg($scope, {
+              "title": "Error",
+              "text": "Select first a "+$select[part].title,
+              "status": "error"
+          });
+          cfpLoadingBar.complete();
+      }
+    };
 });
 
 //http://localhost:8080/dcm4chee-arc/devices/dcm4chee-arc
