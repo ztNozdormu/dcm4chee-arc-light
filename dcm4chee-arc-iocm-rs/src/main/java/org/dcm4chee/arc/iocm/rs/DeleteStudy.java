@@ -38,12 +38,61 @@
  * *** END LICENSE BLOCK *****
  */
 
-package org.dcm4chee.arc.conf;
+package org.dcm4chee.arc.iocm.rs;
+
+import org.dcm4che3.net.ApplicationEntity;
+import org.dcm4che3.net.Device;
+import org.dcm4chee.arc.delete.DeletionService;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+
+import javax.enterprise.context.RequestScoped;
+import javax.inject.Inject;
+import javax.servlet.http.HttpServletRequest;
+import javax.ws.rs.POST;
+import javax.ws.rs.Path;
+import javax.ws.rs.PathParam;
+import javax.ws.rs.WebApplicationException;
+import javax.ws.rs.core.Context;
+import javax.ws.rs.core.Response;
+import java.io.InputStream;
 
 /**
  * @author Gunter Zeilinger <gunterze@gmail.com>
  * @since Jun 2016
  */
-public enum MWLStatus {
-    SCHEDULED, ARRIVED, READY, STARTED, DEPARTED, CANCELLED, DISCONTINUED, COMPLETED
+@RequestScoped
+@Path("aets/{AETitle}/rs")
+public class DeleteStudy {
+
+    private static final Logger LOG = LoggerFactory.getLogger(DeleteStudy.class);
+
+    @Inject
+    private Device device;
+
+    @Inject
+    private DeletionService deletionService;
+
+    @PathParam("AETitle")
+    private String aet;
+
+    @Context
+    private HttpServletRequest request;
+
+    @POST
+    @Path("/studies/{StudyUID}")
+    public void updateStudy(InputStream in) throws Exception {
+        LOG.info("Process DELETE {} from {}@{}",
+                request.getRequestURI(), request.getRemoteUser(), request.getRemoteHost());
+        //TODO
+    }
+
+    private ApplicationEntity getApplicationEntity() {
+        ApplicationEntity ae = device.getApplicationEntity(aet, true);
+        if (ae == null || !ae.isInstalled())
+            throw new WebApplicationException(
+                    "No such Application Entity: " + aet,
+                    Response.Status.SERVICE_UNAVAILABLE);
+        return ae;
+    }
 }

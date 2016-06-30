@@ -42,10 +42,12 @@ package org.dcm4chee.arc.iocm.rs;
 
 import org.dcm4che3.data.*;
 import org.dcm4che3.json.JSONReader;
+import org.dcm4che3.json.JSONWriter;
 import org.dcm4che3.net.ApplicationEntity;
 import org.dcm4che3.net.Device;
 import org.dcm4che3.util.UIDUtils;
 import org.dcm4chee.arc.conf.IDGenerator;
+import org.dcm4chee.arc.entity.Patient;
 import org.dcm4chee.arc.id.IDService;
 import org.dcm4chee.arc.patient.PatientMgtContext;
 import org.dcm4chee.arc.patient.PatientService;
@@ -57,12 +59,16 @@ import org.slf4j.LoggerFactory;
 import javax.enterprise.context.RequestScoped;
 import javax.inject.Inject;
 import javax.json.Json;
+import javax.json.stream.JsonGenerator;
 import javax.servlet.http.HttpServletRequest;
 import javax.ws.rs.*;
 import javax.ws.rs.core.Context;
 import javax.ws.rs.core.Response;
+import javax.ws.rs.core.StreamingOutput;
+import java.io.IOException;
 import java.io.InputStream;
 import java.io.InputStreamReader;
+import java.io.OutputStream;
 
 /**
  * @author Gunter Zeilinger <gunterze@gmail.com>
@@ -106,17 +112,14 @@ public class UpdateAttributes {
         logRequest();
         JSONReader reader = new JSONReader(Json.createParser(new InputStreamReader(in, "UTF-8")));
         Attributes attrs = reader.readDataset(null);
-        IDWithIssuer patientID = IDWithIssuer.pidOf(attrs);
-        if (patientID != null)
+        if (attrs.containsValue(Tag.PatientID))
             throw new WebApplicationException("Patient ID in message body", Response.Status.BAD_REQUEST);
-        patientID = new IDWithIssuer(idService.createID(IDGenerator.Name.PatientID),
-                getApplicationEntity().getDevice().getIssuerOfPatientID());
-        patientID.exportPatientIDWithIssuer(attrs);
+        idService.newPatientID(attrs);
         PatientMgtContext ctx = patientService.createPatientMgtContextWEB(request, getApplicationEntity());
         ctx.setAttributes(attrs);
         ctx.setAttributeUpdatePolicy(Attributes.UpdatePolicy.REPLACE);
         patientService.updatePatient(ctx);
-        return patientID.toString();
+        return IDWithIssuer.pidOf(attrs).toString();
     }
 
     @PUT
@@ -140,6 +143,40 @@ public class UpdateAttributes {
     }
 
     @POST
+    @Path("/studies")
+    @Consumes("application/json")
+    @Produces("application/json")
+    public StreamingOutput updateStudy(InputStream in) throws Exception {
+        logRequest();
+        JSONReader reader = new JSONReader(Json.createParser(new InputStreamReader(in, "UTF-8")));
+        final Attributes attrs = reader.readDataset(null);
+        IDWithIssuer patientID = IDWithIssuer.pidOf(attrs);
+        if (patientID == null)
+            throw new WebApplicationException("missing Patient ID in message body", Response.Status.BAD_REQUEST);
+
+        Patient patient = patientService.findPatient(patientID);
+        if (patient == null)
+            throw new WebApplicationException("Patient[id=" + patientID + "] does not exists",
+                    Response.Status.NOT_FOUND);
+
+        if (!attrs.containsValue(Tag.StudyInstanceUID))
+            attrs.setString(Tag.StudyInstanceUID, VR.UI, UIDUtils.createUID());
+
+        StudyMgtContext ctx = studyService.createIOCMContextWEB(request, getApplicationEntity());
+        ctx.setPatient(patient);
+        ctx.setAttributes(attrs);
+        studyService.updateStudy(ctx);
+        return new StreamingOutput() {
+            @Override
+            public void write(OutputStream out) throws IOException {
+                try (JsonGenerator gen = Json.createGenerator(out)) {
+                    new JSONWriter(gen).write(attrs);
+                }
+            }
+        };
+    }
+
+    @POST
     @Path("/patients/{PatientID}/studies")
     @Consumes("application/json")
     public String updateStudy(@PathParam("PatientID") IDWithIssuer patientID,
@@ -150,10 +187,16 @@ public class UpdateAttributes {
         String studyIUID = attrs.getString(Tag.StudyInstanceUID);
         if (studyIUID != null)
             throw new WebApplicationException("Study Instance UID in message body", Response.Status.BAD_REQUEST);
-        studyIUID = UIDUtils.createUID();
-        attrs.setString(Tag.StudyInstanceUID, VR.UI, studyIUID);
+
+        Patient patient = patientService.findPatient(patientID);
+        if (patient == null)
+            throw new WebApplicationException("Patient[id=" + patientID + "] does not exists",
+                    Response.Status.NOT_FOUND);
+
+        attrs.setString(Tag.StudyInstanceUID, VR.UI, UIDUtils.createUID());
+
         StudyMgtContext ctx = studyService.createIOCMContextWEB(request, getApplicationEntity());
-        ctx.setPatientID(patientID);
+        ctx.setPatient(patient);
         ctx.setAttributes(attrs);
         studyService.updateStudy(ctx);
         return studyIUID;
@@ -166,10 +209,9 @@ public class UpdateAttributes {
                             @PathParam("StudyUID") String studyUID,
                             InputStream in) throws Exception {
         logRequest();
-        StudyMgtContext ctx = studyService.createIOCMContextWEB(request, getApplicationEntity());
         JSONReader reader = new JSONReader(Json.createParser(new InputStreamReader(in, "UTF-8")));
-        ctx.setPatientID(patientID);
-        ctx.setAttributes(reader.readDataset(null));
+
+        StudyMgtContext ctx = studyService.createIOCMContextWEB(request, getApplicationEntity());
         String studyIUIDBody = ctx.getStudyInstanceUID();
         if (studyIUIDBody == null)
             throw new WebApplicationException("missing Study Instance UID in message body", Response.Status.BAD_REQUEST);
@@ -177,6 +219,14 @@ public class UpdateAttributes {
             throw new WebApplicationException("Study Instance UID[" + studyIUIDBody +
                     "] in message body does not match Study Instance UID[" + studyUID + "] in path",
                     Response.Status.BAD_REQUEST);
+
+        Patient patient = patientService.findPatient(patientID);
+        if (patient == null)
+            throw new WebApplicationException("Patient[id=" + patientID + "] does not exists",
+                    Response.Status.NOT_FOUND);
+
+        ctx.setPatient(patient);
+        ctx.setAttributes(reader.readDataset(null));
 
         studyService.updateStudy(ctx);
     }

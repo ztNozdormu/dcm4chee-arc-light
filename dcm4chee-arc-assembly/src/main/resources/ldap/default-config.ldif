@@ -5,6 +5,7 @@ dicomInstalled: TRUE
 dicomDeviceName: logstash
 objectClass: dicomDevice
 objectClass: dcmDevice
+dicomPrimaryDeviceType: LOG
 
 dn: cn=syslog,dicomDeviceName=logstash,cn=Devices,cn=DICOM Configuration,dc=dcm4che,dc=org
 dicomHostname: localhost
@@ -62,6 +63,7 @@ dcmSendPendingCGet: TRUE
 dcmQueryRetrieveViewID: hideRejected
 dicomDeviceName: dcm4chee-arc
 dcmRejectExpiredStudiesFetchSize: 10
+dicomPrimaryDeviceType: ARCHIVE
 hl7ImportReportTemplateURI: ${jboss.server.temp.url}/dcm4chee-arc/hl7-oru2dsr.xsl
 dcmStorageID: fs1
 dicomManufacturer: dcm4che.org
@@ -248,10 +250,6 @@ dcmTag: 00100101
 dcmTag: 00101001
 dcmTag: 00101002
 dcmTag: 00101005
-dcmTag: 00101010
-dcmTag: 00101020
-dcmTag: 00101021
-dcmTag: 00101030
 dcmTag: 00101040
 dcmTag: 00101060
 dcmTag: 00101080
@@ -263,15 +261,12 @@ dcmTag: 00102150
 dcmTag: 00102152
 dcmTag: 00102154
 dcmTag: 00102160
-dcmTag: 00102180
 dcmTag: 001021A0
-dcmTag: 001021B0
 dcmTag: 001021C0
 dcmTag: 001021D0
 dcmTag: 001021F0
 dcmTag: 00102201
 dcmTag: 00102202
-dcmTag: 00102203
 dcmTag: 00102292
 dcmTag: 00102293
 dcmTag: 00102294
@@ -441,12 +436,16 @@ dcmTag: 00081080
 dcmTag: 00081084
 dcmTag: 00081110
 dcmTag: 00081120
+dcmTag: 00101010
 dcmTag: 00101020
 dcmTag: 00101021
 dcmTag: 00101030
 dcmTag: 00102000
 dcmTag: 00102110
+dcmTag: 00102180
+dcmTag: 001021B0
 dcmTag: 001021C0
+dcmTag: 00102203
 dcmTag: 0020000D
 dcmTag: 00321031
 dcmTag: 00321032

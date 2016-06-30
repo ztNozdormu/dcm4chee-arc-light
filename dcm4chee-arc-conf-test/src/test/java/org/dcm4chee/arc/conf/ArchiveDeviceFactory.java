@@ -181,10 +181,6 @@ class ArchiveDeviceFactory {
             Tag.OtherPatientNames,
             Tag.OtherPatientIDsSequence,
             Tag.PatientBirthName,
-            Tag.PatientAge,
-            Tag.PatientSize,
-            Tag.PatientSizeCodeSequence,
-            Tag.PatientWeight,
             Tag.PatientAddress,
             Tag.PatientMotherBirthName,
             Tag.MilitaryRank,
@@ -196,15 +192,12 @@ class ArchiveDeviceFactory {
             Tag.RegionOfResidence,
             Tag.PatientTelephoneNumbers,
             Tag.EthnicGroup,
-            Tag.Occupation,
             Tag.SmokingStatus,
-            Tag.AdditionalPatientHistory,
             Tag.PregnancyStatus,
             Tag.LastMenstrualDate,
             Tag.PatientReligiousPreference,
             Tag.PatientSpeciesDescription,
             Tag.PatientSpeciesCodeSequence,
-            Tag.PatientSexNeutered,
             Tag.PatientBreedDescription,
             Tag.PatientBreedCodeSequence,
             Tag.BreedRegistrationSequence,
@@ -362,9 +355,13 @@ class ArchiveDeviceFactory {
             Tag.AdmittingDiagnosesCodeSequence,
             Tag.ReferencedStudySequence,
             Tag.ReferencedPatientSequence,
+            Tag.PatientAge,
             Tag.PatientSize,
             Tag.PatientSizeCodeSequence,
             Tag.PatientWeight,
+            Tag.Occupation,
+            Tag.AdditionalPatientHistory,
+            Tag.PatientSexNeutered,
             Tag.MedicalAlerts,
             Tag.Allergies,
             Tag.PregnancyStatus,
@@ -679,8 +676,8 @@ class ArchiveDeviceFactory {
             UID.PatientStudyOnlyQueryRetrieveInformationModelGETRetired,
             UID.PatientStudyOnlyQueryRetrieveInformationModelMOVERetired
     };
-    static final MWLStatus[] HIDE_SPS_WITH_STATUS_FROM_MWL = {
-            MWLStatus.STARTED, MWLStatus.DEPARTED, MWLStatus.CANCELLED, MWLStatus.DISCONTINUED, MWLStatus.COMPLETED
+    static final SPSStatus[] HIDE_SPS_WITH_STATUS_FROM_MWL = {
+            SPSStatus.STARTED, SPSStatus.DEPARTED, SPSStatus.CANCELLED, SPSStatus.DISCONTINUED, SPSStatus.COMPLETED
     };
 
     static final Code INCORRECT_WORKLIST_ENTRY_SELECTED =
@@ -820,6 +817,21 @@ class ArchiveDeviceFactory {
             "OMG^O19",
             "ORU^R01"
     };
+
+    static final String[] DEVICE_TYPES = {
+            "ARCHIVE",
+            "CT",
+            "WSD",
+            "DSS",
+            "DSS",
+            "CT",
+            "CT",
+            "WSD",
+            "WSD",
+            "WSD",
+            "DSS"
+    };
+
     static final String DCM4CHEE_ARC_VERSION = "5.5.0";
     static final String DCM4CHEE_ARC_KEY_JKS =  "${jboss.server.config.url}/dcm4chee-arc/key.jks";
     static final String HL7_ADT2DCM_XSL = "${jboss.server.temp.url}/dcm4chee-arc/hl7-adt2dcm.xsl";
@@ -872,6 +884,7 @@ class ArchiveDeviceFactory {
         syslog.setProtocol(protocol);
         arrDevice.addConnection(syslog);
         arr.addConnection(syslog);
+        arrDevice.setPrimaryDeviceTypes("LOG");
         return arrDevice ;
     }
 
@@ -893,7 +906,7 @@ class ArchiveDeviceFactory {
         return device;
     }
 
-    public static Device createDevice(String name, Issuer issuer, Code institutionCode, String aet,
+    public static Device createDevice(String name, String primaryDeviceType, Issuer issuer, Code institutionCode, String aet,
                                String host, int port, int tlsPort) throws Exception {
         Device device = init(new Device(name), issuer, institutionCode);
         ApplicationEntity ae = new ApplicationEntity(aet);
@@ -930,6 +943,7 @@ class ArchiveDeviceFactory {
                 Connection.TLS_RSA_WITH_3DES_EDE_CBC_SHA);
         device.addConnection(hl7TLS);
         hl7app.addConnection(hl7TLS);
+        device.setPrimaryDeviceTypes("DSS");
         return device;
     }
     public static Device createArchiveDevice(String name, Device arrDevice, ConfigType configType) throws Exception {
@@ -967,6 +981,7 @@ class ArchiveDeviceFactory {
         device.setKeyStoreURL(DCM4CHEE_ARC_KEY_JKS);
         device.setKeyStoreType("JKS");
         device.setKeyStorePin("secret");
+        device.setPrimaryDeviceTypes("ARCHIVE");
 
         device.addApplicationEntity(createAE("DCM4CHEE", "Hide instances rejected for Quality Reasons",
                 dicom, dicomTLS, HIDE_REJECTED_VIEW, true, true, true, configType));

@@ -145,11 +145,10 @@
         }
       }
     },
-    "/ctrl/devicename": {
+    "/devicename": {
       "get": {
         "tags": [
-          "CONFIG-RS",
-          "CTRL-RS"
+          "CONFIG-RS"
         ],
         "summary": "Get Archive Device Name",
         "operationId": "devicename",
@@ -820,183 +819,6 @@
         }
       }
     },
-    "/aets/{aet}/rs/patients/{patientID}/studies": {
-      "post": {
-        "tags": [
-          "IOCM-RS"
-        ],
-        "summary": "create study",
-        "operationId": "createStudy",
-        "consumes": [
-          "application/json"
-        ],
-        "produces": [
-          "text/plan"
-        ],
-        "parameters": [
-          {
-            "name": "aet",
-            "in": "path",
-            "description": "Archive AE Title",
-            "required": true,
-            "type": "string"
-          },
-          {
-            "name": "patientID",
-            "in": "path",
-            "description": "Patient ID and Issuer encoded as HL7 CX",
-            "required": true,
-            "type": "string"
-          }
-        ],
-        "responses": {
-          "200": {
-            "description": "Study Instance UID of created Study",
-            "schema": {
-              "type": "string"
-            }
-          },
-          "default": {
-            "description": "unexpected error"
-          }
-        }
-      }
-    },
-    "/aets/{aet}/rs/patients/{patientID}/studies/{studyUID}": {
-      "put": {
-        "tags": [
-          "IOCM-RS"
-        ],
-        "summary": "update or create study",
-        "operationId": "updateStudy",
-        "consumes": [
-          "application/json"
-        ],
-        "parameters": [
-          {
-            "name": "aet",
-            "in": "path",
-            "description": "Archive AE Title",
-            "required": true,
-            "type": "string"
-          },
-          {
-            "name": "patientID",
-            "in": "path",
-            "description": "Patient ID and Issuer encoded as HL7 CX",
-            "required": true,
-            "type": "string"
-          },
-          {
-            "name": "studyUID",
-            "in": "path",
-            "description": "Unique Identifier of the Study",
-            "required": true,
-            "type": "string"
-          }
-        ],
-        "responses": {
-          "204": {
-            "description": "successful operation"
-          },
-          "default": {
-            "description": "unexpected error"
-          }
-        }
-      }
-    },
-    "/aets/{aet}/rs/patients/{patientID}/mwlitems": {
-      "post": {
-        "tags": [
-          "MWL-RS"
-        ],
-        "summary": "Create Scheduled Procedure Step",
-        "operationId": "CreateSPS",
-        "consumes": [
-          "application/json"
-        ],
-        "produces": [
-          "application/json"
-        ],
-        "parameters": [
-          {
-            "name": "aet",
-            "in": "path",
-            "description": "Archive AE Title",
-            "required": true,
-            "type": "string"
-          },
-          {
-            "name": "patientID",
-            "in": "path",
-            "description": "Patient ID and Issuer encoded as HL7 CX",
-            "required": true,
-            "type": "string"
-          }
-        ],
-        "responses": {
-          "200": {
-            "description": "successful operation",
-            "schema": {
-              "type": "file"
-            }
-          },
-          "default": {
-            "description": "unexpected error"
-          }
-        }
-      }
-    },
-    "/aets/{aet}/rs/patients/{patientID}/mwlitems/{studyUID}/{spsID}": {
-      "put": {
-        "tags": [
-          "MWL-RS"
-        ],
-        "summary": "Update Scheduled Procedure Step",
-        "operationId": "UpdateSPS",
-        "consumes": [
-          "application/json"
-        ],
-        "parameters": [
-          {
-            "name": "aet",
-            "in": "path",
-            "description": "Archive AE Title",
-            "required": true,
-            "type": "string"
-          },
-          {
-            "name": "patientID",
-            "in": "path",
-            "description": "Patient ID and Issuer encoded as HL7 CX",
-            "required": true,
-            "type": "string"
-          },
-          {
-            "name": "studyUID",
-            "in": "path",
-            "description": "Unique Identifier of the Study",
-            "required": true,
-            "type": "string"
-          },
-          {
-            "name": "spsID",
-            "in": "path",
-            "description": "Identifier of the Scheduled Procedure Step",
-            "required": true,
-            "type": "string"
-          }
-        ],
-        "responses": {
-          "204": {
-            "description": "successful operation"
-          },
-          "default": {
-            "description": "unexpected error"
-          }
-        }
-      }
-    },
     "/aets/{aet}/rs/mwlitems": {
       "get": {
         "tags": [
@@ -1069,10 +891,114 @@
         ],
         "responses": {
           "200": {
-            "description": "successful operation",
+            "description": "Matching Scheduled Procedure Steps",
             "schema": {
               "type": "file"
             }
+          },
+          "default": {
+            "description": "unexpected error"
+          }
+        }
+      },
+      "post": {
+        "tags": [
+          "MWL-RS"
+        ],
+        "summary": "Create/Update Scheduled Procedure Step",
+        "operationId": "CreateUpdateSPS",
+        "consumes": [
+          "application/json"
+        ],
+        "produces": [
+          "application/json"
+        ],
+        "parameters": [
+          {
+            "name": "aet",
+            "in": "path",
+            "description": "Archive AE Title",
+            "required": true,
+            "type": "string"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Created/Updated Scheduled Procedure Step",
+            "schema": {
+              "type": "file"
+            }
+          },
+          "default": {
+            "description": "unexpected error"
+          }
+        }
+      }
+    },
+    "/aets/{aet}/rs/studies": {
+      "post": {
+        "tags": [
+          "IOCM-RS"
+        ],
+        "summary": "Create/Update Study",
+        "operationId": "CreateUpdateStudy",
+        "consumes": [
+          "application/json"
+        ],
+        "produces": [
+          "application/json"
+        ],
+        "parameters": [
+          {
+            "name": "aet",
+            "in": "path",
+            "description": "Archive AE Title",
+            "required": true,
+            "type": "string"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Created/Updated Study Attributes",
+            "schema": {
+              "type": "file"
+            }
+          },
+          "default": {
+            "description": "unexpected error"
+          }
+        }
+      }
+    },
+    "/aets/{aet}/rs/studies/{studyUID}": {
+      "delete": {
+        "tags": [
+          "IOCM-RS"
+        ],
+        "summary": "Delete Study Permanently",
+        "operationId": "DeleteStudy",
+        "parameters": [
+          {
+            "name": "aet",
+            "in": "path",
+            "description": "Archive AE Title",
+            "required": true,
+            "type": "string"
+          },
+          {
+            "name": "studyUID",
+            "in": "path",
+            "description": "Unique Identifier of the Study",
+            "required": true,
+            "type": "string"
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "successful operation"
+          },
+          "404": {
+            "description": "no such study"
           },
           "default": {
             "description": "unexpected error"
