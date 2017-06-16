@@ -1,4 +1,4 @@
-<div class="main_content monitoring">
+<div class="main_content monitoring diff">
     <ul class="nav nav-tabs" role="tablist">
         <li role="presentation" routerLinkActive="active"><a role="tab" routerLink="/monitoring/queues" routerLinkActive="active">Queues</a></li>
         <li role="presentation" routerLinkActive="active"><a role="tab" routerLink="/monitoring/export" routerLinkActive="active">Export</a></li>
@@ -12,62 +12,47 @@
             <div class="main_filter_block">
                 <div class="col-md-3 block-1-1">
                     <div class="row">
-                        <label class="col-md-6 text-right control-label">Uri Schema:</label>
+                        <label class="col-md-6 text-right control-label">Primare AE:</label>
                         <div class="col-md-6">
-                            <md-select [(ngModel)]="filters.uriScheme" class="col-md-12">
-                                <!--<md-option *ngFor="let ae of aets" [value]="ae.title" title="{{ae.description}}">{{ ae.title }}</md-option>-->
-                                <md-option value="">*</md-option>
-                                <md-option value="file">file</md-option>
-                                <md-option value="jclouds">jclouds</md-option>
-                                <md-option value="emc-ecs-s3">emc-ecs-s3</md-option>
-                                <md-option value="hcp">hcp</md-option>
-                                <md-option value="documentu">documentu</md-option>
+                            <md-select [(ngModel)]="aet1" class="col-md-12">
+                                <md-option *ngFor="let ae of aes" [value]="ae.dicomAETitle" title="{{ae.dicomDeviceName}} {{ ae.dicomAETitle }}">{{ ae.dicomAETitle }}</md-option>
                             </md-select>
                         </div>
                     </div>
                     <div class="row">
-                        <label class="col-md-6 text-right control-label">AETitle:</label>
+                        <label class="col-md-6 text-right control-label">Secondary AE:</label>
                         <div class="col-md-6">
-                            <md-select [(ngModel)]="filters.dicomAETitle" class="col-md-12">
-                                <md-option value="">*</md-option>
-                                <md-option *ngFor="let ae of aets" [value]="ae.title" title="{{ae.description}}">{{ ae.title }}</md-option>
+                            <md-select [(ngModel)]="aet2" class="col-md-12">
+                                <md-option *ngFor="let ae of aes" [value]="ae.dicomAETitle" title="{{ae.dicomDeviceName}} {{ ae.dicomAETitle }}">{{ ae.dicomAETitle }}</md-option>
                             </md-select>
                         </div>
                     </div>
+                </div>
+                <div class="col-md-3 block-1-1">
                     <div class="row">
-                        <label for="usage" class="col-md-6 text-right control-label">Usablespace below:</label>
+                        <label class="col-md-6 text-right control-label">Start date</label>
                         <div class="col-md-6">
-                            <input id="usage" type="number" min="1" [(ngModel)]="filters.usableSpaceBelow" class="col-md-12" />
+                            <p-calendar dataType="string" [(ngModel)]="startDate" dateFormat="yymmdd" monthNavigator="true" yearNavigator="true" yearRange="1800:2100" placeholder="Start date"></p-calendar>
+                        </div>
+                    </div>
+                    <div class="row">
+                        <label class="col-md-6 text-right control-label">End date</label>
+                        <div class="col-md-6">
+                            <p-calendar dataType="string" [(ngModel)]="endDate" dateFormat="yymmdd" monthNavigator="true" yearNavigator="true" yearRange="1800:2100" placeholder="End date"></p-calendar>
                         </div>
                     </div>
                 </div>
                 <div class="col-md-3 block-2-1">
-                    <!--<div class="row">-->
-                    <!--<label class="col-md-6 text-right control-label">Study UID</label>-->
-                    <!--<div class="col-md-6">-->
-                    <!--<p-calendar  dataType="string" [(ngModel)]="filters.updatedBefore" dateFormat="yy-mm-dd" monthNavigator="true" yearNavigator="true" yearRange="1800:2100" placeholder="Updated before"></p-calendar>-->
-                    <!--</div>-->
-                    <!--</div>-->
                     <div class="row" title="Only return Storage Systems used for the specified content">
-                        <label for="usage" class="col-md-6 text-right control-label">Usage:</label>
-                        <div class="col-md-6">
-                            <!--<input id="usage" type="text" min="1" [(ngModel)]="filters.usage" class="col-md-12" />-->
-                            <md-select [(ngModel)]="filters.usage" class="col-md-12">
-                                <md-option value="">*</md-option>
-                                <md-option value="dcmObjectStorageID">Object Storage</md-option>
-                                <md-option value="dcmMetadataStorageID">Metadata Storage</md-option>
-                                <md-option value="dcmSeriesMetadataStorageID">SeriesMetadata Storage</md-option>
-                            </md-select>
-                        </div>
-                    </div>
-                    <div class="row" title="Only return Storage Systems which have usable space below specified value">
-
+                        <span *ngIf="count text-right">
+                            {{count}}/3000
+                        </span>
                     </div>
                     <div class="row">
                         <div class="col-md-6">
                         </div>
                         <div class="col-md-6">
-                            <button class="btn btn-default submit col-md-12" (click)="search(0)" title="Refresh">
+                            <button class="btn btn-default submit col-md-12" (click)="search()" title="Refresh">
                                 <span class="glyphicon glyphicon-refresh"></span>
                                 SUBMIT
                             </button>
@@ -76,22 +61,22 @@
                 </div>
             </div>
         </div>
-        <table class="table table-bordered table-condensed" *ngIf="_.size(matches) > 0">
+  <!--      <table class="table table-bordered table-condensed" *ngIf="_.size(matches) > 0">
             <thead>
             <tr>
                 <th colspan="2">
-<!--                    <button class="btn btn-link btn-xs"
-                            [disabled]="!hasNewer(matches)"
-                            (click)="search(newerOffset(matches))"
-                            title="Newer">
-                        <span class="glyphicon glyphicon-menu-left"></span>
-                    </button>
-                    <button class="btn btn-link btn-xs"
-                            [disabled]="!hasOlder(matches)"
-                            (click)="search(olderOffset(matches))"
-                            title="Older">
-                        <span class="glyphicon glyphicon-menu-right"></span>
-                    </button>-->
+                    &lt;!&ndash;                    <button class="btn btn-link btn-xs"
+                                                [disabled]="!hasNewer(matches)"
+                                                (click)="search(newerOffset(matches))"
+                                                title="Newer">
+                                            <span class="glyphicon glyphicon-menu-left"></span>
+                                        </button>
+                                        <button class="btn btn-link btn-xs"
+                                                [disabled]="!hasOlder(matches)"
+                                                (click)="search(olderOffset(matches))"
+                                                title="Older">
+                                            <span class="glyphicon glyphicon-menu-right"></span>
+                                        </button>&ndash;&gt;
                 </th>
                 <th>Storage ID</th>
                 <th>Storage URI</th>
@@ -132,6 +117,6 @@
                 <tr [hidden]="true"></tr>
             </ng-container>
             </tbody>
-        </table>
+        </table>-->
     </div>
 </div>
