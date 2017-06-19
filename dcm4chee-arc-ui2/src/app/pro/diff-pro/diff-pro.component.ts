@@ -45,6 +45,7 @@ export class DiffProComponent implements OnInit {
     aet1;
     aet2;
     homeAet;
+    advancedConfig = false;
     diff;
     count;
     disabled = {
