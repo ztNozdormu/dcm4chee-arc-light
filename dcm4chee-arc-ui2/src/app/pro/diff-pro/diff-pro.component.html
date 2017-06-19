@@ -8,7 +8,7 @@
         <li role="presentation" routerLinkActive="active"><a role="tab" routerLink="/monitoring/diff" routerLinkActive="active">Diff</a></li>
     </ul>
     <div class="tab-content">
-        <div class="row filter"  (keyup)="filterKeyUp($event)">
+        <div class="row filter">
             <div class="main_filter_block">
                 <div class="col-md-3 block-1-1">
                     <div class="row">
@@ -30,34 +30,201 @@
                 </div>
                 <div class="col-md-3 block-1-1">
                     <div class="row">
-                        <label class="col-md-6 text-right control-label">Start date</label>
+                        <label class="col-md-6 text-right control-label">Start date/time:</label>
                         <div class="col-md-6">
-                            <p-calendar dataType="string" [(ngModel)]="startDate" dateFormat="yymmdd" monthNavigator="true" yearNavigator="true" yearRange="1800:2100" placeholder="Start date"></p-calendar>
+                            <p-calendar
+                                    [(ngModel)]="StudyDateTime.from"
+                                    dateFormat="yy-mm-dd"
+                                    showTime="showTime"
+                                    hourFormat="24"
+                                    monthNavigator="true"
+                                    yearNavigator="true"
+                                    yearRange="1800:2100"
+                                    placeholder="Start date/time"
+                                    (ngModelChange)="studyDateTimeChanged($event,'from')"
+                            ></p-calendar>
                         </div>
                     </div>
                     <div class="row">
-                        <label class="col-md-6 text-right control-label">End date</label>
+                        <label class="col-md-6 text-right control-label">End date/time:</label>
                         <div class="col-md-6">
-                            <p-calendar dataType="string" [(ngModel)]="endDate" dateFormat="yymmdd" monthNavigator="true" yearNavigator="true" yearRange="1800:2100" placeholder="End date"></p-calendar>
+                            <p-calendar
+                                    [(ngModel)]="StudyDateTime.to"
+                                    dateFormat="yy-mm-dd"
+                                    showTime="showTime"
+                                    hourFormat="24"
+                                    monthNavigator="true"
+                                    yearNavigator="true"
+                                    yearRange="1800:2100"
+                                    placeholder="End date/time"
+                                    (ngModelChange)="studyDateTimeChanged($event,'to')"
+                            ></p-calendar>
                         </div>
                     </div>
                 </div>
-                <div class="col-md-3 block-2-1">
-                    <div class="row" title="Only return Storage Systems used for the specified content">
-                        <span *ngIf="count text-right">
-                            {{count}}/3000
+                <div class="col-md-3 block-2-1 block_half">
+                    <div class="row" title="(found / limit)">
+                        <span *ngIf="count" class="diff_count">
+                            {{count}} / {{filters.limit}}
                         </span>
                     </div>
                     <div class="row">
-                        <div class="col-md-6">
-                        </div>
-                        <div class="col-md-6">
+                        <div class="col-md-12">
                             <button class="btn btn-default submit col-md-12" (click)="search()" title="Refresh">
                                 <span class="glyphicon glyphicon-refresh"></span>
                                 SUBMIT
                             </button>
                         </div>
                     </div>
+                </div>
+                <a class="clearform_button" title="Clear all filters" href="" (click)="$event.preventDefault();clearForm()">
+                    Clear <span class="glyphicon glyphicon-remove"></span>
+                </a>
+            </div>
+            <div class="diff_more_filters">
+                <a href="" (click)="$event.preventDefault();advancedConfig=true" *ngIf="!advancedConfig" class="more">Extended search<i class="glyphicon glyphicon-triangle-bottom"></i></a>
+                <a href="" (click)="$event.preventDefault();advancedConfig=false" *ngIf="advancedConfig" class="more ng-hide">Close extended search<i class="glyphicon glyphicon-triangle-top"></i></a>
+            </div>
+            <div *ngIf="advancedConfig" class="ng-hide">
+                <div class="row ng-hide filter hidden_filters" *ngIf="advancedConfig">
+                    <div class="col-md-3 block-2-1" >
+                        <div class="row">
+                            <div class="col-md-12">
+                                <!--<input id="dicomDeviceName" type="text" [(ngModel)]="homeAet" placeholder="Home AET" title="Home AET:" class="col-md-12" />-->
+                                <label class="col-md-6 text-right control-label">Home AET:</label>
+                                <div class="col-md-6">
+                                    <md-select [(ngModel)]="homeAet" class="col-md-12">
+                                        <md-option *ngFor="let ae of aets" [value]="ae.title" title="{{ae.description}}">{{ ae.title }}</md-option>
+                                    </md-select>
+                                </div>
+                            </div>
+                        </div>
+                        <div class="row">
+                            <div class="col-md-6">
+                                <input id="PatientName" type="text" [(ngModel)]="filters.PatientName" placeholder="Patient name" title="Patient name" class="col-md-12" />
+                            </div>
+                            <div class="col-md-6">
+                                <label>
+                                    <input type="checkbox" [(ngModel)]="filters.fuzzymatching"> Fuzzy Matching
+                                </label>
+                            </div>
+                        </div>
+                        <div class="row">
+                            <div class="col-md-6">
+                                <input id="PatientID" type="text" [(ngModel)]="filters.PatientID" placeholder="Patient ID" title="Patient ID" class="col-md-12" />
+                            </div>
+                            <div class="col-md-6">
+                                <input autocomplete="off" id="IssuerOfPatientID" [disabled]="disabled.IssuerOfPatientID" type="text" [(ngModel)]="filters.IssuerOfPatientID" placeholder="Issuer of patient" title="Issuer of patient" class="col-md-12" (click)="conditionWarning($event, !filters.PatientID, 'Patient ID is empty, set first the patient ID!')" (keyup)="conditionWarning($event, !filters.PatientID, 'Patient ID is empty, set first the patient ID!')" />
+                            </div>
+                        </div>
+                    </div>
+                    <div class="col-md-3 block-2-1">
+                        <div class="row">
+                            <div class="col-md-6">
+                                <input id="AccessionNumber" type="text" [(ngModel)]="filters.AccessionNumber" placeholder="Accession number" title="Accession number" class="col-md-12" />
+                            </div>
+                            <div class="col-md-6">
+                                <input id="LocalNamespaceEntityID" type="text" [disabled]="disabled.LocalNamespaceEntityID" [(ngModel)]="filters['IssuerOfAccessionNumberSequence.LocalNamespaceEntityID']" placeholder="Issuer of accession number" title="Issuer of accession number" class="col-md-12"  (keyup)="conditionWarning($event, !filters.AccessionNumber, 'Accession Number is empty, set first the Accession Number!')" (click)="conditionWarning($event, !filters.AccessionNumber, 'Accession Number is empty, set first the Accession Number!')"/>
+                            </div>
+                        </div>
+                        <div class="row">
+                            <div class="col-md-6">
+                                <input id="StationName" type="text" [(ngModel)]="filters.StationName" placeholder="Station Name" title="Station Name" class="col-md-12" />
+                            </div>
+                            <div class="col-md-6">
+                                <input id="ReferringPhysicianName" type="text" [(ngModel)]="filters.ReferringPhysicianName" placeholder="Referring physician name" title="Referring physician name" class="col-md-12" />
+                            </div>
+                        </div>
+                        <div class="row">
+                            <div class="col-md-6">
+                                <input id="dicomDeviceDescription" type="number" [(ngModel)]="filters.limit" placeholder="Limit" title="Limit" class="col-md-12" />
+                            </div>
+                            <div class="col-md-6">
+
+                                <input id="Modality" type="text" size="5"  [(ngModel)]="filters.ModalitiesInStudy" (click)="showModalitySelector = !showModalitySelector" placeholder="Modality"  class="col-md-12" ng-keypress="checkKeyModality($event)"/>
+                                <div class="modality_selector [hidden]" *ngIf="showModalitySelector">
+                                    <a href="" (click)="showModalitySelector=false" class="close"><i class="glyphicon glyphicon-remove"></i></a>
+                                    <div class="common">
+                                        <a href="" *ngFor="let value of modalities.common | getKey;" (click)="$event.preventDefault();selectModality(value._KEY)" title="{{value._VALUE}}">{{value._KEY}}</a>
+                                    </div>
+                                    <button (click)="filters.ModalitiesInStudy='';showModalitySelector=false;" class="clear custom_button">Clear</button>
+                                    <!-- <div class="col-md-12"></div> -->
+                                    <a href="" (click)="$event.preventDefault();showMore=true" *ngIf="!showMore" class="more">more<i class="glyphicon glyphicon-triangle-bottom"></i></a>
+                                    <a href="" (click)="$event.preventDefault();showMore=false" *ngIf="showMore" class="more">less<i class="glyphicon glyphicon-triangle-top"></i></a>
+                                    <div class="more_block" *ngIf="showMore">
+                                        <a href="" *ngFor="let value of modalities.more | getKey;" (click)="$event.preventDefault();selectModality(value._KEY)" title="{{value._VALUE}}">{{value._KEY}}</a>
+                                        <div class="form-group">
+                                            <label>Custom modality code:</label>
+                                            <input [(ngModel)]="filters.ModalitiesInStudy" />
+                                            <button (click)="showModalitySelector=false" class="custom_button">Add</button>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="col-md-3 block-2-1">
+                        <div class="row">
+                            <div class="col-md-12">
+                                <label>
+                                    Study created date/time:
+                                </label>
+                            </div>
+                        </div>
+                        <div class="row">
+                            <div class="col-md-6">
+                                <p-calendar (ngModelChange)="studyReceiveDateTimeChanged($event,'from')" [(ngModel)]="StudyReceiveDateTime.from" dateFormat="yy-mm-dd"  showTime="showTime" hourFormat="24" placeholder="from"></p-calendar>
+                            </div>
+                            <div class="col-md-6">
+                                <p-calendar (ngModelChange)="studyReceiveDateTimeChanged($event,'to')" [(ngModel)]="StudyReceiveDateTime.to" dateFormat="yy-mm-dd"  showTime="showTime" hourFormat="24" placeholder="to"></p-calendar>
+                            </div>
+                        </div>
+                        <div class="row">
+                            <div class="col-md-6">
+                                <input type="text" [(ngModel)]="filters.StudyInstanceUID" placeholder="Study Instance UID" title="Study instance UID" class="col-md-12 clearable" />
+                            </div>
+                            <div class="col-md-6">
+                                <input type="text" [(ngModel)]="filters.StudyDescription" placeholder="Study Description" title="Study description" class="col-md-12" />
+                            </div>
+                        </div>
+                    </div>
+                    <div class="col-md-3 block-2-1">
+                        <div class="row">
+                            <div class="col-md-6">
+                                <input id="SeriesDescription" type="text" [(ngModel)]="filters.SeriesDescription" placeholder="Series Description" title="Series Description" class="col-md-12 clearable" />
+                            </div>
+                            <div class="col-md-6">
+                                <input id="StudyID" type="text" [(ngModel)]="filters.StudyID" placeholder="Study ID" title="Study ID" class="col-md-12" />
+                            </div>
+                        </div>
+                        <div class="row">
+                            <div class="col-md-6">
+                                <input id="BodyPartExamined" type="text" [(ngModel)]="filters.BodyPartExamined" placeholder="Body Part Examined" title="Body Part Examined" class="col-md-12 clearable" />
+                            </div>
+                            <div class="col-md-6">
+                                <input id="SOPClassesInStudy" type="text" [(ngModel)]="filters.SOPClassesInStudy" placeholder="SOP classes in study" title="SOP classes in study" class="col-md-12 clearable" />
+                            </div>
+                        </div>
+                    </div>
+                    <div class="col-md-3 block-2-1">
+                        <div class="row">
+                            <div class="col-md-6">
+                                <input id="InstitutionName" type="text" [(ngModel)]="filters.InstitutionName" placeholder="Institution Name" title="Institution Name" class="col-md-12" />
+                            </div>
+                            <div class="col-md-6">
+                                <input id="SendingApplicationEntityTitleOfSeries" type="text" [(ngModel)]="filters.SendingApplicationEntityTitleOfSeries" placeholder="Sending Application Entity Title of Series" title="Sending Application Entity Title of Series" class="col-md-12 clearable" />
+                            </div>
+                        </div>
+                        <div class="row">
+                            <div class="col-md-6">
+                                <input id="InstitutionalDepartmentName" type="text" [(ngModel)]="filters.InstitutionalDepartmentName" placeholder="Institutional Department Name" title="Institutional Department Name" class="col-md-12 clearable" />
+                            </div>
+                            <div class="col-md-6">
+                                <!--<input id="StationName" type="text" [(ngModel)]="filters.StationName" placeholder="Station Name" title="Station Name" class="col-md-12" />-->
+                            </div>
+                        </div>
+                    </div>
+
                 </div>
             </div>
         </div>

@@ -689,6 +689,11 @@ md-dialog-container{
   .block-1-1, .block-1-2, .block-2-1, .block-2-2{
     min-height:144px;
   }
+  &.diff{
+    .block-1-1, .block-1-2, .block-2-1, .block-2-2{
+      min-height:109px;
+    }
+  }
 }
 .connection_tls{
   font-size: 17px;
@@ -1383,4 +1388,25 @@ md-dialog-container{
 .diff_border{
   border-bottom:1px solid #ff6471;
   overflow: hidden !important;
+}
+/*Pro*/
+.diff{
+  .diff_more_filters{
+    float: left;
+    width:100%;
+    margin-bottom:20px;
+    .glyphicon{
+      margin-left: 10px;
+    }
+  }
+  .block_half{
+    width:16%;
+  }
+  .clearform_button{
+    right:auto;
+  }
+}
+.diff_count{
+  float: right;
+  margin-right:20px;
 }
