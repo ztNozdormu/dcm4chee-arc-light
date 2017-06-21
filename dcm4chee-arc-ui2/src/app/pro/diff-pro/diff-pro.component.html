@@ -228,6 +228,14 @@
                 </div>
             </div>
         </div>
+        <div class="float_content">
+            <h2>
+                Groups
+            </h2>
+            <div class="bluebar" *ngFor="let keys of Object.keys(groupObject)">
+                {{groupObject[keys].label}}
+            </div>
+        </div>
   <!--      <table class="table table-bordered table-condensed" *ngIf="_.size(matches) > 0">
             <thead>
             <tr>

@@ -62,6 +62,9 @@ export class DiffProComponent implements OnInit {
         from: undefined,
         to: undefined
     };
+    groups;
+    groupObject;
+    Object = Object;
     selectModality(key){
         this.filters.ModalitiesInStudy = key;
         this.filters['ScheduledProcedureStepSequence.Modality'] = key;
@@ -78,6 +81,33 @@ export class DiffProComponent implements OnInit {
         this.getAes(2);
         this.getAets(2);
         this.modalities = Globalvar.MODALITIES;
+        this.groups = new Map();
+        this.groups.set("patient",{
+            label:"Patient data",
+            count:43
+        });
+        this.groups.set("nopatient",{
+            label:"Dicom data",
+            count:35
+        });
+        this.groups.set("auftrag",{
+            label:"Assignment data",
+            count:251
+        });
+        this.groupObject = {
+            "patient":{
+                label:"Patient data",
+                count:43
+            },
+            "nopatient":{
+                label:"Dicom data",
+                count:35
+            },
+            "auftrag":{
+                label:"Assignment data",
+                count:25
+            }
+        };
     }
     clearForm(){
         _.forEach(this.filters, (m, i) => {

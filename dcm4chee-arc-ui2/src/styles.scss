@@ -1379,6 +1379,24 @@ md-dialog-container{
     }
   }
 }
+.float_content{
+  float: left;
+  width: 100%;
+}
+.bluebar{
+  background: $lightBlue;
+  box-shadow: 1px 6px 6px -3px #a3a1a1;
+  color: white !important;
+  display: block;
+  float: left;
+  margin-bottom: 0px;
+  margin-top: 10px;
+  padding: 5px 10px;
+  width: 100%;
+  &:hover{
+    cursor: pointer;
+  }
+}
 .form-row.submit_button_block{
 
 }
@@ -1391,6 +1409,7 @@ md-dialog-container{
 }
 /*Pro*/
 .diff{
+  float: left;
   .diff_more_filters{
     float: left;
     width:100%;
