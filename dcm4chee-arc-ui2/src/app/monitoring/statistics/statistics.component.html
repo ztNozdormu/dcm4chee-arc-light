@@ -1,4 +1,4 @@
-<div class="main_content monitoring">
+<!--<div class="main_content monitoring">
 <div style="display: block">
     <canvas baseChart
             [datasets]="barChartData"
@@ -10,4 +10,109 @@
             (chartClick)="chartClicked($event)"></canvas>
 </div>
 <button (click)="randomize()">Update</button>
+</div>-->
+
+<div class="main_content queues monitoring statistics">
+    <ul class="nav nav-tabs" role="tablist">
+        <li role="presentation" routerLinkActive="active"><a role="tab" routerLink="/monitoring/queues" routerLinkActive="active">Queues</a></li>
+        <li role="presentation" routerLinkActive="active"><a role="tab" routerLink="/monitoring/export" routerLinkActive="active">Export</a></li>
+        <li role="presentation" routerLinkActive="active"><a role="tab" routerLink="/monitoring/associations" routerLinkActive="active">Associations</a></li>
+        <li role="presentation" routerLinkActive="active"><a role="tab" routerLink="/monitoring/storage-commitment" routerLinkActive="active">Storage commitments</a></li>
+        <li role="presentation" routerLinkActive="active"><a role="tab" routerLink="/monitoring/storage-systems" routerLinkActive="active">Storage systems</a></li>
+        <li role="presentation" routerLinkActive="active"><a role="tab" routerLink="/monitoring/diff" routerLinkActive="active">Diff</a></li>
+    </ul>
+    <div class="tab-content">
+        <div class="row filter">
+            <div class="main_filter_block">
+                <div class="col-md-3 block-1-1">
+                    <div class="row">
+                        <label class="col-md-6 text-right control-label">From date/time:</label>
+                        <div class="col-md-6">
+                            <p-calendar
+                                    [(ngModel)]="range.from"
+                                    dateFormat="yy-mm-dd"
+                                    showTime="showTime"
+                                    hourFormat="24"
+                                    monthNavigator="true"
+                                    yearNavigator="true"
+                                    yearRange="1800:2100"
+                                    placeholder="Start date/time"
+                                    (ngModelChange)="studyDateTimeChanged($event,'from')"
+                            ></p-calendar>
+                        </div>
+                    </div>
+                    <div class="row">
+                        <label class="col-md-6 text-right control-label">To date/time:</label>
+                        <div class="col-md-6">
+                            <p-calendar
+                                    [(ngModel)]="range.to"
+                                    dateFormat="yy-mm-dd"
+                                    showTime="showTime"
+                                    hourFormat="24"
+                                    monthNavigator="true"
+                                    yearNavigator="true"
+                                    yearRange="1800:2100"
+                                    placeholder="End date/time"
+                                    (ngModelChange)="studyDateTimeChanged($event,'to')"
+                            ></p-calendar>
+                        </div>
+                    </div>
+                </div>
+                <div class="col-md-3 block-2-1 block_half">
+                    <div class="row">
+                        <div class="col-md-12">
+                            <input type="text" [(ngModel)]="search" class="col-md-12" placeholder="Search...">
+                        </div>
+                    </div>
+                    <div class="row">
+                        <div class="col-md-12">
+                            <button class="btn btn-default submit col-md-12" (click)="search()" title="Refresh">
+                                <span class="glyphicon glyphicon-refresh"></span>
+                                SUBMIT
+                            </button>
+                        </div>
+                    </div>
+                </div>
+                <a class="clearform_button" title="Clear all filters" href="" (click)="$event.preventDefault();clearForm()">
+                    Clear <span class="glyphicon glyphicon-remove"></span>
+                </a>
+            </div>
+        </div>
+        <div class="statistics_content">
+            <div class="count_block">
+                <h3>{{studieStored.label}}</h3>
+                <label *ngIf="studieStored.count">{{studieStored.count}}</label>
+            </div>
+            <div class="count_block">
+                <h3>Queries Count</h3>
+                <label>12</label>
+            </div>
+            <table class="table table-bordered table-condensed">
+                <tr>
+                    <th>AccessionNumber</th>
+                    <th>ActionCode</th>
+                    <th>AuditSourceID</th>
+                    <th>EventID</th>
+                    <th>EventOutcomeIndicator</th>
+                    <th>Patient</th>
+                    <th>Study</th>
+                    <th>Time</th>
+                    <th>requestorId</th>
+                    <th>userId</th>
+                </tr>
+                <tr *ngFor="let item of auditEvents">
+                    <td>{{item.AccessionNumber}}</td>
+                    <td>{{item.ActionCode}}</td>
+                    <td>{{item.AuditSourceID}}</td>
+                    <td>{{item.EventID}}</td>
+                    <td>{{item.EventOutcomeIndicator}}</td>
+                    <td>{{item.Patient}}</td>
+                    <td>{{item.Study}}</td>
+                    <td>{{item.Time}}</td>
+                    <td>{{item.requestorId}}</td>
+                    <td>{{item.userId}}</td>
+                </tr>
+            </table>
+        </div>
+    </div>
 </div>
