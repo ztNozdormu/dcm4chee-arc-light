@@ -62,6 +62,9 @@ import {UploadDicomService} from './widgets/dialogs/upload-dicom/upload-dicom.se
 import {WindowRefService} from "./helpers/window-ref.service";
 import { DiffProComponent } from './pro/diff-pro/diff-pro.component';
 import {DiffProService} from "./pro/diff-pro/diff-pro.service";
+import {ChartsModule} from "ng2-charts";
+import { StatisticsComponent } from './monitoring/statistics/statistics.component';
+import {StatisticsService} from "./monitoring/statistics/statistics.service";
 
 @NgModule({
     declarations: [
@@ -102,7 +105,8 @@ import {DiffProService} from "./pro/diff-pro/diff-pro.service";
         UtcPipe,
         CustomValidatorDirective,
         StorageSystemsComponent,
-        DiffProComponent
+        DiffProComponent,
+        StatisticsComponent
     ],
     imports: [
         BrowserModule,
@@ -117,6 +121,7 @@ import {DiffProService} from "./pro/diff-pro/diff-pro.service";
         ReactiveFormsModule,
         BrowserAnimationsModule,
         FileUploadModule,
+        ChartsModule,
         RouterModule.forRoot([
             {
               path: '',
@@ -136,6 +141,7 @@ import {DiffProService} from "./pro/diff-pro/diff-pro.service";
             { path: 'monitoring/storage-commitment', component: StorageCommitmentComponent },
             { path: 'monitoring/storage-systems', component: StorageSystemsComponent },
             { path: 'monitoring/diff', component: DiffProComponent },
+            { path: 'monitoring/statistics', component: StatisticsComponent },
             { path: 'device/devicelist', component: DevicesComponent },
             { path: 'device/aelist', component: AeListComponent },
             { path: 'device/edit/:device', component: DeviceConfiguratorComponent },
@@ -165,7 +171,8 @@ import {DiffProService} from "./pro/diff-pro/diff-pro.service";
         DeviceConfiguratorService,
         UploadDicomService,
         WindowRefService,
-        StudiesService
+        StudiesService,
+        StatisticsService
     ],
     bootstrap: [AppComponent]
 })
