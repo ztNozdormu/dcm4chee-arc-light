@@ -62,7 +62,7 @@ export class StatisticsService {
         };
         let requestOptions = new RequestOptions();
         requestOptions.body = params;
-       return this.$http.get("http://sepp.j4care.com:9200/_search",params)
+       return this.$http.get("http://192.162.2.109:9200/_search",params)
            .map(res => {let resjson; try{ let pattern = new RegExp("[^:]*:\/\/[^\/]*\/auth\/"); if(pattern.exec(res.url)){ WindowRefService.nativeWindow.location = "/dcm4chee-arc/ui2/";} resjson = res.json(); }catch (e){ resjson = [];} return resjson;});
     }
 }
