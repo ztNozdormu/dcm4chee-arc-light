@@ -1,4 +1,4 @@
-import { Component, OnInit } from '@angular/core';
+import { Component, OnInit, HostListener} from '@angular/core';
 import {StatisticsService} from "./statistics.service";
 import * as _ from 'lodash';
 
@@ -15,15 +15,55 @@ export class StatisticsComponent implements OnInit {
     studieStored = {
         label:"Studies Stored Count",
         count:undefined
-    }
+    };
+    retriev = {
+        label:"Retrieves Count",
+        count:undefined
+    };
+    queries = {
+        label:"Queries Count",
+        count:undefined
+    };
+    errors = {
+        label:"Errors",
+        count:undefined
+    };
     auditEvents;
+    moreAudit = {
+        limit: 30,
+        start: 0,
+        loaderActive: false
+    };
+    searchlist = "";
     constructor(
         private service:StatisticsService
     ) { }
 
     ngOnInit() {
+        this.search();
+    }
+
+    @HostListener('window:scroll', ['$event'])
+    loadMoreAuditOnScroll(event) {
+        let hT = ($('.load_more').offset()) ? $('.load_more').offset().top : 0,
+            hH = $('.load_more').outerHeight(),
+            wH = $(window).height(),
+            wS = window.pageYOffset;
+        if (wS > (hT + hH - wH)){
+            this.loadMoreAudit();
+        }
+    }
+    loadMoreAudit(){
+        this.moreAudit.loaderActive = true;
+        this.moreAudit.limit += 20;
+        this.moreAudit.loaderActive = false;
+    }
+    search(){
         this.getAuditEvents();
         this.getStudiesStoredCounts();
+        this.getRetrievCounts();
+        this.getQueriesCounts();
+        this.getErrorCounts();
     }
     public barChartOptions:any = {
         scaleShowVerticalLines: false,
@@ -50,9 +90,7 @@ export class StatisticsComponent implements OnInit {
     getAuditEvents(){
         let $this = this;
         this.service.getAuditEvents().subscribe((res)=>{
-            console.log("res",res);
             $this.auditEvents = res.hits.hits.map((audit)=>{
-                console.log("audit",audit);
                 return {
                     AuditSourceID:(_.hasIn(audit,"_source.AuditSource.AuditSourceID"))?audit._source.AuditSource.AuditSourceID:'-',
                     EventID:(_.hasIn(audit,"_source.EventID.originalText"))?audit._source.EventID.originalText:'-',
@@ -63,20 +101,69 @@ export class StatisticsComponent implements OnInit {
                     userId:(_.hasIn(audit,"_source.Source.UserID"))?audit._source.Source.UserID:'-',
                     requestorId:(_.hasIn(audit,"_source.Requestor.UserID"))?audit._source.Requestor.UserID:'-',
                     EventOutcomeIndicator:(_.hasIn(audit,"_source.Event.EventOutcomeIndicator"))?audit._source.Event.EventOutcomeIndicator:'-',
-                    Time:(_.hasIn(audit,"_source.Event.EventDateTime"))?audit._source.Event.EventDateTim:'-'
+                    Time:(_.hasIn(audit,"_source.Event.EventDateTime"))?audit._source.Event.EventDateTime:undefined
                 }
             });
-            console.log("auditEvnets",$this.auditEvents);
         });
     }
     getStudiesStoredCounts(){
         let $this = this;
         this.service.getStudiesStoredCounts().subscribe(
             (res)=>{
-                $this.studieStored.count = res.hits.total;
+                try {
+                    $this.studieStored.count = res.hits.total;
+                }catch (e){
+                    $this.studieStored.count = "-";
+                }
+            },
+            (err)=>{
+                $this.studieStored.count = "-";
+                console.log("error",err);
+            });
+    }
+    getRetrievCounts(){
+        let $this = this;
+        this.service.getRetrievCounts().subscribe(
+            (res)=>{
+                try {
+                    $this.retriev.count = res.hits.total;
+                }catch (e){
+                    $this.retriev.count = "-";
+                }
+            },
+            (err)=>{
+                $this.retriev.count = "-";
+                console.log("error",err);
+            });
+    }
+    getQueriesCounts(){
+        let $this = this;
+        this.service.getQueriesCounts().subscribe(
+            (res)=>{
+                try {
+                    $this.queries.count = res.hits.total;
+                }catch (e){
+                    $this.queries.count = "-";
+                }
             },
             (err)=>{
                 console.log("error",err);
+                $this.queries.count = "-";
+            });
+    }
+    getErrorCounts(){
+        let $this = this;
+        this.service.getErrorCounts().subscribe(
+            (res)=>{
+                try {
+                    $this.errors.count = res.hits.total;
+                }catch (e){
+                    $this.errors.count = "-";
+                }
+            },
+            (err)=>{
+                console.log("error",err);
+                $this.errors.count = "-";
             });
     }
 

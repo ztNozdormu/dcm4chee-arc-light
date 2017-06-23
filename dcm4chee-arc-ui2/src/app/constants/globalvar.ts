@@ -218,5 +218,256 @@ export class Globalvar {
                 }
             }
         };
+    };
+
+    public static get ELASTICSEARCHDOMAIN(): any{
+        return "http://localhost:9200";
+    };
+
+    public static get STUDIESSTOREDCOUNTS_PARAMETERS(): any{
+        return {
+            "size": 0,
+            "aggs": {
+                "1": {
+                    "cardinality": {
+                        "field": "Study.ParticipantObjectID"
+                    }
+                }
+            },
+            "highlight": {
+                "fields": {
+                    "*": {}
+                },
+                "require_field_match": false,
+                "fragment_size": 2147483647
+            },
+            "query": {
+                "bool": {
+                    "must": [
+                        {
+                            "query_string": {
+                                "query": "EventID.csd-code:110104 AND Event.EventActionCode:C",
+                                "analyze_wildcard": true
+                            }
+                        },
+                        {
+                            "query_string": {
+                                "analyze_wildcard": true,
+                                "query": "*"
+                            }
+                        }
+                        /*                        ,
+                         {
+                         "range": {
+                         "Event.EventDateTime": {
+                         "gte": 1466496969111,
+                         "lte": 1498032969111,
+                         "format": "epoch_millis"
+                         }
+                         }
+                         }*/
+                    ],
+                    "must_not": []
+                }
+            },
+            "_source": {
+                "excludes": []
+            }
+        };
+    };
+
+    public static get ERRORSCOUNTS_PARAMETERS(): any{
+        return {
+            "size": 0,
+            "aggs": {},
+            "highlight": {
+                "fields": {
+                    "*": {}
+                },
+                "require_field_match": false,
+                "fragment_size": 2147483647
+            },
+            "query": {
+                "bool": {
+                    "must": [
+                        {
+                            "query_string": {
+                                "query": "NOT Event.EventOutcomeIndicator:0",
+                                "analyze_wildcard": true
+                            }
+                        },
+                        {
+                            "query_string": {
+                                "analyze_wildcard": true,
+                                "query": "*"
+                            }
+                        },
+                        {
+                            "range": {
+                                "Event.EventDateTime": {
+                                    "gte": 1466496969117,
+                                    "lte": "now",
+                                    "format": "epoch_millis"
+                                }
+                            }
+                        }
+                    ],
+                    "must_not": []
+                }
+            },
+            "_source": {
+                "excludes": []
+            }
+        }
+    }
+    public static get QUERIESCOUNTS_PARAMETERS(): any{
+        return {
+            "query": {
+                "bool": {
+                    "must": [
+                        {
+                            "query_string": {
+                                "query": "EventID.csd-code:110112 AND Destination.UserID:ARCHIVEACT",
+                                "analyze_wildcard": true
+                            }
+                        },
+                        {
+                            "query_string": {
+                                "analyze_wildcard": true,
+                                "query": "*"
+                            }
+                        },
+                        {
+                            "range": {
+                                "Event.EventDateTime": {
+                                    "gte": 1466496969107,
+                                    "lte": 1498218588824,
+                                    "format": "epoch_millis"
+                                }
+                            }
+                        }
+                    ],
+                    "must_not": []
+                }
+            },
+            "highlight": {
+                "pre_tags": [
+                    "@kibana-highlighted-field@"
+                ],
+                "post_tags": [
+                    "@/kibana-highlighted-field@"
+                ],
+                "fields": {
+                    "*": {}
+                },
+                "require_field_match": false,
+                "fragment_size": 2147483647
+            },
+            "size": 0,
+            "_source": {
+                "excludes": []
+            },
+            "aggs": {}
+        }
+    }
+    public static get RETRIEVCOUNTS_PARAMETERS(): any{
+        return {
+            "size": 0,
+            "aggs": {},
+            "highlight": {
+                "fields": {
+                    "*": {}
+                },
+                "require_field_match": false,
+                "fragment_size": 2147483647
+            },
+            "query": {
+                "bool": {
+                    "must": [
+                        {
+                            "query_string": {
+                                "query": "EventID.csd-code:110104 AND Event.EventActionCode:R",
+                                "analyze_wildcard": true
+                            }
+                        },
+                        {
+                            "query_string": {
+                                "analyze_wildcard": true,
+                                "query": "*"
+                            }
+                        },
+                        {
+                            "range": {
+                                "Event.EventDateTime": {
+                                    "gte": 1466496969111,
+                                    "lte": 1498218588824,
+                                    "format": "epoch_millis"
+                                }
+                            }
+                        }
+                    ],
+                    "must_not": []
+                }
+            },
+            "_source": {
+                "excludes": []
+            }
+        };
+    }
+    public static get AUDITEVENTS_PARAMETERS(): any{
+        return {
+            "query": {
+                "bool": {
+                    "must": [
+                        {
+                            "query_string": {
+                                "query": "*",
+                                "analyze_wildcard": true
+                            }
+                        },
+                        {
+                            "query_string": {
+                                "analyze_wildcard": true,
+                                "query": "*"
+                            }
+                        }
+                        ,
+                        {
+                            "range": {
+                                "Event.EventDateTime": {
+                                    "gte": 1466496969107,
+                                    "lte": 1498218588824,
+                                    "format": "epoch_millis"
+                                }
+                            }
+                        }
+                    ],
+                    "must_not": []
+                }
+            },
+            "size": 3000,
+            "sort": [
+                {
+                    "Event.EventDateTime": {
+                        "order": "desc",
+                        "unmapped_type": "boolean"
+                    }
+                }
+            ],
+            "_source": {
+                "excludes": []
+            },
+            "stored_fields": [
+                "*"
+            ],
+            "script_fields": {},
+            "docvalue_fields": [
+                "audit.EventIdentification.EventDateTime",
+                "Event.EventDateTime",
+                "StudyDate",
+                "@timestamp",
+                "syslog_timestamp"
+            ]
+        };
     }
 }
