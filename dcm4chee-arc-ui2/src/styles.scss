@@ -708,6 +708,9 @@ md-dialog-container{
     padding: 30px 10px 0px 10px;
     border: 1px solid #ccc;
     border-top: none;
+    table{
+      margin-top:35px;
+    }
   }
   md-select{
     padding:0;
@@ -1420,26 +1423,26 @@ md-dialog-container{
   -webkit-box-shadow: 5px 5px 10px #aaa;
   -moz-box-shadow: 5px 5px 10px #aaa;
   box-shadow: 5px 5px 10px #aaa;
-  margin:30px 0;
+  margin-bottom:20px;
   .header{
     float: left;
     width:100%;
-    height:40px;
+    height:35px;
     background: $lightBlue;
     box-sizing: border-box;
     padding-left: 20px;
     h3{
       color: white;
       margin:0;
-      height:40px;
+      height:35px;
       vertical-align: middle;
-      line-height: 40px;
+      line-height: 35px;
       float: left;
     }
     input{
       float: left;
       margin-left:20px;
-      margin-top:7px;
+      margin-top:4px;
       padding-left:7px;
     }
   }
@@ -1465,12 +1468,34 @@ md-dialog-container{
     }
   }
 }
+.diagram_content{
+  float: left;
+  display: block;
+  box-sizing: border-box;
+  padding:40px 30px;
+  width:100%;
+  height:500px;
+}
+.count_block_row{
+  float: left;
+  width:100%;
+  margin-bottom: 20px;
+  .count_block{
+    width:24%;
+  }
+  .count_block:first-child{
+    margin-right:1.33333%;
+  }
+  .count_block:nth-child(2),.count_block:nth-child(3){
+    margin-right:1.33333%;
+  }
+}
 .count_block{
   float: left;
-  width: 300px;
-  height: 153px;
+  //width: 300px;
+  height: 185px;
   border:1px solid $lightBlue;
-  margin-right:30px;
+  //margin-right:30px;
   -webkit-box-shadow: 5px 5px 10px #aaa;
   -moz-box-shadow: 5px 5px 10px #aaa;
   box-shadow: 5px 5px 10px #aaa;
@@ -1490,8 +1515,8 @@ md-dialog-container{
     text-align: center;
     float: left;
     width: 100%;
-    height: 95px;
-    line-height: 95px;
+    height: 145px;
+    line-height: 145px;
     font-size: 31px;
   }
 }

@@ -1,16 +1,3 @@
-<!--<div class="main_content monitoring">
-<div style="display: block">
-    <canvas baseChart
-            [datasets]="barChartData"
-            [labels]="barChartLabels"
-            [options]="barChartOptions"
-            [legend]="barChartLegend"
-            [chartType]="barChartType"
-            (chartHover)="chartHovered($event)"
-            (chartClick)="chartClicked($event)"></canvas>
-</div>
-<button (click)="randomize()">Update</button>
-</div>-->
 
 <div class="main_content queues monitoring statistics">
     <ul class="nav nav-tabs" role="tablist">
@@ -78,28 +65,46 @@
             </div>
         </div>
         <div class="statistics_content">
-            <div class="count_block">
-                <h3>{{studieStored.label}}</h3>
-                <label *ngIf="studieStored.count != undefined">{{studieStored.count}}</label>
-            </div>
-            <div class="count_block">
-                <h3>{{retriev.label}}</h3>
-                <label *ngIf="retriev.count != undefined">{{retriev.count}}</label>
-            </div>
-            <div class="count_block">
-                <h3>{{queries.label}}</h3>
-                <label *ngIf="queries.count != undefined">{{queries.count}}</label>
-            </div>
-            <div class="count_block">
-                <h3>{{errors.label}}</h3>
-                <label *ngIf="errors.count != undefined">{{errors.count}}</label>
+            <div class="count_block_row">
+                <div class="count_block">
+                    <h3>{{studieStored.label}}</h3>
+                    <label *ngIf="studieStored.count != undefined">{{studieStored.count}}</label>
+                </div>
+                <div class="count_block">
+                    <h3>{{retriev.label}}</h3>
+                    <label *ngIf="retriev.count != undefined">{{retriev.count}}</label>
+                </div>
+                <div class="count_block">
+                    <h3>{{queries.label}}</h3>
+                    <label *ngIf="queries.count != undefined">{{queries.count}}</label>
+                </div>
+                <div class="count_block">
+                    <h3>{{errors.label}}</h3>
+                    <label *ngIf="errors.count != undefined" class="text-danger">{{errors.count}}</label>
+                </div>
             </div>
             <div class="table_block">
-                <div class="header">
-                    <h3>Audit Events</h3>
-                    <input type="text" [(ngModel)]="searchlist" placeholder="Search...">
+                <div class="header" (click)="toggleBlock('USERIDQUERIES')">
+                    <h3>Queries / User ID</h3>
                 </div>
-                <div class="table_content">
+                <div class="diagram_content" *ngIf="toggle === 'USERIDQUERIES'">
+                    <canvas baseChart
+                            [datasets]="barChartData"
+                            [labels]="barChartLabels"
+                            [options]="barChartOptions"
+                            [colors]="pieChartColor"
+                            [legend]="barChartLegend"
+                            [chartType]="barChartType"
+                            (chartHover)="chartHovered($event)"
+                            (chartClick)="chartClicked($event)"></canvas>
+                </div>
+            </div>
+            <div class="table_block">
+                <div class="header" (click)="toggleBlock('AUDITEVENTS')">
+                    <h3>Audit Events</h3>
+                    <input *ngIf="toggle === 'AUDITEVENTS'" type="text" [(ngModel)]="searchlist" placeholder="Search...">
+                </div>
+                <div class="table_content" [hidden]="toggle != 'AUDITEVENTS'">
                     <table class="table table-bordered table-condensed">
                         <thead>
                             <tr>
@@ -131,7 +136,7 @@
                         </tbody>
                     </table>
                 </div>
-                <button class="load_more" *ngIf="auditEvents && moreAudit.limit <= auditEvents.length" (click)="loadMoreAudit()"><i *ngIf="moreAudit.loaderActive" class="fa fa-spinner fa-spin fa-3x fa-fw"></i>More</button>
+                <button class="load_more" *ngIf="auditEvents && moreAudit.limit <= auditEvents.length && toggle.showAuditEvents" (click)="loadMoreAudit()"><i *ngIf="moreAudit.loaderActive" class="fa fa-spinner fa-spin fa-3x fa-fw"></i>More</button>
             </div>
         </div>
     </div>

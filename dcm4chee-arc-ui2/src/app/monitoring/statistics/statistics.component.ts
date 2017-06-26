@@ -34,6 +34,7 @@ export class StatisticsComponent implements OnInit {
         start: 0,
         loaderActive: false
     };
+    toggle = "";
     searchlist = "";
     constructor(
         private service:StatisticsService
@@ -43,6 +44,9 @@ export class StatisticsComponent implements OnInit {
         this.search();
     }
 
+    toggleBlock(mode){
+        this.toggle = (this.toggle === mode)? '':mode;
+    }
     @HostListener('window:scroll', ['$event'])
     loadMoreAuditOnScroll(event) {
         let hT = ($('.load_more').offset()) ? $('.load_more').offset().top : 0,
@@ -67,18 +71,91 @@ export class StatisticsComponent implements OnInit {
     }
     public barChartOptions:any = {
         scaleShowVerticalLines: false,
-        responsive: true
+        responsive: true,
+        maintainAspectRatio: false,
+        scales: {
+            xAxes: [{
+                type: 'time',
+                time: {
+                    displayFormats: {
+                        'millisecond': 'YYYY MMM',
+                        'second': 'YYYY MMM',
+                        'minute': 'YYYY MMM',
+                        'hour': 'YYYY MMM',
+                        'day': 'YYYY MMM',
+                        'week': 'YYYY MMM',
+                        'month': 'YYYY MMM',
+                        'quarter': 'YYYY MMM',
+                        'year': 'YYYY MMM',
+                    }
+                }
+            }],
+            yAxes: [{
+                ticks: {
+                    min: 0
+                }
+            }]
+        }
     };
-    public barChartLabels:string[] = ['2006', '2007', '2008', '2009', '2010', '2011', '2012'];
+    newDate(days) {
+        return new Date(2017, 3+days, 4+days, 10, 6, 23, 0);
+    }
+    public barChartLabels = [
+        new Date(2012, 3, 4, 10, 6, 23, 0),
+        new Date(2014, 3, 4, 10, 6, 23, 0),
+        new Date(2016, 3, 28, 10, 6, 23, 0),
+        new Date(2016, 3, 28, 10, 7, 23, 0),
+        new Date(2016, 5 , 29, 10, 6, 23, 0),
+        new Date(2017, 1, 28, 10, 6, 23, 0),
+        new Date(2017, 2, 8, 10, 6, 23, 0),
+        new Date(2017, 4, 13, 10, 6, 23, 0),
+    ];
+    public pieChartColor =  [
+        {
+            backgroundColor: 'rgba(62, 83, 98, 0.84)'
+        },
+        {
+            backgroundColor: 'rgba(0, 32, 57, 0.84)'
+        },
+        {
+            backgroundColor: 'rgba(97, 142, 181, 0.84)'
+        },
+        {
+            backgroundColor: 'rgba(38, 45, 51, 0.84)'
+        },
+        {
+            backgroundColor: 'rgba(0, 123, 90, 0.84)'
+        },
+        {
+            backgroundColor: 'rgba(56, 38, 109, 0.84)'
+        },
+        {
+            backgroundColor: 'rgba(109, 41, 41, 0.84)'
+        },
+        {
+            backgroundColor: 'rgba(20, 55, 16, 0.84)'
+        },
+        {
+            backgroundColor: 'rgba(54, 111, 121, 0.84)'
+        }
+    ];
     public barChartType:string = 'bar';
     public barChartLegend:boolean = true;
 
-    public barChartData:any[] = [
-        {data: [65, 59, 80, 81, 56, 55, 40], label: 'Series A'},
-        {data: [28, 48, 40, 19, 86, 27, 90], label: 'Series B'},
-        {data: [18, 28, 50, 9, 26, 7, 80], label: 'Series B'}
+    public barChartData:any[] =  [
+        {
+            label: "My First dataset",
+            data: [null, 223, 324, 21, 1104, 2, 50,null],
+        },
+        {
+            label: "My sec",
+            data: [null, 20, null, 225, 312, null,4, null],
+        },
+        {
+            label: "My sec2",
+            data: [null, null, 123, null, 323, null,423, null],
+        }
     ];
-
     // events
     public chartClicked(e:any):void {
         console.log(e);
