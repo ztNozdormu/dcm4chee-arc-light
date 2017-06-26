@@ -173,15 +173,23 @@
         <xsl:with-param name="vr" select="'CS'"/>
         <xsl:with-param name="val" select="concat(string(field[1]), '_', string(field[5]))"/>
       </xsl:call-template>
+      <xsl:apply-templates select="following-sibling::TQ1[1]" mode="sps"/>
       <xsl:apply-templates select="following-sibling::OBR[1]" mode="sps"/>
     </Item>
+  </xsl:template>
+  <xsl:template match="TQ1" mode="sps">
+    <!-- Scheduled Procedure Step Start Date/Time -->
+    <xsl:call-template name="attrDATM">
+      <xsl:with-param name="datag" select="'00400002'"/>
+      <xsl:with-param name="tmtag" select="'00400003'"/>
+      <xsl:with-param name="val" select="field[7]"/>
+    </xsl:call-template>
   </xsl:template>
   <xsl:template match="OBR" mode="sps">
     <!-- Scheduled Performing Physican Name -->
     <xsl:call-template name="cn2pnAttr">
       <xsl:with-param name="tag" select="'00400006'"/>
       <xsl:with-param name="cn" select="field[34]"/>
-      <xsl:with-param name="cn26" select="field[34]/subcomponent"/>
     </xsl:call-template>
     <!-- Scheduled Protocol Step Description and Code Sequence -->
     <xsl:call-template name="ce2codeItemWithDesc">
