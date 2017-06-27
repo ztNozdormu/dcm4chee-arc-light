@@ -44,15 +44,21 @@ export class StatisticsComponent implements OnInit {
         this.search();
     }
 
-    toggleBlock(mode){
-        this.toggle = (this.toggle === mode)? '':mode;
+    toggleBlock(mode,e){
+        console.log("e",e.target.nodeName);
+        if(e.target.nodeName != "INPUT"){
+            this.toggle = (this.toggle === mode)? '':mode;
+        }
     }
+
     @HostListener('window:scroll', ['$event'])
     loadMoreAuditOnScroll(event) {
         let hT = ($('.load_more').offset()) ? $('.load_more').offset().top : 0,
             hH = $('.load_more').outerHeight(),
             wH = $(window).height(),
             wS = window.pageYOffset;
+        console.log("ws",wS);
+        console.log("hT + hH - wH",(hT + hH - wH));
         if (wS > (hT + hH - wH)){
             this.loadMoreAudit();
         }
@@ -73,6 +79,9 @@ export class StatisticsComponent implements OnInit {
         scaleShowVerticalLines: false,
         responsive: true,
         maintainAspectRatio: false,
+        legend:{
+            position:'right'
+        },
         scales: {
             xAxes: [{
                 type: 'time',
@@ -93,6 +102,10 @@ export class StatisticsComponent implements OnInit {
             yAxes: [{
                 ticks: {
                     min: 0
+                },
+                scaleLabel: {
+                    display: true,
+                    labelString: 'Queries'
                 }
             }]
         }
@@ -101,11 +114,11 @@ export class StatisticsComponent implements OnInit {
         return new Date(2017, 3+days, 4+days, 10, 6, 23, 0);
     }
     public barChartLabels = [
-        new Date(2012, 3, 4, 10, 6, 23, 0),
-        new Date(2014, 3, 4, 10, 6, 23, 0),
-        new Date(2016, 3, 28, 10, 6, 23, 0),
-        new Date(2016, 3, 28, 10, 7, 23, 0),
-        new Date(2016, 5 , 29, 10, 6, 23, 0),
+        new Date(2016, 3, 4, 10, 6, 23, 0),
+        new Date(2016, 5, 7, 10, 6, 23, 0),
+        new Date(2016, 6, 28, 10, 6, 23, 0),
+        new Date(2016, 7, 28, 10, 7, 23, 0),
+        new Date(2016, 8 , 29, 10, 6, 23, 0),
         new Date(2017, 1, 28, 10, 6, 23, 0),
         new Date(2017, 2, 8, 10, 6, 23, 0),
         new Date(2017, 4, 13, 10, 6, 23, 0),
@@ -154,6 +167,151 @@ export class StatisticsComponent implements OnInit {
         {
             label: "My sec2",
             data: [null, null, 123, null, 323, null,423, null],
+        },{
+            label: "My First dataset2",
+            data: [null, 229, 34, 21, 1104, 2, 50,null],
+        },
+        {
+            label: "My sec",
+            data: [null, 20, null, 225, 312, null,4, null],
+        },
+        {
+            label: "My sec2",
+            data: [null, null, 123, null, 323, null,423, null],
+        },{
+            label: "My First dataset",
+            data: [null, 223, 324, 21, 1104, 2, 50,null],
+        },
+        {
+            label: "My sec",
+            data: [null, 20, null, 225, 312, null,4, null],
+        },
+        {
+            label: "My sec2",
+            data: [null, null, 123, null, 323, null,423, null],
+        },{
+            label: "My First dataset2",
+            data: [null, 229, 34, 21, 1104, 2, 50,null],
+        },
+        {
+            label: "My sec2",
+            data: [null, null, 123, null, 323, null,423, null],
+        },{
+            label: "My First dataset",
+            data: [null, 223, 324, 21, 1104, 2, 50,null],
+        },
+        {
+            label: "My sec",
+            data: [null, 20, null, 225, 312, null,4, null],
+        },
+        {
+            label: "My sec2",
+            data: [null, null, 123, null, 323, null,423, null],
+        },{
+            label: "My First dataset2",
+            data: [null, 229, 34, 21, 1104, 2, 50,null],
+        },
+        {
+            label: "My sec",
+            data: [null, 20, null, 225, 312, null,4, null],
+        },
+        {
+            label: "My sec2",
+            data: [null, null, 123, null, 323, null,423, null],
+        },{
+            label: "My First dataset2",
+            data: [null, 229, 34, 21, 1104, 2, 50,null],
+        },
+        {
+            label: "My sec",
+            data: [null, 20, null, 225, 312, null,4, null],
+        },
+        {
+            label: "My sec2",
+            data: [null, null, 123, null, 323, null,423, null],
+        },{
+            label: "My First dataset",
+            data: [null, 223, 324, 21, 1104, 2, 50,null],
+        },
+        {
+            label: "My sec",
+            data: [null, 20, null, 225, 312, null,4, null],
+        },
+        {
+            label: "My sec2",
+            data: [null, null, 123, null, 323, null,423, null],
+        },{
+            label: "My First dataset2",
+            data: [null, 229, 34, 21, 1104, 2, 50,null],
+        },
+        {
+            label: "My sec2",
+            data: [null, null, 123, null, 323, null,423, null],
+        },{
+            label: "My First dataset",
+            data: [null, 223, 324, 21, 1104, 2, 50,null],
+        },
+        {
+            label: "My sec",
+            data: [null, 20, null, 225, 312, null,4, null],
+        },
+        {
+            label: "My sec2",
+            data: [null, null, 123, null, 323, null,423, null],
+        },{
+            label: "My First dataset2",
+            data: [null, 229, 34, 21, 1104, 2, 50,null],
+        },
+        {
+            label: "My sec",
+            data: [null, 20, null, 225, 312, null,4, null],
+        },
+        {
+            label: "My sec2",
+            data: [null, null, 123, null, 323, null,423, null],
+        },{
+            label: "My First dataset2",
+            data: [null, 229, 34, 21, 1104, 2, 50,null],
+        },
+        {
+            label: "My sec",
+            data: [null, 20, null, 225, 312, null,4, null],
+        },
+        {
+            label: "My sec2",
+            data: [null, null, 123, null, 323, null,423, null],
+        },{
+            label: "My First dataset",
+            data: [null, 223, 324, 21, 1104, 2, 50,null],
+        },
+        {
+            label: "My sec",
+            data: [null, 20, null, 225, 312, null,4, null],
+        },
+        {
+            label: "My sec2",
+            data: [null, null, 123, null, 323, null,423, null],
+        },{
+            label: "My First dataset2",
+            data: [null, 229, 34, 21, 1104, 2, 50,null],
+        },
+        {
+            label: "My sec2",
+            data: [null, null, 123, null, 323, null,423, null],
+        },{
+            label: "My First dataset",
+            data: [null, 223, 324, 21, 1104, 2, 50,null],
+        },
+        {
+            label: "My sec",
+            data: [null, 20, null, 225, 312, null,4, null],
+        },
+        {
+            label: "My sec2",
+            data: [null, null, 123, null, 323, null,423, null],
+        },{
+            label: "My First dataset2",
+            data: [null, 229, 34, 21, 1104, 2, 50,null],
         }
     ];
     // events

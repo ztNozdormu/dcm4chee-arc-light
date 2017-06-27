@@ -84,10 +84,10 @@
                 </div>
             </div>
             <div class="table_block">
-                <div class="header" (click)="toggleBlock('USERIDQUERIES')">
+                <div class="header" (click)="toggleBlock('USERIDQUERIES',$event)">
                     <h3>Queries / User ID</h3>
                 </div>
-                <div class="diagram_content" *ngIf="toggle === 'USERIDQUERIES'">
+                <div class="diagram_content" [hidden]="toggle != 'USERIDQUERIES'">
                     <canvas baseChart
                             [datasets]="barChartData"
                             [labels]="barChartLabels"
@@ -100,7 +100,7 @@
                 </div>
             </div>
             <div class="table_block">
-                <div class="header" (click)="toggleBlock('AUDITEVENTS')">
+                <div class="header" (click)="toggleBlock('AUDITEVENTS',$event)">
                     <h3>Audit Events</h3>
                     <input *ngIf="toggle === 'AUDITEVENTS'" type="text" [(ngModel)]="searchlist" placeholder="Search...">
                 </div>
@@ -136,7 +136,7 @@
                         </tbody>
                     </table>
                 </div>
-                <button class="load_more" *ngIf="auditEvents && moreAudit.limit <= auditEvents.length && toggle.showAuditEvents" (click)="loadMoreAudit()"><i *ngIf="moreAudit.loaderActive" class="fa fa-spinner fa-spin fa-3x fa-fw"></i>More</button>
+                <button class="load_more" *ngIf="auditEvents && moreAudit.limit <= auditEvents.length && toggle === 'AUDITEVENTS'" (click)="loadMoreAudit()"><i *ngIf="moreAudit.loaderActive" class="fa fa-spinner fa-spin fa-3x fa-fw"></i>More</button>
             </div>
         </div>
     </div>
