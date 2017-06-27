@@ -3,7 +3,7 @@ import {Input, HostListener} from '@angular/core';
 import * as _ from 'lodash';
 
 @Directive({
-  selector: '[tooltip]'
+    selector: '[tooltip]'
 })
 export class TooltipDirective {
     @Input() tooltip: string;
