@@ -256,16 +256,6 @@ export class Globalvar {
                                 "query": "*"
                             }
                         }
-                        /*                        ,
-                         {
-                         "range": {
-                         "Event.EventDateTime": {
-                         "gte": 1466496969111,
-                         "lte": 1498032969111,
-                         "format": "epoch_millis"
-                         }
-                         }
-                         }*/
                     ],
                     "must_not": []
                 }
@@ -276,6 +266,48 @@ export class Globalvar {
         };
     };
 
+    public static get QUERIESUSERID_PARAMETERS(): any{
+        return {
+            "size": 0,
+            "aggs": {
+                "2": {
+                    "date_histogram": {
+                        "field": "Event.EventDateTime",
+                        "interval": "3h",
+                        "time_zone": "Europe/Berlin",
+                        "min_doc_count": 1
+                    },
+                    "aggs": {
+                        "3": {
+                            "terms": {
+                                "field": "Source.UserID",
+                                "size": 15,
+                                "order": {
+                                    "_count": "desc"
+                                }
+                            }
+                        }
+                    }
+                }
+            },
+            "query": {
+                "bool": {
+                    "must": [
+                        {
+                            "query_string": {
+                                "query": "EventID.csd-code:110112 AND (Destination.UserID:DCM4CHEE OR Destination.UserID:ANOTHER_AET)",
+                                "analyze_wildcard": true
+                            }
+                        }
+                    ],
+                    "must_not": []
+                }
+            },
+            "_source": {
+                "excludes": []
+            }
+        };
+    }
     public static get ERRORSCOUNTS_PARAMETERS(): any{
         return {
             "size": 0,
@@ -300,15 +332,6 @@ export class Globalvar {
                             "query_string": {
                                 "analyze_wildcard": true,
                                 "query": "*"
-                            }
-                        },
-                        {
-                            "range": {
-                                "Event.EventDateTime": {
-                                    "gte": 1466496969117,
-                                    "lte": "now",
-                                    "format": "epoch_millis"
-                                }
                             }
                         }
                     ],
@@ -336,32 +359,10 @@ export class Globalvar {
                                 "analyze_wildcard": true,
                                 "query": "*"
                             }
-                        },
-                        {
-                            "range": {
-                                "Event.EventDateTime": {
-                                    "gte": 1466496969107,
-                                    "lte": 1498218588824,
-                                    "format": "epoch_millis"
-                                }
-                            }
                         }
                     ],
                     "must_not": []
                 }
-            },
-            "highlight": {
-                "pre_tags": [
-                    "@kibana-highlighted-field@"
-                ],
-                "post_tags": [
-                    "@/kibana-highlighted-field@"
-                ],
-                "fields": {
-                    "*": {}
-                },
-                "require_field_match": false,
-                "fragment_size": 2147483647
             },
             "size": 0,
             "_source": {
@@ -374,13 +375,6 @@ export class Globalvar {
         return {
             "size": 0,
             "aggs": {},
-            "highlight": {
-                "fields": {
-                    "*": {}
-                },
-                "require_field_match": false,
-                "fragment_size": 2147483647
-            },
             "query": {
                 "bool": {
                     "must": [
@@ -394,15 +388,6 @@ export class Globalvar {
                             "query_string": {
                                 "analyze_wildcard": true,
                                 "query": "*"
-                            }
-                        },
-                        {
-                            "range": {
-                                "Event.EventDateTime": {
-                                    "gte": 1466496969111,
-                                    "lte": 1498218588824,
-                                    "format": "epoch_millis"
-                                }
                             }
                         }
                     ],
@@ -429,16 +414,6 @@ export class Globalvar {
                             "query_string": {
                                 "analyze_wildcard": true,
                                 "query": "*"
-                            }
-                        }
-                        ,
-                        {
-                            "range": {
-                                "Event.EventDateTime": {
-                                    "gte": 1466496969107,
-                                    "lte": 1498218588824,
-                                    "format": "epoch_millis"
-                                }
                             }
                         }
                     ],

@@ -87,10 +87,11 @@
                 <div class="header" (click)="toggleBlock('USERIDQUERIES',$event)">
                     <h3>Queries / User ID</h3>
                 </div>
-                <div class="diagram_content" [hidden]="toggle != 'USERIDQUERIES'">
+                <div class="diagram_content" *ngIf="toggle === 'USERIDQUERIES' && histogramData.querieUserID.ready.labels.length > 0">
                     <canvas baseChart
-                            [datasets]="barChartData"
-                            [labels]="barChartLabels"
+                            *ngIf="histogramData.querieUserID.show"
+                            [datasets]="histogramData.querieUserID.ready.data"
+                            [labels]="histogramData.querieUserID.ready.labels"
                             [options]="barChartOptions"
                             [colors]="pieChartColor"
                             [legend]="barChartLegend"
@@ -104,7 +105,7 @@
                     <h3>Audit Events</h3>
                     <input *ngIf="toggle === 'AUDITEVENTS'" type="text" [(ngModel)]="searchlist" placeholder="Search...">
                 </div>
-                <div class="table_content" [hidden]="toggle != 'AUDITEVENTS'">
+                <div class="table_content" *ngIf="toggle === 'AUDITEVENTS'">
                     <table class="table table-bordered table-condensed">
                         <thead>
                             <tr>
@@ -127,9 +128,9 @@
                                 <td tooltip="{{item.EventID}}">{{item.EventID | trim:20}}</td>
                                 <td>{{item.ActionCode}}</td>
                                 <td tooltip="{{item.Patient}}">{{item.Patient | trim:20}}</td>
-                                <td tooltip="{{item.Study}}">{{item.Study |trim:45}}</td>
-                                <td>{{item.AccessionNumber}}</td>
-                                <td>{{item.userId}}</td>
+                                <td tooltip="{{item.Study}}">{{item.Study |trim:40}}</td>
+                                <td tooltip="{{item.AccessionNumber}}">{{item.AccessionNumber|trim:15}}</td>
+                                <td tooltip="{{item.userId}}">{{item.userId |trim:15}}</td>
                                 <td>{{item.requestorId}}</td>
                                 <td>{{item.EventOutcomeIndicator}}</td>
                             </tr>

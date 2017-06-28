@@ -9,89 +9,84 @@ export class StatisticsService {
 
     constructor(private $http:Http) { }
 
-    getStudiesStoredCounts(){
+    queryGet(params){
+        return this.$http.get(`${Globalvar.ELASTICSEARCHDOMAIN}/_search?source=`+JSON.stringify(params))
+            .map(res => {
+                let resjson;
+                try{
+                    let pattern = new RegExp("[^:]*:\/\/[^\/]*\/auth\/");
+                    if(pattern.exec(res.url)){
+                        WindowRefService.nativeWindow.location = "/dcm4chee-arc/ui2/";
+                    }
+                    resjson = res.json();
+                }catch (e){
+                    resjson = [];
+                }
+                return resjson;
+            });
+    };
+    setRangeToParams(params,convertedRange, errorText){
+        try{
+            params.query.bool.must.push({
+                "range": {
+                    "Event.EventDateTime": {
+                        "gte": convertedRange.from,
+                        "lte": convertedRange.to,
+                        "format": "epoch_millis"
+                    }
+                }
+            });
+        }catch(e){
+            console.error(errorText,e);
+        }
+    }
+    getRangeConverted(range){
+        try{
+            return {
+                from:new Date(range.from).getTime(),
+                to :new Date(range.to).getTime()
+            };
+        }catch (e){
+            return{
+                from :(new Date().getTime() - 86400000),
+                to : new Date().getTime()
+            }
+        }
+    }
+    getQueriesUserID(range){
+        let convertedRange = this.getRangeConverted(range);
+        let params = Globalvar.QUERIESUSERID_PARAMETERS;
+        this.setRangeToParams(params,convertedRange,"Setting time range failed on Queries UserID ");
+        return this.queryGet(params);
+    }
+    getStudiesStoredCounts(range){
+        let convertedRange = this.getRangeConverted(range);
         let params = Globalvar.STUDIESSTOREDCOUNTS_PARAMETERS;
-        return this.$http.get(`${Globalvar.ELASTICSEARCHDOMAIN}/_search?source=`+JSON.stringify(params))
-            .map(res => {
-                let resjson;
-                try{
-                    let pattern = new RegExp("[^:]*:\/\/[^\/]*\/auth\/");
-                    if(pattern.exec(res.url)){
-                        WindowRefService.nativeWindow.location = "/dcm4chee-arc/ui2/";
-                    }
-                    resjson = res.json();
-                }catch (e){
-                    resjson = [];
-                }
-                return resjson;
-            });
+        this.setRangeToParams(params,convertedRange,"Setting time range failed on Stored Counts ");
+        return this.queryGet(params);
     }
-    getRetrievCounts(){
+    getRetrieveCounts(range){
+        let convertedRange = this.getRangeConverted(range);
         let params = Globalvar.RETRIEVCOUNTS_PARAMETERS;
-        return this.$http.get(`${Globalvar.ELASTICSEARCHDOMAIN}/_search?source=`+JSON.stringify(params))
-            .map(res => {
-                let resjson;
-                try{
-                    let pattern = new RegExp("[^:]*:\/\/[^\/]*\/auth\/");
-                    if(pattern.exec(res.url)){
-                        WindowRefService.nativeWindow.location = "/dcm4chee-arc/ui2/";
-                    }
-                    resjson = res.json();
-                }catch (e){
-                    resjson = [];
-                }
-                return resjson;
-            });
+        this.setRangeToParams(params,convertedRange,"Setting time range failed on Retrieve Counts ");
+        return this.queryGet(params);
     }
-    getErrorCounts(){
+    getErrorCounts(range){
+        let convertedRange = this.getRangeConverted(range);
         let params = Globalvar.ERRORSCOUNTS_PARAMETERS;
-        return this.$http.get(`${Globalvar.ELASTICSEARCHDOMAIN}/_search?source=`+JSON.stringify(params))
-            .map(res => {
-                let resjson;
-                try{
-                    let pattern = new RegExp("[^:]*:\/\/[^\/]*\/auth\/");
-                    if(pattern.exec(res.url)){
-                        WindowRefService.nativeWindow.location = "/dcm4chee-arc/ui2/";
-                    }
-                    resjson = res.json();
-                }catch (e){
-                    resjson = [];
-                }
-                return resjson;
-            });
+        this.setRangeToParams(params,convertedRange,"Setting time range failed on Error Counts ");
+        return this.queryGet(params);
     }
-    getQueriesCounts(){
+    getQueriesCounts(range){
+        let convertedRange = this.getRangeConverted(range);
         let params = Globalvar.QUERIESCOUNTS_PARAMETERS;
-        return this.$http.get(`${Globalvar.ELASTICSEARCHDOMAIN}/_search?source=`+JSON.stringify(params))
-            .map(res => {
-                let resjson;
-                try{
-                    let pattern = new RegExp("[^:]*:\/\/[^\/]*\/auth\/");
-                    if(pattern.exec(res.url)){
-                        WindowRefService.nativeWindow.location = "/dcm4chee-arc/ui2/";
-                    }
-                    resjson = res.json();
-                }catch (e){
-                    resjson = [];
-                }
-                return resjson;
-            });
+        this.setRangeToParams(params,convertedRange,"Setting time range failed on Queries Counts ");
+        return this.queryGet(params);
     }
-    getAuditEvents(){
+    getAuditEvents(range){
+        let convertedRange = this.getRangeConverted(range);
         let params = Globalvar.AUDITEVENTS_PARAMETERS;
-        return this.$http.get(`${Globalvar.ELASTICSEARCHDOMAIN}/_search?source=`+JSON.stringify(params))
-           .map(res => {
-               let resjson;
-               try{
-                   let pattern = new RegExp("[^:]*:\/\/[^\/]*\/auth\/");
-                   if(pattern.exec(res.url)){
-                       WindowRefService.nativeWindow.location = "/dcm4chee-arc/ui2/";
-                   }
-                   resjson = res.json();
-               }catch (e){
-                   resjson = [];
-               }
-               return resjson;
-           });
+        this.setRangeToParams(params,convertedRange,"Setting time range failed on Audit Event ");
+        return this.queryGet(params);
     }
 }
