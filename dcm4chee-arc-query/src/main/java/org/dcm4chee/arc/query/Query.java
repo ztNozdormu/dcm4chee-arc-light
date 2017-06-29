@@ -43,6 +43,8 @@ package org.dcm4chee.arc.query;
 import com.querydsl.core.types.OrderSpecifier;
 import org.dcm4che3.data.Attributes;
 import org.dcm4che3.net.service.DicomServiceException;
+import org.dcm4che3.net.service.QueryRetrieveLevel2;
+import org.hibernate.Transaction;
 
 /**
  * @author Gunter Zeilinger <gunterze@gmail.com>
@@ -54,6 +56,8 @@ public interface Query {
     void close();
 
     void initQuery();
+
+    Transaction beginTransaction();
 
     void setFetchSize(int fetchSize);
 
@@ -72,4 +76,6 @@ public interface Query {
     Attributes nextMatch();
 
     Attributes adjust(Attributes match);
+
+    QueryContext getQueryContext();
 }
