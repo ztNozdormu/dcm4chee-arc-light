@@ -1,6 +1,7 @@
 import { Component, OnInit, HostListener} from '@angular/core';
 import {StatisticsService} from "./statistics.service";
 import * as _ from 'lodash';
+import {Globalvar} from "../../constants/globalvar";
 
 @Component({
   selector: 'app-statistics',
@@ -56,8 +57,6 @@ export class StatisticsComponent implements OnInit {
         this.range.from = d;
         this.range.to = new Date();
         this.search();
-        let today = new Date().getTime();
-        console.log("today",today);
     }
 
     toggleBlock(mode,e){
@@ -92,6 +91,7 @@ export class StatisticsComponent implements OnInit {
         this.getErrorCounts();
         this.getQueriesUserID();
     }
+    //barChartOptions.legend.position
     public barChartOptions:any = {
         scaleShowVerticalLines: false,
         responsive: true,
@@ -127,211 +127,11 @@ export class StatisticsComponent implements OnInit {
             }]
         }
     };
-    newDate(days) {
-        return new Date(2017, 3+days, 4+days, 10, 6, 23, 0);
-    }
-/*    public barChartLabels = [
-        new Date(2016, 3, 4, 10, 6, 23, 0),
-        new Date(2016, 5, 7, 10, 6, 23, 0),
-        new Date(2016, 6, 28, 10, 6, 23, 0),
-        new Date(2016, 7, 28, 10, 7, 23, 0),
-        new Date(2016, 8 , 29, 10, 6, 23, 0),
-        new Date(2017, 1, 28, 10, 6, 23, 0),
-        new Date(2017, 2, 8, 10, 6, 23, 0),
-        new Date(2017, 4, 13, 10, 6, 23, 0),
-    ];*/
     public barChartLabels = [];
-    public pieChartColor =  [
-        {
-            backgroundColor: 'rgba(62, 83, 98, 0.84)'
-        },
-        {
-            backgroundColor: 'rgba(0, 32, 57, 0.84)'
-        },
-        {
-            backgroundColor: 'rgba(97, 142, 181, 0.84)'
-        },
-        {
-            backgroundColor: 'rgba(38, 45, 51, 0.84)'
-        },
-        {
-            backgroundColor: 'rgba(0, 123, 90, 0.84)'
-        },
-        {
-            backgroundColor: 'rgba(56, 38, 109, 0.84)'
-        },
-        {
-            backgroundColor: 'rgba(109, 41, 41, 0.84)'
-        },
-        {
-            backgroundColor: 'rgba(20, 55, 16, 0.84)'
-        },
-        {
-            backgroundColor: 'rgba(54, 111, 121, 0.84)'
-        }
-    ];
+    public pieChartColor =  Globalvar.HISTOGRAMCOLORS;
     public barChartType:string = 'bar';
     public barChartLegend:boolean = true;
     public barChartData:any[] = [];
-/*    public barChartData:any[] =  [
-        {
-            label: "My First dataset",
-            data: [null, 223, 324, 21, 1104, 2, 50,null],
-        },
-        {
-            label: "My sec",
-            data: [null, 20, null, 225, 312, null,4, null],
-        },
-        {
-            label: "My sec2",
-            data: [null, null, 123, null, 323, null,423, null],
-        },{
-            label: "My First dataset2",
-            data: [null, 229, 34, 21, 1104, 2, 50,null],
-        },
-        {
-            label: "My sec",
-            data: [null, 20, null, 225, 312, null,4, null],
-        },
-        {
-            label: "My sec2",
-            data: [null, null, 123, null, 323, null,423, null],
-        },{
-            label: "My First dataset",
-            data: [null, 223, 324, 21, 1104, 2, 50,null],
-        },
-        {
-            label: "My sec",
-            data: [null, 20, null, 225, 312, null,4, null],
-        },
-        {
-            label: "My sec2",
-            data: [null, null, 123, null, 323, null,423, null],
-        },{
-            label: "My First dataset2",
-            data: [null, 229, 34, 21, 1104, 2, 50,null],
-        },
-        {
-            label: "My sec2",
-            data: [null, null, 123, null, 323, null,423, null],
-        },{
-            label: "My First dataset",
-            data: [null, 223, 324, 21, 1104, 2, 50,null],
-        },
-        {
-            label: "My sec",
-            data: [null, 20, null, 225, 312, null,4, null],
-        },
-        {
-            label: "My sec2",
-            data: [null, null, 123, null, 323, null,423, null],
-        },{
-            label: "My First dataset2",
-            data: [null, 229, 34, 21, 1104, 2, 50,null],
-        },
-        {
-            label: "My sec",
-            data: [null, 20, null, 225, 312, null,4, null],
-        },
-        {
-            label: "My sec2",
-            data: [null, null, 123, null, 323, null,423, null],
-        },{
-            label: "My First dataset2",
-            data: [null, 229, 34, 21, 1104, 2, 50,null],
-        },
-        {
-            label: "My sec",
-            data: [null, 20, null, 225, 312, null,4, null],
-        },
-        {
-            label: "My sec2",
-            data: [null, null, 123, null, 323, null,423, null],
-        },{
-            label: "My First dataset",
-            data: [null, 223, 324, 21, 1104, 2, 50,null],
-        },
-        {
-            label: "My sec",
-            data: [null, 20, null, 225, 312, null,4, null],
-        },
-        {
-            label: "My sec2",
-            data: [null, null, 123, null, 323, null,423, null],
-        },{
-            label: "My First dataset2",
-            data: [null, 229, 34, 21, 1104, 2, 50,null],
-        },
-        {
-            label: "My sec2",
-            data: [null, null, 123, null, 323, null,423, null],
-        },{
-            label: "My First dataset",
-            data: [null, 223, 324, 21, 1104, 2, 50,null],
-        },
-        {
-            label: "My sec",
-            data: [null, 20, null, 225, 312, null,4, null],
-        },
-        {
-            label: "My sec2",
-            data: [null, null, 123, null, 323, null,423, null],
-        },{
-            label: "My First dataset2",
-            data: [null, 229, 34, 21, 1104, 2, 50,null],
-        },
-        {
-            label: "My sec",
-            data: [null, 20, null, 225, 312, null,4, null],
-        },
-        {
-            label: "My sec2",
-            data: [null, null, 123, null, 323, null,423, null],
-        },{
-            label: "My First dataset2",
-            data: [null, 229, 34, 21, 1104, 2, 50,null],
-        },
-        {
-            label: "My sec",
-            data: [null, 20, null, 225, 312, null,4, null],
-        },
-        {
-            label: "My sec2",
-            data: [null, null, 123, null, 323, null,423, null],
-        },{
-            label: "My First dataset",
-            data: [null, 223, 324, 21, 1104, 2, 50,null],
-        },
-        {
-            label: "My sec",
-            data: [null, 20, null, 225, 312, null,4, null],
-        },
-        {
-            label: "My sec2",
-            data: [null, null, 123, null, 323, null,423, null],
-        },{
-            label: "My First dataset2",
-            data: [null, 229, 34, 21, 1104, 2, 50,null],
-        },
-        {
-            label: "My sec2",
-            data: [null, null, 123, null, 323, null,423, null],
-        },{
-            label: "My First dataset",
-            data: [null, 223, 324, 21, 1104, 2, 50,null],
-        },
-        {
-            label: "My sec",
-            data: [null, 20, null, 225, 312, null,4, null],
-        },
-        {
-            label: "My sec2",
-            data: [null, null, 123, null, 323, null,423, null],
-        },{
-            label: "My First dataset2",
-            data: [null, 229, 34, 21, 1104, 2, 50,null],
-        }
-    ];*/
     histogramData = {
         querieUserID:{
             labels:[],
@@ -352,9 +152,6 @@ export class StatisticsComponent implements OnInit {
         console.log(e);
     }
     isRangeSmallerThan24H(){
-        console.log("(new Date(this.range.to).getTime()) - (new Date(this.range.from).getTime())",(new Date(this.range.to).getTime()) - (new Date(this.range.from).getTime()));
-        console.log("to",(new Date(this.range.to).getTime()));
-        console.log("from",(new Date(this.range.from).getTime()));
         if((new Date(this.range.to).getTime()) - (new Date(this.range.from).getTime()) < 86400005)
             return true;
         else
@@ -395,13 +192,13 @@ export class StatisticsComponent implements OnInit {
         }
         $this.histogramData[histogram] = {
             labels:[],
-                data:{},
+            data:{},
             ready:{
                 labels:[],
                     data:[]
             }
         }
-        if(_.hasIn(response,"aggregations.2.buckets")){
+        if(_.hasIn(response,"aggregations.2.buckets") && _.size(response.aggregations[2].buckets) > 0){
             _.forEach(response.aggregations["2"].buckets,(m,i)=>{
                 $this.histogramData[histogram].labels.push(m.key);
                 _.forEach(m[3].buckets,(bucket,bIndex)=>{
@@ -424,8 +221,36 @@ export class StatisticsComponent implements OnInit {
                     data:[null,...d.data,null]
                 });
             });
+            if(Object.keys($this.histogramData[histogram].data).length < 11){
+                $this.barChartOptions.legend.position = 'top';
+            }else{
+                if(Object.keys($this.histogramData[histogram].data).length < 30){
+                    $this.barChartOptions.legend.position = 'right';
+                }else{
+                    //TODO don't Show histogram
+                    $this.histogramData[histogram] = {
+                        labels:[],
+                        data:{},
+                        ready:{
+                            labels:[],
+                            data:[]
+                        }
+                    }
+                }
+            }
+            this.refreshChart(histogram);
+        }else{
+            console.log("in empty data",response);
+            $this.histogramData[histogram] = {
+                labels:[],
+                data:{},
+                ready:{
+                    labels:[],
+                    data:[]
+                },
+                noDataText:"No data found!",
+            }
         }
-        this.refreshChart(histogram);
         console.log("$this.histogramData",$this.histogramData);
     }
     getQueriesUserID(){

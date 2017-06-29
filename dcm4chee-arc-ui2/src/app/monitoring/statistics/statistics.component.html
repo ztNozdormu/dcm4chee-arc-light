@@ -99,6 +99,9 @@
                             (chartHover)="chartHovered($event)"
                             (chartClick)="chartClicked($event)"></canvas>
                 </div>
+                <div class="diagram_content no_data" *ngIf="toggle === 'USERIDQUERIES' && histogramData.querieUserID.ready.labels.length === 0">
+                    <h3>{{histogramData.querieUserID.noDataText}}</h3>
+                </div>
             </div>
             <div class="table_block">
                 <div class="header" (click)="toggleBlock('AUDITEVENTS',$event)">

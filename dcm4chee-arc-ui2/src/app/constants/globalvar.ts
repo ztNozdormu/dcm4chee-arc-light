@@ -220,6 +220,103 @@ export class Globalvar {
         };
     };
 
+    public static get HISTOGRAMCOLORS(): any{
+        return [
+            {
+                backgroundColor: 'rgba(62, 83, 98, 0.84)'
+            },
+            {
+                backgroundColor: 'rgba(0, 32, 57, 0.84)'
+            },
+            {
+                backgroundColor: 'rgba(97, 142, 181, 0.84)'
+            },
+            {
+                backgroundColor: 'rgba(38, 45, 51, 0.84)'
+            },
+            {
+                backgroundColor: 'rgba(0, 123, 90, 0.84)'
+            },
+            {
+                backgroundColor: 'rgba(56, 38, 109, 0.84)'
+            },
+            {
+                backgroundColor: 'rgba(109, 41, 41, 0.84)'
+            },
+            {
+                backgroundColor: 'rgba(20, 55, 16, 0.84)'
+            },
+            {
+                backgroundColor: 'rgba(54, 111, 121, 0.84)'
+            },
+            {
+                backgroundColor: 'rgba(249,168,37 ,0.84)'
+            },
+            {
+                backgroundColor: 'rgba(3,169,244 ,0.84)'
+            },
+            {
+                backgroundColor: 'rgba(40,53,147 ,0.84)'
+            },
+            {
+                backgroundColor: 'rgba(142,36,170 ,0.84)'
+            },
+            {
+                backgroundColor: 'rgba(183,28,28 ,0.84)'
+            },
+            {
+                backgroundColor: 'rgba(240,98,146 ,0.84)'
+            },
+            {
+                backgroundColor: 'rgba(121,85,72 ,0.84)'
+            },
+            {
+                backgroundColor: 'rgba(33,33,33 ,0.84)'
+            },
+            {
+                backgroundColor: 'rgba(144,164,174 ,0.84)'
+            },
+            {
+                backgroundColor: 'rgba(38,166,154 ,0.84)'
+            },
+            {
+                backgroundColor: 'rgba(159,168,218 ,0.84)'
+            },
+            {
+                backgroundColor: 'rgba(213,0,0 ,0.84)'
+            },
+            {
+                backgroundColor: 'rgba(24,255,255 ,0.84)'
+            },
+            {
+                backgroundColor: 'rgba(0,188,212,0.84)'
+            },
+            {
+                backgroundColor: 'rgba(63,81,181,0.84)'
+            },
+            {
+                backgroundColor: 'rgba(213,0,249 ,0.84)'
+            },
+            {
+                backgroundColor: 'rgba(156,204,101 ,0.84)'
+            },
+            {
+                backgroundColor: 'rgba(255,111,0 ,0.84)'
+            },
+            {
+                backgroundColor: 'rgba(109,135,100 ,0.84)'
+            },
+            {
+                backgroundColor: 'rgba(255,82,82 ,0.84)'
+            },
+            {
+                backgroundColor: 'rgba(229,115,140 ,0.84)'
+            },
+            {
+                backgroundColor: 'rgba(21,45,115 ,0.84)'
+            }
+        ]
+    }
     public static get ELASTICSEARCHDOMAIN(): any{
         return "http://localhost:9200";
     };
