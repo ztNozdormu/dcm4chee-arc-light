@@ -1,0 +1,23 @@
+<div class="vex vex-theme-os" xmlns="http://www.w3.org/1999/html">
+    <div class="vex-dialog-form">
+        <div class="table_block">
+            <div class="header">
+                <h3>{{title}}</h3>
+            </div>
+            <div class="diagram_content" *ngIf="histogramData.queriesCounts.ready.labels.length > 0">
+                <canvas baseChart
+                        *ngIf="histogramData.queriesCounts.show"
+                        [datasets]="histogramData.queriesCounts.ready.data"
+                        [labels]="histogramData.queriesCounts.ready.labels"
+                        [options]="histogramData.queriesCounts.chartOptions"
+                        [colors]="pieChartColor"
+                        [legend]="barChartLegend"
+                        [chartType]="barChartType"
+                        ></canvas>
+            </div>
+        </div>
+        <div class="dialogbuttons">
+            <button class="cancle" type="button" (click)="dialogRef.close(null)">CLOSE</button>
+        </div>
+    </div>
+</div>

@@ -59,6 +59,18 @@ export class StatisticsService {
         this.setRangeToParams(params,convertedRange,"Setting time range failed on Queries UserID ");
         return this.queryGet(params);
     }
+    getRetrievUserID(range){
+        let convertedRange = this.getRangeConverted(range);
+        let params = Globalvar.RETRIEVESUSERID_PARAMETERS;
+        this.setRangeToParams(params,convertedRange,"Setting time range failed on Retrieves UserID ");
+        return this.queryGet(params);
+    }
+    getStudiesStoredSopClass(range){
+        let convertedRange = this.getRangeConverted(range);
+        let params = Globalvar.STUDIESSTOREDSOPCLASS_PARAMETERS;
+        this.setRangeToParams(params,convertedRange,"Setting time range failed on Retrieves UserID ");
+        return this.queryGet(params);
+    }
     getStudiesStoredCounts(range){
         let convertedRange = this.getRangeConverted(range);
         let params = Globalvar.STUDIESSTOREDCOUNTS_PARAMETERS;
@@ -75,6 +87,12 @@ export class StatisticsService {
         let convertedRange = this.getRangeConverted(range);
         let params = Globalvar.ERRORSCOUNTS_PARAMETERS;
         this.setRangeToParams(params,convertedRange,"Setting time range failed on Error Counts ");
+        return this.queryGet(params);
+    }
+    getWildflyErrorCounts(range){
+        let convertedRange = this.getRangeConverted(range);
+        let params = Globalvar.WILDFLYERRORCOUNTS_PARAMETERS;
+        this.setRangeToParams(params,convertedRange,"Setting time range failed on Application Error Counts ");
         return this.queryGet(params);
     }
     getQueriesCounts(range){

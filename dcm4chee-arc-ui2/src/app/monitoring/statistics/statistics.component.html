@@ -67,20 +67,24 @@
         <div class="statistics_content">
             <div class="count_block_row">
                 <div class="count_block">
-                    <h3>{{studieStored.label}}</h3>
-                    <label *ngIf="studieStored.count != undefined">{{studieStored.count}}</label>
+                    <h3>{{queries.label}}</h3>
+                    <label *ngIf="queries.count != undefined">{{queries.count}}</label>
                 </div>
                 <div class="count_block">
                     <h3>{{retriev.label}}</h3>
                     <label *ngIf="retriev.count != undefined">{{retriev.count}}</label>
                 </div>
                 <div class="count_block">
-                    <h3>{{queries.label}}</h3>
-                    <label *ngIf="queries.count != undefined">{{queries.count}}</label>
+                    <h3>{{studieStored.label}}</h3>
+                    <label *ngIf="studieStored.count != undefined">{{studieStored.count}}</label>
                 </div>
                 <div class="count_block">
                     <h3>{{errors.label}}</h3>
-                    <label *ngIf="errors.count != undefined" class="text-danger">{{errors.count}}</label>
+                    <label *ngIf="errors.count != undefined" [ngClass]="{'text-danger': errors.count}">{{errors.count}}</label>
+                </div>
+                <div class="count_block">
+                    <h3>{{wildflError.label}}</h3>
+                    <label *ngIf="wildflError.count != undefined" [ngClass]="{'text-danger': wildflError.count}">{{wildflError.count}}</label>
                 </div>
             </div>
             <div class="table_block">
@@ -92,15 +96,55 @@
                             *ngIf="histogramData.querieUserID.show"
                             [datasets]="histogramData.querieUserID.ready.data"
                             [labels]="histogramData.querieUserID.ready.labels"
-                            [options]="barChartOptions"
+                            [options]="histogramData.querieUserID.chartOptions"
                             [colors]="pieChartColor"
                             [legend]="barChartLegend"
                             [chartType]="barChartType"
                             (chartHover)="chartHovered($event)"
                             (chartClick)="chartClicked($event)"></canvas>
                 </div>
-                <div class="diagram_content no_data" *ngIf="toggle === 'USERIDQUERIES' && histogramData.querieUserID.ready.labels.length === 0">
+                <div class="diagram_content no_data" *ngIf="toggle === 'USERIDQUERIES' && histogramData.querieUserID.ready && histogramData.querieUserID.ready.labels.length === 0">
                     <h3>{{histogramData.querieUserID.noDataText}}</h3>
+                </div>
+            </div>
+            <div class="table_block">
+                <div class="header" (click)="toggleBlock('USERIDRETRIEVES',$event)">
+                    <h3>Retrieves / User ID</h3>
+                </div>
+                <div class="diagram_content" *ngIf="toggle === 'USERIDRETRIEVES' && histogramData.retrievesUserID.ready && histogramData.retrievesUserID.ready.labels.length > 0">
+                    <canvas baseChart
+                            *ngIf="histogramData.retrievesUserID.show"
+                            [datasets]="histogramData.retrievesUserID.ready.data"
+                            [labels]="histogramData.retrievesUserID.ready.labels"
+                            [options]="histogramData.retrievesUserID.chartOptions"
+                            [colors]="pieChartColor"
+                            [legend]="barChartLegend"
+                            [chartType]="barChartType"
+                            (chartHover)="chartHovered($event)"
+                            (chartClick)="chartClicked($event)"></canvas>
+                </div>
+                <div class="diagram_content no_data" *ngIf="toggle === 'USERIDRETRIEVES' && histogramData.retrievesUserID.ready.labels.length === 0">
+                    <h3>{{histogramData.retrievesUserID.noDataText}}</h3>
+                </div>
+            </div>
+            <div class="table_block">
+                <div class="header" (click)="toggleBlock('STUDYSOPCLASS',$event)">
+                    <h3>Studies Stored / SOP Class</h3>
+                </div>
+                <div class="diagram_content" *ngIf="toggle === 'STUDYSOPCLASS' && histogramData.studyStoredSopClass.ready && histogramData.studyStoredSopClass.ready.labels.length > 0">
+                    <canvas baseChart
+                            *ngIf="histogramData.studyStoredSopClass.show"
+                            [datasets]="histogramData.studyStoredSopClass.ready.data"
+                            [labels]="histogramData.studyStoredSopClass.ready.labels"
+                            [options]="histogramData.studyStoredSopClass.chartOptions"
+                            [colors]="pieChartColor"
+                            [legend]="barChartLegend"
+                            [chartType]="barChartType"
+                            (chartHover)="chartHovered($event)"
+                            (chartClick)="chartClicked($event)"></canvas>
+                </div>
+                <div class="diagram_content no_data" *ngIf="toggle === 'STUDYSOPCLASS' && histogramData.studyStoredSopClass.ready.labels.length === 0">
+                    <h3>{{histogramData.studyStoredSopClass.noDataText}}</h3>
                 </div>
             </div>
             <div class="table_block">
@@ -108,7 +152,7 @@
                     <h3>Audit Events</h3>
                     <input *ngIf="toggle === 'AUDITEVENTS'" type="text" [(ngModel)]="searchlist" placeholder="Search...">
                 </div>
-                <div class="table_content" *ngIf="toggle === 'AUDITEVENTS'">
+                <div class="table_content" *ngIf="toggle === 'AUDITEVENTS' && auditEvents.length > 0">
                     <table class="table table-bordered table-condensed">
                         <thead>
                             <tr>

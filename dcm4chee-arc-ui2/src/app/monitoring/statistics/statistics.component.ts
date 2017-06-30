@@ -1,7 +1,10 @@
-import { Component, OnInit, HostListener} from '@angular/core';
+import {Component, OnInit, HostListener, ViewContainerRef} from '@angular/core';
 import {StatisticsService} from "./statistics.service";
 import * as _ from 'lodash';
 import {Globalvar} from "../../constants/globalvar";
+import {HistogramDialogComponent} from "../../widgets/dialogs/histogram-dialog/histogram-dialog.component";
+import {MdDialogRef, MdDialog, MdDialogConfig} from "@angular/material";
+import {SlimLoadingBarService} from "ng2-slim-loading-bar";
 
 @Component({
   selector: 'app-statistics',
@@ -17,16 +20,21 @@ export class StatisticsComponent implements OnInit {
         label:"Studies Stored Count",
         count:undefined
     };
+    wildflError = {
+        label:"Application Error",
+        count:undefined
+    };
     retriev = {
         label:"Retrieves Count",
         count:undefined
     };
     queries = {
         label:"Queries Count",
-        count:undefined
+        count:undefined,
+        model:undefined
     };
     errors = {
-        label:"Errors",
+        label:"Audit Errors",
         count:undefined
     };
     auditEvents;
@@ -37,9 +45,13 @@ export class StatisticsComponent implements OnInit {
     };
     toggle = "";
     searchlist = "";
+    dialogRef: MdDialogRef<any>;
     constructor(
-        private service:StatisticsService
-
+        private service:StatisticsService,
+        public viewContainerRef: ViewContainerRef,
+        public dialog: MdDialog,
+        public config: MdDialogConfig,
+        public cfpLoadingBar: SlimLoadingBarService
     ) { }
 
     studyDateTimeChanged(e, mode){
@@ -62,6 +74,13 @@ export class StatisticsComponent implements OnInit {
     toggleBlock(mode,e){
         console.log("e",e.target.nodeName);
         if(e.target.nodeName != "INPUT"){
+            if(this.toggle  === "AUDITEVENTS"){
+                this.moreAudit = {
+                    limit: 30,
+                    start: 0,
+                    loaderActive: false
+                };
+            }
             this.toggle = (this.toggle === mode)? '':mode;
         }
     }
@@ -85,11 +104,14 @@ export class StatisticsComponent implements OnInit {
     }
     search(){
         this.getAuditEvents();
-        this.getStudiesStoredCounts();
-        this.getRetrieveCounts();
-        this.getQueriesCounts();
         this.getErrorCounts();
+        this.getRetrieveCounts();
+        this.getStudiesStoredCounts();
+        this.getWildflyErrorCounts();
+        // this.getQueriesCounts();
         this.getQueriesUserID();
+        this.getRetrievUserID();
+        this.getStudiesStoredSopClass();
     }
     //barChartOptions.legend.position
     public barChartOptions:any = {
@@ -127,6 +149,7 @@ export class StatisticsComponent implements OnInit {
             }]
         }
     };
+    //barChartOptions.scales.yAxes[0].scaleLabel.labelString
     public barChartLabels = [];
     public pieChartColor =  Globalvar.HISTOGRAMCOLORS;
     public barChartType:string = 'bar';
@@ -140,7 +163,38 @@ export class StatisticsComponent implements OnInit {
                 labels:[],
                 data:[]
             },
-            show:true
+            show:true,
+            chartOptions:{}
+        },
+        queriesCounts:{
+            labels:[],
+            data:{},
+            ready:{
+                labels:[],
+                data:[]
+            },
+            show:true,
+            chartOptions:{}
+        },
+        retrievesUserID:{
+            labels:[],
+            data:{},
+            ready:{
+                labels:[],
+                data:[]
+            },
+            show:true,
+            chartOptions:{}
+        },
+        studyStoredSopClass:{
+            labels:[],
+            data:{},
+            ready:{
+                labels:[],
+                data:[]
+            },
+            show:true,
+            chartOptions:{}
         }
     }
     // events
@@ -165,8 +219,18 @@ export class StatisticsComponent implements OnInit {
     }
     prepareHistogramData(response, histogram){
         let $this = this;
+        $this.histogramData[histogram] = {
+            labels:[],
+            data:{},
+            ready:{
+                labels:[],
+                    data:[]
+            }
+        }
+        this.histogramData[histogram].chartOptions = _.cloneDeep(this.barChartOptions);
         if(this.isRangeSmallerThan24H()){
-            this.barChartOptions.scales.xAxes[0].time.displayFormats = {
+
+            this.histogramData[histogram].chartOptions['scales'].xAxes[0].time.displayFormats = {
                 'millisecond': 'HH:mm:ss',
                 'second': 'HH:mm:ss',
                 'minute': 'HH:mm:ss',
@@ -178,7 +242,7 @@ export class StatisticsComponent implements OnInit {
                 'year': 'HH:mm:ss',
             }
         }else{
-            this.barChartOptions.scales.xAxes[0].time.displayFormats = {
+            this.histogramData[histogram].chartOptions['scales'].xAxes[0].time.displayFormats = {
                 'millisecond': 'DD.MM.YYYY',
                 'second': 'DD.MM.YYYY',
                 'minute': 'DD.MM.YYYY',
@@ -188,14 +252,6 @@ export class StatisticsComponent implements OnInit {
                 'month': 'DD.MM.YYYY',
                 'quarter': 'DD.MM.YYYY',
                 'year': 'DD.MM.YYYY',
-            }
-        }
-        $this.histogramData[histogram] = {
-            labels:[],
-            data:{},
-            ready:{
-                labels:[],
-                    data:[]
             }
         }
         if(_.hasIn(response,"aggregations.2.buckets") && _.size(response.aggregations[2].buckets) > 0){
@@ -222,19 +278,19 @@ export class StatisticsComponent implements OnInit {
                 });
             });
             if(Object.keys($this.histogramData[histogram].data).length < 11){
-                $this.barChartOptions.legend.position = 'top';
+                $this.histogramData[histogram].chartOptions.legend.position = 'top';
             }else{
                 if(Object.keys($this.histogramData[histogram].data).length < 30){
-                    $this.barChartOptions.legend.position = 'right';
+                    $this.histogramData[histogram].chartOptions.legend.position = 'right';
                 }else{
-                    //TODO don't Show histogram
                     $this.histogramData[histogram] = {
                         labels:[],
                         data:{},
                         ready:{
                             labels:[],
                             data:[]
-                        }
+                        },
+                        noDataText:"Too much data!",
                     }
                 }
             }
@@ -257,13 +313,48 @@ export class StatisticsComponent implements OnInit {
         let $this = this;
         this.service.getQueriesUserID(this.range).subscribe(
             (res)=>{
-                console.log("userid queries =",res);
-                let dummy = {"responses":[{"took":59,"timed_out":false,"_shards":{"total":105,"successful":105,"failed":0},"hits":{"total":2801,"max_score":0.0,"hits":[]},"aggregations":{"2":{"buckets":[{"key_as_string":"2017-04-01T00:00:00.000+02:00","key":1490997600000,"doc_count":2165,"3":{"doc_count_error_upper_bound":0,"sum_other_doc_count":0,"buckets":[{"key":"STORESCU","doc_count":1499},{"key":"J4C_VIEWER_14","doc_count":41}]}},{"key_as_string":"2017-05-01T00:00:00.000+02:00","key":1493589600000,"doc_count":636,"3":{"doc_count_error_upper_bound":0,"sum_other_doc_count":0,"buckets":[{"key":"J4CARE_VIEWER","doc_count":465},{"key":"J4C_VIEWER_14","doc_count":171}]}}]}},"status":200}]};
-                console.log("dummy",dummy);
                 $this.prepareHistogramData(res,'querieUserID');
+                try {
+                    $this.queries.count = res.hits.total;
+                }catch (e){
+                    $this.queries.count = "-";
+                }
             },
             (err)=>{
                 $this.studieStored.count = "-";
+                console.log("error",err);
+            });
+    }
+    getRetrievUserID(){
+        let $this = this;
+        this.service.getRetrievUserID(this.range).subscribe(
+            (res)=>{
+                console.log("userid queries =",res);
+                $this.prepareHistogramData(res,'retrievesUserID');
+                if(_.hasIn($this.histogramData,'retrievesUserID.chartOptions.scales.yAxes[0].scaleLabel.labelString')){
+                    $this.histogramData["retrievesUserID"].chartOptions['scales'].yAxes[0].scaleLabel.labelString = "Retrieves";
+                }
+                try {
+                    $this.queries.count = res.hits.total;
+                }catch (e){
+                    $this.queries.count = "-";
+                }
+            },
+            (err)=>{
+                console.log("error",err);
+            });
+    }
+    getStudiesStoredSopClass(){
+        let $this = this;
+        this.service.getStudiesStoredSopClass(this.range).subscribe(
+            (res)=>{
+                console.log("userid queries =",res);
+                $this.prepareHistogramData(res,'studyStoredSopClass');
+                if(_.hasIn($this.histogramData,'studyStoredSopClass.chartOptions.scales.yAxes[0].scaleLabel.labelString')){
+                    $this.histogramData["studyStoredSopClass"].chartOptions['scales'].yAxes[0].scaleLabel.labelString = "Retrieves";
+                }
+            },
+            (err)=>{
                 console.log("error",err);
             });
     }
@@ -301,6 +392,21 @@ export class StatisticsComponent implements OnInit {
                 console.log("error",err);
             });
     }
+    getWildflyErrorCounts(){
+        let $this = this;
+        this.service.getWildflyErrorCounts(this.range).subscribe(
+            (res)=>{
+                try {
+                    $this.wildflError.count = res.hits.total;
+                }catch (e){
+                    $this.wildflError.count = "-";
+                }
+            },
+            (err)=>{
+                $this.wildflError.count = "-";
+                console.log("error",err);
+            });
+    }
     getRetrieveCounts(){
         let $this = this;
         this.service.getRetrieveCounts(this.range).subscribe(
@@ -316,21 +422,41 @@ export class StatisticsComponent implements OnInit {
                 console.log("error",err);
             });
     }
-    getQueriesCounts(){
+    openQueriesCountsHistogram(){
         let $this = this;
-        this.service.getQueriesCounts(this.range).subscribe(
-            (res)=>{
-                try {
-                    $this.queries.count = res.hits.total;
-                }catch (e){
-                    $this.queries.count = "-";
-                }
-            },
-            (err)=>{
-                console.log("error",err);
-                $this.queries.count = "-";
-            });
+        // $this.prepareHistogramData($this.queries.model,'queriesCounts');
+        $this.config.viewContainerRef = $this.viewContainerRef;
+        $this.dialogRef = $this.dialog.open(HistogramDialogComponent, {
+            height: 'auto',
+            width: '80%'
+        });
+        $this.dialogRef.componentInstance.histogramData = $this.histogramData;
+        $this.dialogRef.componentInstance.pieChartColor = $this.pieChartColor;
+        $this.dialogRef.componentInstance.barChartLegend = $this.barChartLegend;
+        $this.dialogRef.componentInstance.barChartType = $this.barChartType;
+        $this.dialogRef.componentInstance.title = "Queries Count";
+        $this.dialogRef.afterClosed().subscribe((result) => {
+            console.log('result', result);
+            if (result){
+            }
+        });
     }
+    // getQueriesCounts(){
+    //     let $this = this;
+    //     this.service.getQueriesCounts(this.range).subscribe(
+    //         (res)=>{
+    //             try {
+    //                 $this.queries.count = res.hits.total;
+    //                 $this.prepareHistogramData(res,'queriesCounts');
+    //             }catch (e){
+    //                 $this.queries.count = "-";
+    //             }
+    //         },
+    //         (err)=>{
+    //             console.log("error",err);
+    //             $this.queries.count = "-";
+    //         });
+    // }
     getErrorCounts(){
         let $this = this;
         this.service.getErrorCounts(this.range).subscribe(

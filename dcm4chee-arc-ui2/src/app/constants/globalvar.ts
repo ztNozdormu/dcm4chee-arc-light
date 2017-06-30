@@ -405,6 +405,29 @@ export class Globalvar {
             }
         };
     }
+    public static get WILDFLYERRORCOUNTS_PARAMETERS(): any{
+        return {
+            "size": 0,
+            "query": {
+                "bool": {
+                    "must": [
+                        {
+                            "query_string": {
+                                "query": "Severity:ERROR",
+                                "analyze_wildcard": true
+                            }
+                        },
+                        {
+                            "query_string": {
+                                "analyze_wildcard": true,
+                                "query": "*"
+                            }
+                        }
+                    ]
+                }
+            }
+        };
+    }
     public static get ERRORSCOUNTS_PARAMETERS(): any{
         return {
             "size": 0,
@@ -442,12 +465,123 @@ export class Globalvar {
     }
     public static get QUERIESCOUNTS_PARAMETERS(): any{
         return {
+            "size":0,
+            "query": {
+                "bool": {
+                    "must":[
+                        {
+                            "query_string": {
+                                "query": "EventID.csd-code:110112",
+                                "analyze_wildcard": true
+                            }
+                        }
+                    ]
+                    ,
+                    "must_not": [{
+                        "wildcard":{"Destination.UserID":"*/*"} //Get all entries but thous who have slashes in there in Destination.UserID
+                    }]
+                }
+            },
+            "aggs" :{
+                "2":{
+                    "date_histogram": {
+                        "field": "Event.EventDateTime",
+                        "interval": "1D",
+                        "time_zone": "Europe/Berlin",
+                        "min_doc_count": 1
+                    },
+                    "aggs":{
+                        "3" : {
+                            "terms" : {
+                                "field" : "Destination.UserID"
+                            }
+                        }
+                    }
+                }}
+        }
+    }
+    public static get STUDIESSTOREDSOPCLASS_PARAMETERS(): any{
+        return {
+            "size": 0,
+            "aggs": {
+                "2": {
+                    "date_histogram": {
+                        "field": "Event.EventDateTime",
+                        "interval": "3h",
+                        "time_zone": "Europe/Berlin",
+                        "min_doc_count": 1
+                    },
+                    "aggs": {
+                        "3": {
+                            "terms": {
+                                "field": "Study.ParticipantObjectDescription.SOPClass.UID",
+                                "size": 5,
+                                "order": {
+                                    "1": "desc"
+                                }
+                            },
+                            "aggs": {
+                                "1": {
+                                    "cardinality": {
+                                        "field": "Study.ParticipantObjectID"
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+            },
             "query": {
                 "bool": {
                     "must": [
                         {
                             "query_string": {
-                                "query": "EventID.csd-code:110112 AND Destination.UserID:ARCHIVEACT",
+                                "query": "EventID.csd-code:110104 AND Event.EventActionCode:C",
+                                "analyze_wildcard": true
+                            }
+                        }
+                    ]
+                }
+            }
+        };
+    }
+    public static get RETRIEVESUSERID_PARAMETERS(): any{
+        return {
+            "size": 0,
+            "aggs": {
+                "2": {
+                    "date_histogram": {
+                        "field": "Event.EventDateTime",
+                        "interval": "1w",
+                        "time_zone": "Europe/Berlin",
+                        "min_doc_count": 1
+                    },
+                    "aggs": {
+                        "3": {
+                            "terms": {
+                                "field": "Destination.UserID",
+                                "size": 5,
+                                "order": {
+                                    "1": "desc"
+                                }
+                            },
+                            "aggs": {
+                                "1": {
+                                    "cardinality": {
+                                        "field": "Study.ParticipantObjectID"
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+            },
+            "query": {
+                "bool": {
+                    "must": [
+                        {
+                            "query_string": {
+                                "query": "EventID.csd-code:110104 AND Event.EventActionCode:R",
                                 "analyze_wildcard": true
                             }
                         },
@@ -461,12 +595,10 @@ export class Globalvar {
                     "must_not": []
                 }
             },
-            "size": 0,
             "_source": {
                 "excludes": []
-            },
-            "aggs": {}
-        }
+            }
+        };
     }
     public static get RETRIEVCOUNTS_PARAMETERS(): any{
         return {
