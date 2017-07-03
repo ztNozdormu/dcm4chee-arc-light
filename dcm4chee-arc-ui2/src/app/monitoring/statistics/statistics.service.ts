@@ -71,6 +71,12 @@ export class StatisticsService {
         this.setRangeToParams(params,convertedRange,"Setting time range failed on Retrieves UserID ");
         return this.queryGet(params);
     }
+    getStudiesStoredUserID(range){
+        let convertedRange = this.getRangeConverted(range);
+        let params = Globalvar.STUDIESSTOREDUSERID_PARAMETERS;
+        this.setRangeToParams(params,convertedRange,"Setting time range failed on Retrieves UserID ");
+        return this.queryGet(params);
+    }
     getStudiesStoredCounts(range){
         let convertedRange = this.getRangeConverted(range);
         let params = Globalvar.STUDIESSTOREDCOUNTS_PARAMETERS;

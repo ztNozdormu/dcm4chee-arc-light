@@ -148,6 +148,26 @@
                 </div>
             </div>
             <div class="table_block">
+                <div class="header" (click)="toggleBlock('STUDYUSERID',$event)">
+                    <h3>Studies Stored / User ID</h3>
+                </div>
+                <div class="diagram_content" *ngIf="toggle === 'STUDYUSERID' && histogramData.studyStoredUserID.ready && histogramData.studyStoredUserID.ready.labels.length > 0">
+                    <canvas baseChart
+                            *ngIf="histogramData.studyStoredUserID.show"
+                            [datasets]="histogramData.studyStoredUserID.ready.data"
+                            [labels]="histogramData.studyStoredUserID.ready.labels"
+                            [options]="histogramData.studyStoredUserID.chartOptions"
+                            [colors]="pieChartColor"
+                            [legend]="barChartLegend"
+                            [chartType]="barChartType"
+                            (chartHover)="chartHovered($event)"
+                            (chartClick)="chartClicked($event)"></canvas>
+                </div>
+                <div class="diagram_content no_data" *ngIf="toggle === 'STUDYUSERID' && histogramData.studyStoredUserID.ready.labels.length === 0">
+                    <h3>{{histogramData.studyStoredSopClass.noDataText}}</h3>
+                </div>
+            </div>
+            <div class="table_block">
                 <div class="header" (click)="toggleBlock('AUDITEVENTS',$event)">
                     <h3>Audit Events</h3>
                     <input *ngIf="toggle === 'AUDITEVENTS'" type="text" [(ngModel)]="searchlist" placeholder="Search...">

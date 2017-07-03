@@ -500,6 +500,51 @@ export class Globalvar {
                 }}
         }
     }
+    public static get STUDIESSTOREDUSERID_PARAMETERS(): any{
+        return {
+            "size": 0,
+            "aggs": {
+                "2": {
+                    "date_histogram": {
+                        "field": "Event.EventDateTime",
+                        "interval": "12h",
+                        "time_zone": "Europe/Berlin",
+                        "min_doc_count": 1
+                    },
+                    "aggs": {
+                        "3": {
+                            "terms": {
+                                "field": "Source.UserID",
+                                "size": 15,
+                                "order": {
+                                    "1": "desc"
+                                }
+                            },
+                            "aggs": {
+                                "1": {
+                                    "cardinality": {
+                                        "field": "Study.ParticipantObjectID"
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+            },
+            "query": {
+                "bool": {
+                    "must": [
+                        {
+                            "query_string": {
+                                "query": "EventID.csd-code:110104 AND Event.EventActionCode:C",
+                                "analyze_wildcard": true
+                            }
+                        }
+                    ]
+                }
+            }
+        }
+    }
     public static get STUDIESSTOREDSOPCLASS_PARAMETERS(): any{
         return {
             "size": 0,

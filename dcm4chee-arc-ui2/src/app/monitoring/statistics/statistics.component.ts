@@ -112,6 +112,7 @@ export class StatisticsComponent implements OnInit {
         this.getQueriesUserID();
         this.getRetrievUserID();
         this.getStudiesStoredSopClass();
+        this.getStudiesStoredUserID();
     }
     //barChartOptions.legend.position
     public barChartOptions:any = {
@@ -187,6 +188,16 @@ export class StatisticsComponent implements OnInit {
             chartOptions:{}
         },
         studyStoredSopClass:{
+            labels:[],
+            data:{},
+            ready:{
+                labels:[],
+                data:[]
+            },
+            show:true,
+            chartOptions:{}
+        },
+        studyStoredUserID:{
             labels:[],
             data:{},
             ready:{
@@ -351,7 +362,21 @@ export class StatisticsComponent implements OnInit {
                 console.log("userid queries =",res);
                 $this.prepareHistogramData(res,'studyStoredSopClass');
                 if(_.hasIn($this.histogramData,'studyStoredSopClass.chartOptions.scales.yAxes[0].scaleLabel.labelString')){
-                    $this.histogramData["studyStoredSopClass"].chartOptions['scales'].yAxes[0].scaleLabel.labelString = "Retrieves";
+                    $this.histogramData["studyStoredSopClass"].chartOptions['scales'].yAxes[0].scaleLabel.labelString = "Studies";
+                }
+            },
+            (err)=>{
+                console.log("error",err);
+            });
+    }
+    getStudiesStoredUserID(){
+        let $this = this;
+        this.service.getStudiesStoredUserID(this.range).subscribe(
+            (res)=>{
+                console.log("userid queries =",res);
+                $this.prepareHistogramData(res,'studyStoredUserID');
+                if(_.hasIn($this.histogramData,'studyStoredUserID.chartOptions.scales.yAxes[0].scaleLabel.labelString')){
+                    $this.histogramData["studyStoredUserID"].chartOptions['scales'].yAxes[0].scaleLabel.labelString = "Count";
                 }
             },
             (err)=>{
