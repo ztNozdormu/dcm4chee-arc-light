@@ -7,6 +7,7 @@
         <li role="presentation" routerLinkActive="active"><a role="tab" routerLink="/monitoring/storage-commitment" routerLinkActive="active">Storage commitments</a></li>
         <li role="presentation" routerLinkActive="active"><a role="tab" routerLink="/monitoring/storage-systems" routerLinkActive="active">Storage systems</a></li>
         <li role="presentation" routerLinkActive="active"><a role="tab" routerLink="/monitoring/diff" routerLinkActive="active">Diff</a></li>
+        <li role="presentation" routerLinkActive="active"><a role="tab" routerLink="/monitoring/statistics" routerLinkActive="active">Statistics</a></li>
     </ul>
     <div class="tab-content">
         <div class="row filter">
@@ -164,7 +165,27 @@
                             (chartClick)="chartClicked($event)"></canvas>
                 </div>
                 <div class="diagram_content no_data" *ngIf="toggle === 'STUDYUSERID' && histogramData.studyStoredUserID.ready.labels.length === 0">
-                    <h3>{{histogramData.studyStoredSopClass.noDataText}}</h3>
+                    <h3>{{histogramData.studyStoredUserID.noDataText}}</h3>
+                </div>
+            </div>
+            <div class="table_block">
+                <div class="header" (click)="toggleBlock('STUDYRECEIVINGAET',$event)">
+                    <h3>Studies Stored / Receiving AET</h3>
+                </div>
+                <div class="diagram_content" *ngIf="toggle === 'STUDYRECEIVINGAET' && histogramData.studyStoredReceivingAET.ready && histogramData.studyStoredReceivingAET.ready.labels.length > 0">
+                    <canvas baseChart
+                            *ngIf="histogramData.studyStoredReceivingAET.show"
+                            [datasets]="histogramData.studyStoredReceivingAET.ready.data"
+                            [labels]="histogramData.studyStoredReceivingAET.ready.labels"
+                            [options]="histogramData.studyStoredReceivingAET.chartOptions"
+                            [colors]="pieChartColor"
+                            [legend]="barChartLegend"
+                            [chartType]="barChartType"
+                            (chartHover)="chartHovered($event)"
+                            (chartClick)="chartClicked($event)"></canvas>
+                </div>
+                <div class="diagram_content no_data" *ngIf="toggle === 'STUDYRECEIVINGAET' && histogramData.studyStoredReceivingAET.ready.labels.length === 0">
+                    <h3>{{histogramData.studyStoredReceivingAET.noDataText}}</h3>
                 </div>
             </div>
             <div class="table_block">

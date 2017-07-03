@@ -68,13 +68,19 @@ export class StatisticsService {
     getStudiesStoredSopClass(range){
         let convertedRange = this.getRangeConverted(range);
         let params = Globalvar.STUDIESSTOREDSOPCLASS_PARAMETERS;
-        this.setRangeToParams(params,convertedRange,"Setting time range failed on Retrieves UserID ");
+        this.setRangeToParams(params,convertedRange,"Setting time range failed on Studies Stored / SOPClass ");
         return this.queryGet(params);
     }
     getStudiesStoredUserID(range){
         let convertedRange = this.getRangeConverted(range);
         let params = Globalvar.STUDIESSTOREDUSERID_PARAMETERS;
-        this.setRangeToParams(params,convertedRange,"Setting time range failed on Retrieves UserID ");
+        this.setRangeToParams(params,convertedRange,"Setting time range failed on Studies Stored / UserID ");
+        return this.queryGet(params);
+    }
+    getStudiesStoredReceivingAET(range){
+        let convertedRange = this.getRangeConverted(range);
+        let params = Globalvar.STUDIESSTOREDRECIVINGAET_PARAMETERS;
+        this.setRangeToParams(params,convertedRange,"Setting time range failed on Studies Stored / Receiving AET UserID ");
         return this.queryGet(params);
     }
     getStudiesStoredCounts(range){

@@ -112,6 +112,7 @@ export class StatisticsComponent implements OnInit {
         this.getQueriesUserID();
         this.getRetrievUserID();
         this.getStudiesStoredSopClass();
+        this.getStudiesStoredReceivingAET();
         this.getStudiesStoredUserID();
     }
     //barChartOptions.legend.position
@@ -377,6 +378,20 @@ export class StatisticsComponent implements OnInit {
                 $this.prepareHistogramData(res,'studyStoredUserID');
                 if(_.hasIn($this.histogramData,'studyStoredUserID.chartOptions.scales.yAxes[0].scaleLabel.labelString')){
                     $this.histogramData["studyStoredUserID"].chartOptions['scales'].yAxes[0].scaleLabel.labelString = "Count";
+                }
+            },
+            (err)=>{
+                console.log("error",err);
+            });
+    }
+    getStudiesStoredReceivingAET(){
+        let $this = this;
+        this.service.getStudiesStoredReceivingAET(this.range).subscribe(
+            (res)=>{
+                console.log("userid queries =",res);
+                $this.prepareHistogramData(res,'studyStoredReceivingAET');
+                if(_.hasIn($this.histogramData,'studyStoredReceivingAET.chartOptions.scales.yAxes[0].scaleLabel.labelString')){
+                    $this.histogramData["studyStoredReceivingAET"].chartOptions['scales'].yAxes[0].scaleLabel.labelString = "Count";
                 }
             },
             (err)=>{
