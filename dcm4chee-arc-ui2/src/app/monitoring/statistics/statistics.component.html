@@ -65,7 +65,7 @@
                 </a>
             </div>
         </div>
-        <div class="statistics_content">
+        <div class="statistics_content" *ngIf="elasticSearchIsRunning">
             <div class="count_block_row">
                 <div class="count_block">
                     <h3>{{queries.label}}</h3>
@@ -227,6 +227,9 @@
                 </div>
                 <button class="load_more" *ngIf="auditEvents && moreAudit.limit <= auditEvents.length && toggle === 'AUDITEVENTS'" (click)="loadMoreAudit()"><i *ngIf="moreAudit.loaderActive" class="fa fa-spinner fa-spin fa-3x fa-fw"></i>More</button>
             </div>
+        </div>
+        <div class="statistics_content no_data" *ngIf="!elasticSearchIsRunning">
+            <h3 class="text-center text-danger">Unable to connect to Elasticsearch!</h3>
         </div>
     </div>
 </div>

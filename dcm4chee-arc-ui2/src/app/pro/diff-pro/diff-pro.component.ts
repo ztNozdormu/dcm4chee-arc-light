@@ -1,14 +1,16 @@
-import { Component, OnInit } from '@angular/core';
+import {Component, OnInit, ViewEncapsulation, ViewContainerRef} from '@angular/core';
 import {DiffProService} from "./diff-pro.service";
 import {SlimLoadingBarService} from "ng2-slim-loading-bar";
 import {AppService} from "../../app.service";
 import {Globalvar} from "../../constants/globalvar";
 import {DatePipe} from "@angular/common";
 import * as _ from 'lodash';
+import {DiffDetailViewComponent} from "../../widgets/dialogs/diff-detail-view/diff-detail-view.component";
+import {MdDialogConfig, MdDialog, MdDialogRef} from "@angular/material";
 
 @Component({
-  selector: 'app-diff-pro',
-  templateUrl: './diff-pro.component.html'
+    selector: 'app-diff-pro',
+    templateUrl: './diff-pro.component.html'
 })
 export class DiffProComponent implements OnInit {
     filters = {
@@ -40,6 +42,7 @@ export class DiffProComponent implements OnInit {
         StationName:undefined,
         InstitutionName:undefined,
     };
+    _ = _;
     aes;
     aets;
     aet1;
@@ -48,10 +51,12 @@ export class DiffProComponent implements OnInit {
     advancedConfig = false;
     diff;
     count;
+    groupResults = {};
     disabled = {
         IssuerOfPatientID:false,
         LocalNamespaceEntityID:false
     };
+    diffAttributes;
     modalities;
     showModalitySelector;
     StudyReceiveDateTime = {
@@ -65,22 +70,107 @@ export class DiffProComponent implements OnInit {
     groups;
     groupObject;
     Object = Object;
+    toggle = '';
+    table = [
+        {
+            title:"Patient's Name",
+            code:"00100010",
+            description:"Patient's Name",
+            widthWeight:1,
+            calculatedWidth:"20%"
+        },{
+            title:"Patient ID",
+            code:"00100020",
+            description:"Patient ID",
+            widthWeight:1,
+            calculatedWidth:"20%"
+        },{
+            title:"Birth Date",
+            code:"00100030",
+            description:"Patient's Birth Date",
+            widthWeight:1,
+            calculatedWidth:"20%"
+        },{
+            title:"Sex",
+            code:"00100040",
+            description:"Patient's Sex",
+            widthWeight:1,
+            calculatedWidth:"20%"
+        },{
+            title:"Issuer of PID",
+            code:"00100021",
+            description:"Issuer of Patient ID",
+            widthWeight:1,
+            calculatedWidth:"20%"
+        },
+        {
+            title:"Study ID",
+            code:"00200010",
+            description:"Study ID",
+            widthWeight:1,
+            calculatedWidth:"20%"
+        },{
+            title:"Acc. Nr.",
+            code:"00080050",
+            description:"Accession Number",
+            widthWeight:1,
+            calculatedWidth:"20%"
+        },
+        {
+            title:"Modality",
+            code:"00080061",
+            description:"Modalities in Study",
+            widthWeight:0.6,
+            calculatedWidth:"20%"
+        },
+        {
+            title:"#S",
+            code:"00201206",
+            description:"Number of Study Related Series",
+            widthWeight:0.2,
+            calculatedWidth:"20%"
+        },
+        {
+            title:"#I",
+            code:"00201208",
+            description:"Number of Study Related Instances",
+            widthWeight:0.2,
+            calculatedWidth:"20%"
+        }
+    ];
+//http://192.168.2.124:8080/dcm4chee-arc/aets/DCM4CHEE/dimse/DCM4CHEE/diff/DCM4CHEE_CLONE/studies?includefield=all&comparefield=all
+//http://192.168.2.124:8080/dcm4chee-arc/aets/DCM4CHEE/dimse/DCM4CHEE/diff/DCM4CHEE_CLONE/studies?includefield=all
+    toggleBar(mode){
+        if(this.groupResults[mode] && this.groupResults[mode].length > 0){
+            if(this.toggle === mode){
+                this.toggle = '';
+            }else{
+                this.toggle = mode;
+            }
+        }
+    }
     selectModality(key){
         this.filters.ModalitiesInStudy = key;
         this.filters['ScheduledProcedureStepSequence.Modality'] = key;
         $('.Modality').show();
         this.showModalitySelector = false;
     };
+    dialogRef: MdDialogRef<any>;
     constructor(
         private service:DiffProService,
         private cfpLoadingBar: SlimLoadingBarService,
-        private mainservice:AppService
+        private mainservice:AppService,
+        public viewContainerRef: ViewContainerRef ,
+        public dialog: MdDialog,
+        public config: MdDialogConfig
     ) { }
 
     ngOnInit() {
         this.getAes(2);
         this.getAets(2);
+        this.getDiffAttributeSet(2);
         this.modalities = Globalvar.MODALITIES;
+        this.calculateWidthOfTable();
         this.groups = new Map();
         this.groups.set("patient",{
             label:"Patient data",
@@ -108,7 +198,36 @@ export class DiffProComponent implements OnInit {
                 count:25
             }
         };
-    }
+    };
+
+    openDetailView(studies,i){
+        this.config.viewContainerRef = this.viewContainerRef;
+        this.dialogRef = this.dialog.open(DiffDetailViewComponent, {
+            height: 'auto',
+            width: '80%'
+        });
+        this.dialogRef.componentInstance.studies = studies;
+        this.dialogRef.componentInstance.index = i;
+        this.dialogRef.componentInstance.aet1 = this.aet1;
+        this.dialogRef.componentInstance.aet2 = this.aet2;
+        this.dialogRef.componentInstance.index = i;
+        this.dialogRef.afterClosed().subscribe((result) => {
+            console.log('result', result);
+            if (result){
+            }
+        });
+    };
+
+    calculateWidthOfTable(){
+        let summ = 0;
+        _.forEach(this.table,(m,i)=>{
+            summ += m.widthWeight;
+        });
+        _.forEach(this.table,(m,i)=>{
+            m.calculatedWidth =  ((m.widthWeight * 100)/summ)+"%";
+        });
+    };
+
     clearForm(){
         _.forEach(this.filters, (m, i) => {
             if(i != "limit"){
@@ -124,6 +243,7 @@ export class DiffProComponent implements OnInit {
             to: undefined
         };
     };
+
     studyReceiveDateTimeChanged(e, mode){
         this.filters['StudyReceiveDateTime'] = this.filters['StudyReceiveDateTime'] || {};
         this['StudyReceiveDateTime'][mode] = e;
@@ -131,7 +251,8 @@ export class DiffProComponent implements OnInit {
             let datePipeEn = new DatePipe('us-US');
             this.filters['StudyReceiveDateTime'] = datePipeEn.transform(this.StudyReceiveDateTime.from, 'yyyyMMddHHmmss') + '-' + datePipeEn.transform(this.StudyReceiveDateTime.to, 'yyyyMMddHHmmss');
         }
-    }
+    };
+
     studyDateTimeChanged(e, mode){
         this.filters['StudyDate'] = this.filters['StudyDate'] || {};
         this['StudyDateTime'][mode] = e;
@@ -152,7 +273,8 @@ export class DiffProComponent implements OnInit {
                 this.filters['StudyTime'] = fromTime + '-' + toTime;
             }
         }
-    }
+    };
+
     conditionWarning($event, condition, msg){
         let id = $event.currentTarget.id;
         let $this = this;
@@ -175,11 +297,13 @@ export class DiffProComponent implements OnInit {
             value += '-' + range.to.replace(regex, '');
         if (value.length)
             filter[key] = value;
-    }
+    };
+
     createStudyFilterParams() {
         let filter = Object.assign({}, this.filters);
         return filter;
-    }
+    };
+
     createQueryParams(limit, filter) {
         let params = {
             includefield: 'all',
@@ -191,40 +315,54 @@ export class DiffProComponent implements OnInit {
             }
         }
         return params;
-    }
+    };
+
     search(){
         let $this = this;
         this.cfpLoadingBar.start();
-        let queryParameters = this.createQueryParams(this.filters.limit + 1, this.createStudyFilterParams());
-        if(this.service.getDiffs($this.homeAet,$this.aet1,$this.aet2, queryParameters)){
-            this.service.getDiffs($this.homeAet,$this.aet1,$this.aet2, queryParameters).subscribe(
-                (res)=>{
-                    if(res[0] && res[1]){
-                        $this.diff = [...res[0],...res[1]];
-                    }else{
-                        if(!res[0] && !res[1]){
-                            $this.diff = [];
-                            $this.mainservice.setMessage({
-                                'title': 'Info',
-                                'text': "No diffs ware found",
-                                'status': 'info'
-                            });
-                        }else{
-                            if(res[0]){
-                                $this.diff = res[0];
-                            }else{
-                                $this.diff = res[1];
-                            }
-                        }
-                    }
-                    $this.count = $this.diff.length;
-                    this.cfpLoadingBar.complete();
-                },(err)=>{
-                    this.cfpLoadingBar.complete();
-                    console.log("error",err);
-                });
+        if(!this.aet2) {
+            this.mainservice.setMessage({
+                'title': 'Warning',
+                'text': "Secondary AET is empty!",
+                'status': 'warning'
+            });
+            $this.cfpLoadingBar.complete();
+        }else{
+            if(!this.aet1){
+                this.aet1 = this.homeAet;
+            }
+            let queryParameters = this.createQueryParams(this.filters.limit + 1, this.createStudyFilterParams());
+            _.forEach($this.diffAttributes,(m,i)=>{
+                if(m.name === "missing"){
+                    delete queryParameters["comparefield"];
+                    queryParameters["different"] = false;
+                    queryParameters["missing"] = true;
+                    $this.cfpLoadingBar.start();
+                    $this.service.getDiff($this.homeAet,$this.aet1,$this.aet2,queryParameters).subscribe(
+                        (partDiff)=>{
+                            $this.groupResults[m.name] = partDiff ? partDiff:[];
+                            $this.cfpLoadingBar.complete();
+                        },
+                        (err)=>{
+                            $this.cfpLoadingBar.complete();
+                        });
+                }else{
+                    $this.cfpLoadingBar.start();
+                    queryParameters["comparefield"] = m.name;
+                    $this.service.getDiff($this.homeAet,$this.aet1,$this.aet2,queryParameters).subscribe(
+                        (partDiff)=>{
+                            $this.cfpLoadingBar.complete();
+                            $this.groupResults[m.name] = partDiff ? partDiff:[];
+                        },
+                        (err)=>{
+                            $this.cfpLoadingBar.complete();
+                        });
+                }
+            });
+
         }
-    }
+    };
+
     getAes(retries){
         let $this = this;
         this.service.getAes().subscribe(
@@ -237,7 +375,25 @@ export class DiffProComponent implements OnInit {
                 }
             }
         );
-    }
+    };
+    getDiffAttributeSet(retries){
+        let $this = this;
+        this.service.getDiffAttributeSet().subscribe(
+            (res)=>{
+                $this.diffAttributes = res;
+                $this.diffAttributes.push({
+                    name:"missing",
+                    description:"Missing studies"
+                })
+
+            },
+            (err)=>{
+                if (retries){
+                    $this.getDiffAttributeSet(retries - 1);
+                }
+            }
+        );
+    };
     getAets(retries){
         let $this = this;
         this.service.getAets().subscribe(
@@ -251,5 +407,5 @@ export class DiffProComponent implements OnInit {
                 }
             }
         );
-    }
+    };
 }

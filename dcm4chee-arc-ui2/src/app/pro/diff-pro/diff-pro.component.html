@@ -233,9 +233,27 @@
             <h2>
                 Groups
             </h2>
-            <div class="bluebar" *ngFor="let keys of Object.keys(groupObject)">
-                {{groupObject[keys].label}}
-            </div>
+            <ng-container *ngFor="let attributes of diffAttributes">
+                <div class="bluebar" (click)="toggleBar(attributes.name)">
+                    <span class="pull-left">{{attributes.description}}</span>
+                    <span class="pull-right">{{groupResults[attributes.name]?.length}}</span>
+                </div>
+                <div class="bluecontent" *ngIf="toggle === attributes.name">
+                    <div class="dynamic_table">
+                        <div class="table_header">
+                            <div class="th" *ngFor="let header of table" title="{{header.description}}" [ngStyle]="{width: header.calculatedWidth}">{{header.title}}</div>
+                        </div>
+                        <div class="table_body">
+                            <div class="tr" *ngFor="let study of groupResults[attributes.name];let index = index" (click)="openDetailView(groupResults[attributes.name],index)">
+                                <div class="td" *ngFor="let table_element of table" [ngStyle]="{width: table_element.calculatedWidth}">
+                                    <span *ngIf="_.hasIn(study[table_element.code],'Value[0].Alphabetic')">{{study[table_element.code]?.Value[0].Alphabetic || ''}}</span>
+                                    <span *ngIf="!_.hasIn(study[table_element.code],'Value[0].Alphabetic') && _.hasIn(study[table_element.code],'Value[0]')">{{study[table_element.code]?.Value[0] || ''}}</span>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </ng-container>
         </div>
   <!--      <table class="table table-bordered table-condensed" *ngIf="_.size(matches) > 0">
             <thead>

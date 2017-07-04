@@ -50,8 +50,24 @@ export class DiffProService {
     _config(params) {
         return '?' + jQuery.param(params);
     };
+    getDiffAttributeSet(){
+        return this.$http.get('../attribute-set/DIFF_RS')
+            .map(res => {
+                let resjson;
+                try{
+                    let pattern = new RegExp("[^:]*:\/\/[^\/]*\/auth\/");
+                    if(pattern.exec(res.url)){
+                        WindowRefService.nativeWindow.location = "/dcm4chee-arc/ui2/";
+                    }
+                    resjson = res.json();
+                }catch (e){
+                    resjson = {};
+                }
+                return resjson;
+            });
+    }
     //Get diffs
-    getDiffs(homeAet, aet1, aet2, params){
+    getBilateralDiffs(homeAet, aet1, aet2, params){
         let url1;
         let url2;
         if(!aet1){
@@ -66,8 +82,8 @@ export class DiffProService {
             this.cfpLoadingBar.complete();
             return;
         }else{
-            url1 =  `../aets/${homeAet}/diff/${aet1}/${aet2}/studies${this._config(params)}`;
-            url2 =  `../aets/${homeAet}/diff/${aet2}/${aet1}/studies${this._config(params)}`;
+            url1 =  `../aets/${homeAet}/dimse/${aet1}/diff/${aet2}/studies${this._config(params)}`;
+            url2 =  `../aets/${homeAet}/dimse/${aet2}/diff/${aet1}/studies${this._config(params)}`;
         }
         return Observable.combineLatest(
             this.$http.get(url1).map(res => {
@@ -97,5 +113,22 @@ export class DiffProService {
                     return resjson;
             })
         );
+    }
+    getDiff(homeAet, aet1, aet2, params){
+        let url;
+        url =  `../aets/${homeAet}/dimse/${aet1}/diff/${aet2}/studies${this._config(params)}`;
+        return  this.$http.get(url).map(res => {
+            let resjson;
+            try{
+                let pattern = new RegExp("[^:]*:\/\/[^\/]*\/auth\/");
+                if(pattern.exec(res.url)){
+                    WindowRefService.nativeWindow.location = "/dcm4chee-arc/ui2/";
+                }
+                resjson = res.json();
+            }catch (e){
+                resjson = {};
+            }
+            return resjson;
+        });
     }
 }

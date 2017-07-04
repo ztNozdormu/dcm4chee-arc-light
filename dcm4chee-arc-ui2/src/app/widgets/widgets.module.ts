@@ -23,6 +23,7 @@ import { RemovePartSelectorComponent } from './dialogs/remove-part-selector/remo
 import { InfoComponent } from './dialogs/info/info.component';
 import { UploadFilesComponent } from './dialogs/upload-files/upload-files.component';
 import { HistogramDialogComponent } from './dialogs/histogram-dialog/histogram-dialog.component';
+import { DiffDetailViewComponent } from './dialogs/diff-detail-view/diff-detail-view.component';
 
 
 @NgModule({
@@ -55,5 +56,6 @@ export const WidgetsComponents = [
     RemovePartSelectorComponent,
     InfoComponent,
     UploadFilesComponent,
-    HistogramDialogComponent
+    HistogramDialogComponent,
+    DiffDetailViewComponent
 ];

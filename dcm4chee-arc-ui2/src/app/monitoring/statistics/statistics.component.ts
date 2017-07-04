@@ -45,6 +45,7 @@ export class StatisticsComponent implements OnInit {
     };
     toggle = "";
     searchlist = "";
+    elasticSearchIsRunning = true;
     dialogRef: MdDialogRef<any>;
     constructor(
         private service:StatisticsService,
@@ -64,13 +65,30 @@ export class StatisticsComponent implements OnInit {
         };
     }
     ngOnInit() {
+        let $this = this;
         var d = new Date();
         d.setDate(d.getDate() - 1);
         this.range.from = d;
         this.range.to = new Date();
-        this.search();
+        this.init(2);
     }
 
+    init(retries){
+        let $this = this;
+        this.service.checkIfElasticSearchIsRunning().subscribe(
+            (res)=>{
+                $this.elasticSearchIsRunning = true;
+                $this.search();
+            },
+            (err)=>{
+                if (retries){
+                    $this.init(retries-1);
+                }else{
+                    $this.elasticSearchIsRunning = false;
+                }
+            }
+        );
+    }
     toggleBlock(mode,e){
         console.log("e",e.target.nodeName);
         if(e.target.nodeName != "INPUT"){
@@ -199,6 +217,16 @@ export class StatisticsComponent implements OnInit {
             chartOptions:{}
         },
         studyStoredUserID:{
+            labels:[],
+            data:{},
+            ready:{
+                labels:[],
+                data:[]
+            },
+            show:true,
+            chartOptions:{}
+        },
+        studyStoredReceivingAET:{
             labels:[],
             data:{},
             ready:{

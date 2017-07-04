@@ -1400,6 +1400,55 @@ md-dialog-container{
     cursor: pointer;
   }
 }
+.vex.vex-theme-os.diff{
+  width:100%;
+  .first_diff,.second_diff{
+    float: left;
+    width:49%;
+    border:1px solid $lightBlue;
+    box-sizing: border-box;
+    //padding: 20px 15px;
+  }
+  .first_diff{
+    margin-right:2%;
+  }
+  .second_diff{
+  }
+}
+.dynamic_table{
+  .table_header{
+    .th{
+      float: left;
+      background: $lightBlue;
+      color:white;
+      box-sizing: border-box;
+      padding: 5px 2px 5px 7px;
+    }
+  }
+  .table_body{
+    .tr{
+      border-bottom: 1px solid $lightBlue;
+      float: left;
+      width: 100%;
+      &:last-child{
+        border-bottom:none;
+      }
+      .td{
+        float: left;
+        box-sizing: border-box;
+        padding: 5px 2px 5px 7px;
+      }
+    }
+  }
+}
+.bluecontent{
+  float: left;
+  width:100%;
+  border:1px solid $lightBlue;
+  border-top:none;
+  box-sizing: border-box;
+  //padding:20px 10px;
+}
 .form-row.submit_button_block{
 
 }
