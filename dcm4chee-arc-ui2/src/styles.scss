@@ -1402,6 +1402,21 @@ md-dialog-container{
 }
 .vex.vex-theme-os.diff{
   width:100%;
+  .table_block{
+    table{
+      width: 100%;
+      tr{
+        border: 1px solid #ccc;
+        td{
+          padding: 1px 11px;
+        }
+      }
+    }
+  }
+  .diff_line{
+    background:rgba(36, 71, 98, 0.76);
+    color:white;
+  }
   .first_diff,.second_diff{
     float: left;
     width:49%;
@@ -1527,7 +1542,7 @@ md-dialog-container{
   float: left;
   display: block;
   box-sizing: border-box;
-  padding:40px 30px;
+  padding: 30px 20px;
   width:100%;
   height:500px;
   &.no_data{

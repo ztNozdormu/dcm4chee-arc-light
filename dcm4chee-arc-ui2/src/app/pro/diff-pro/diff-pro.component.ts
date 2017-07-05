@@ -210,7 +210,6 @@ export class DiffProComponent implements OnInit {
         this.dialogRef.componentInstance.index = i;
         this.dialogRef.componentInstance.aet1 = this.aet1;
         this.dialogRef.componentInstance.aet2 = this.aet2;
-        this.dialogRef.componentInstance.index = i;
         this.dialogRef.afterClosed().subscribe((result) => {
             console.log('result', result);
             if (result){

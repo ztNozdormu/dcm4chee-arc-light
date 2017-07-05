@@ -7,7 +7,17 @@
                     <h3>{{aet1}}</h3>
                 </div>
                 <div class="diagram_content">
-                    first
+                    <!--{{currentStudy.primary | json}}-->
+                    <table>
+                        <tr *ngFor="let primaryKey of Object.keys(currentStudy.primary)" [ngClass]="{diff_line: currentStudy.primary[primaryKey].diff}">
+                            <td>{{DCM4CHE.elementName.forTag(primaryKey,privateCreator(primaryKey))}}</td>
+                            <td>{{primaryKey}}</td>
+                            <td>
+                                <span *ngIf="_.hasIn(currentStudy.primary,[primaryKey,'object','Value',0]) && !_.hasIn(currentStudy.primary,[primaryKey,'object','Value',0,'Alphabetic'])">{{currentStudy.primary[primaryKey].object.Value[0]}}</span>
+                                <span *ngIf="_.hasIn(currentStudy.primary,[primaryKey,'object','Value',0,'Alphabetic'])">{{currentStudy.primary[primaryKey].object.Value[0].Alphabetic}}</span>
+                            </td>
+                        </tr>
+                    </table>
                 </div>
             </div>
             <div class="second_diff table_block">
@@ -15,9 +25,23 @@
                     <h3>{{aet2}}</h3>
                 </div>
                 <div class="diagram_content">
-                    second
+                    <table>
+                        <tr *ngFor="let secondaryKey of Object.keys(currentStudy.secondary)"
+                            [ngClass]="{diff_line: currentStudy.secondary[secondaryKey].diff}">
+                            <td>{{DCM4CHE.elementName.forTag(secondaryKey,privateCreator(secondaryKey))}}</td>
+                            <td>{{secondaryKey}}</td>
+                            <td>
+                                <span *ngIf="_.hasIn(currentStudy.secondary,[secondaryKey,'object','Value',0]) && !_.hasIn(currentStudy.secondary,[secondaryKey,'object','Value',0,'Alphabetic'])">{{currentStudy.secondary[secondaryKey].object.Value[0]}}</span>
+                                <span *ngIf="_.hasIn(currentStudy.secondary,[secondaryKey,'object','Value',0,'Alphabetic'])">{{currentStudy.secondary[secondaryKey].object.Value[0].Alphabetic}}</span>
+                            </td>
+                        </tr>
+                    </table>
                 </div>
             </div>
+        </div>
+        <div class="arrows">
+            <a class="prev" [attr.disabled]="index === 0" (click)="$event.preventDefault();prepareStudyWithIndex(index-1)">< prev</a>
+            <a class="next" [attr.disabled]="index === (studies.length-1)" (click)="$event.preventDefault();prepareStudyWithIndex(index+1)">next ></a>
         </div>
         <div class="dialogbuttons">
             <button class="cancle" type="button" (click)="dialogRef.close(null)">CANCEL</button>
