@@ -240,7 +240,7 @@
                 </div>
                 <div class="bluecontent" *ngIf="toggle === attributes.name">
                     <div class="dynamic_table">
-                        <div class="table_header">
+                        <div class="table_header"  (click)="openDetailView(groupResults[attributes.name],0)">
                             <div class="th" *ngFor="let header of table" title="{{header.description}}" [ngStyle]="{width: header.calculatedWidth}">{{header.title}}</div>
                         </div>
                         <div class="table_body">

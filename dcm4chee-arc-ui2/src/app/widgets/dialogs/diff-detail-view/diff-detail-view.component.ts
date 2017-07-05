@@ -22,6 +22,11 @@ export class DiffDetailViewComponent implements OnInit {
     _ = _;
     DCM4CHE = DCM4CHE;
     activeTr;
+    selectedVersion = 'FIRST';
+    selectedVersions = {
+        "FIRST":"SECOND",
+        "SECOND":"FIRST"
+    }
     constructor(
         public dialogRef: MdDialogRef<DiffDetailViewComponent>
     ){}
@@ -38,6 +43,13 @@ export class DiffDetailViewComponent implements OnInit {
             }
         }
         return undefined;
+    }
+    changeSelectedVersion(version){
+        if(this.selectedVersion === version){
+            this.selectedVersion = this.selectedVersions[version];
+        }else{
+            this.selectedVersion = version;
+        }
     }
     activateTr(primaryKey){
         this.activeTr = primaryKey;
