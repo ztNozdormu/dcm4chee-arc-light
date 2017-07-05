@@ -1,20 +1,20 @@
 <div class="vex vex-theme-os diff">
     <div class="vex-dialog-form">
-        <h5>Diff</h5>
+        <h5>Compare Diff</h5>
         <div md-dialog-content>
             <div class="first_diff table_block">
                 <div class="header">
                     <h3>{{aet1}}</h3>
                 </div>
-                <div class="diagram_content">
+                <div class="diff_content">
                     <!--{{currentStudy.primary | json}}-->
                     <table>
-                        <tr *ngFor="let primaryKey of Object.keys(currentStudy.primary)" [ngClass]="{diff_line: currentStudy.primary[primaryKey].diff}">
+                        <tr *ngFor="let primaryKey of currentStudyIndex" [ngClass]="{diff_line: currentStudy.primary[primaryKey].diff,active:activeTr === primaryKey}" (mouseenter)="activateTr(primaryKey)" (mouseleave)="clearTr()">
                             <td>{{DCM4CHE.elementName.forTag(primaryKey,privateCreator(primaryKey))}}</td>
                             <td>{{primaryKey}}</td>
                             <td>
-                                <span *ngIf="_.hasIn(currentStudy.primary,[primaryKey,'object','Value',0]) && !_.hasIn(currentStudy.primary,[primaryKey,'object','Value',0,'Alphabetic'])">{{currentStudy.primary[primaryKey].object.Value[0]}}</span>
-                                <span *ngIf="_.hasIn(currentStudy.primary,[primaryKey,'object','Value',0,'Alphabetic'])">{{currentStudy.primary[primaryKey].object.Value[0].Alphabetic}}</span>
+                                <ng-container *ngIf="_.hasIn(currentStudy.primary,[primaryKey,'object','Value',0]) && !_.hasIn(currentStudy.primary,[primaryKey,'object','Value',0,'Alphabetic'])">{{currentStudy.primary[primaryKey].object.Value[0]}}</ng-container>
+                                <ng-container *ngIf="_.hasIn(currentStudy.primary,[primaryKey,'object','Value',0,'Alphabetic'])">{{currentStudy.primary[primaryKey].object.Value[0].Alphabetic}}</ng-container>
                             </td>
                         </tr>
                     </table>
@@ -24,15 +24,14 @@
                 <div class="header">
                     <h3>{{aet2}}</h3>
                 </div>
-                <div class="diagram_content">
+                <div class=" diff_content">
                     <table>
-                        <tr *ngFor="let secondaryKey of Object.keys(currentStudy.secondary)"
-                            [ngClass]="{diff_line: currentStudy.secondary[secondaryKey].diff}">
+                        <tr *ngFor="let secondaryKey of currentStudyIndex" [ngClass]="{diff_line: currentStudy.secondary[secondaryKey].diff,active:activeTr === secondaryKey}" (mouseenter)="activateTr(secondaryKey)" (mouseleave)="clearTr()">
                             <td>{{DCM4CHE.elementName.forTag(secondaryKey,privateCreator(secondaryKey))}}</td>
                             <td>{{secondaryKey}}</td>
                             <td>
-                                <span *ngIf="_.hasIn(currentStudy.secondary,[secondaryKey,'object','Value',0]) && !_.hasIn(currentStudy.secondary,[secondaryKey,'object','Value',0,'Alphabetic'])">{{currentStudy.secondary[secondaryKey].object.Value[0]}}</span>
-                                <span *ngIf="_.hasIn(currentStudy.secondary,[secondaryKey,'object','Value',0,'Alphabetic'])">{{currentStudy.secondary[secondaryKey].object.Value[0].Alphabetic}}</span>
+                                <ng-container *ngIf="_.hasIn(currentStudy.secondary,[secondaryKey,'object','Value',0]) && !_.hasIn(currentStudy.secondary,[secondaryKey,'object','Value',0,'Alphabetic'])">{{currentStudy.secondary[secondaryKey].object.Value[0]}}</ng-container>
+                                <ng-container *ngIf="_.hasIn(currentStudy.secondary,[secondaryKey,'object','Value',0,'Alphabetic'])">{{currentStudy.secondary[secondaryKey].object.Value[0].Alphabetic}}</ng-container>
                             </td>
                         </tr>
                     </table>
@@ -40,8 +39,8 @@
             </div>
         </div>
         <div class="arrows">
-            <a class="prev" [attr.disabled]="index === 0" (click)="$event.preventDefault();prepareStudyWithIndex(index-1)">< prev</a>
-            <a class="next" [attr.disabled]="index === (studies.length-1)" (click)="$event.preventDefault();prepareStudyWithIndex(index+1)">next ></a>
+            <a class="prev" [attr.disabled]="index === 0 ? true : null" (click)="$event.preventDefault();prepareStudyWithIndex(index-1)" title="Show previous diff"><span class="glyphicon glyphicon-chevron-left"></span> <span class="text">PREVIOUS</span></a>
+            <a class="next" [attr.disabled]="index === (studies.length-1) ? true : null" (click)="$event.preventDefault();prepareStudyWithIndex(index+1)" title="Show next diff"><span class="text">NEXT</span> <span class="glyphicon glyphicon-chevron-right"></span></a>
         </div>
         <div class="dialogbuttons">
             <button class="cancle" type="button" (click)="dialogRef.close(null)">CANCEL</button>

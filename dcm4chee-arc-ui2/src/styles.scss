@@ -1402,14 +1402,83 @@ md-dialog-container{
 }
 .vex.vex-theme-os.diff{
   width:100%;
+  h5{
+    border-bottom: 1px solid #ccc;
+    padding-bottom: 10px;
+    margin-bottom: 20px;
+  }
   .table_block{
     table{
       width: 100%;
       tr{
         border: 1px solid #ccc;
+        &.active{
+          background:#ccc;
+        }
+        &.active.diff_line{
+          background:rgba(33, 56, 74, 0.76);
+        }
         td{
           padding: 1px 11px;
         }
+      }
+    }
+  }
+  .mat-dialog-content{
+    padding:9px 24px;
+
+  }
+  .arrows{
+    float: left;
+    width: 100%;
+    margin-top: 15px;
+    border-top: 1px solid #ccc;
+    padding-top: 10px;
+    .prev{
+      float: left;
+      span.text{
+        font-size: 15px;
+        display: block;
+        height: 35px;
+        line-height: 35px;
+        float: right;
+        &:hover{
+          text-decoration: none;
+          cursor: pointer;
+        }
+      }
+      span.glyphicon{
+        font-size:30px;
+      }
+    }
+    .next{
+      float: right;
+      span.text{
+        font-size: 15px;
+        display: block;
+        height: 35px;
+        line-height: 35px;
+        float: left;
+        &:hover{
+          text-decoration: none;
+        }
+      }
+      span.glyphicon{
+        font-size:30px;
+      }
+    }
+    a{
+      &[disabled] {
+        color: #888;
+        opacity:1;
+        &:hover{
+          color: #888;
+        }
+      }
+      color:$lightBlue;
+      &:hover{
+        color: rgba(13, 39, 60, 0.84);
+        cursor: pointer;
       }
     }
   }
@@ -1545,6 +1614,25 @@ md-dialog-container{
   padding: 30px 20px;
   width:100%;
   height:500px;
+  &.no_data{
+    h3{
+      font-size: 20px;
+      text-align: center;
+      vertical-align: middle;
+      line-height: 348px;
+    }
+  }
+  &[hidden]{
+    display: none;
+  }
+}
+.diff_content{
+  float: left;
+  display: block;
+  box-sizing: border-box;
+  padding: 30px 20px;
+  width:100%;
+  min-height:500px;
   &.no_data{
     h3{
       font-size: 20px;

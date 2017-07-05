@@ -13,6 +13,7 @@ export class DiffDetailViewComponent implements OnInit {
     private _index;
     private _aet1;
     private _aet2;
+    currentStudyIndex = [];
     currentStudy = {
         "primary":{},
         "secondary":{}
@@ -20,6 +21,7 @@ export class DiffDetailViewComponent implements OnInit {
     Object = Object;
     _ = _;
     DCM4CHE = DCM4CHE;
+    activeTr;
     constructor(
         public dialogRef: MdDialogRef<DiffDetailViewComponent>
     ){}
@@ -37,9 +39,21 @@ export class DiffDetailViewComponent implements OnInit {
         }
         return undefined;
     }
+    activateTr(primaryKey){
+        this.activeTr = primaryKey;
+    }
+    clearTr(){
+        this.activeTr = "";
+    }
     prepareStudyWithIndex(index?:number){
         if(_.hasIn(this._studies,index)){
             this._index = index;
+            this.currentStudy = {
+                "primary":{},
+                "secondary":{}
+            };
+            let diffIndexes = [];
+            let noDiffIndexes = [];
             let modifyed = this._studies[this._index]["04000561"].Value[0]["04000550"].Value[0];
             _.forEach(this._studies[this._index],(m,i)=>{
                 if(i != "04000561"){
@@ -52,6 +66,7 @@ export class DiffDetailViewComponent implements OnInit {
                             object:m,
                             diff:true
                         };
+                        diffIndexes.push(i);
                     }else{
                         this.currentStudy["secondary"][i] ={
                             object:m,
@@ -61,9 +76,11 @@ export class DiffDetailViewComponent implements OnInit {
                             object:m,
                             diff:false
                         };
+                        noDiffIndexes.push(i);
                     }
                 }
             });
+            this.currentStudyIndex = [...diffIndexes,...noDiffIndexes];
         }
     }
     get studies() {
