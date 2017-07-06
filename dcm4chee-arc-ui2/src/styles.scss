@@ -1435,7 +1435,7 @@ md-dialog-container{
     float: left;
     width:100%;
     text-align: center;
-    margin-bottom: 20px;
+    margin: 20px 0;
     .mat-checkbox-checked.mat-accent .mat-checkbox-background, .mat-checkbox-indeterminate.mat-accent .mat-checkbox-background,
     .mat-checkbox-checked.mat-accent .mat-checkbox-background:hover, .mat-checkbox-indeterminate.mat-accent .mat-checkbox-background:hover
     .mat-checkbox-checked.mat-accent .mat-checkbox-background:active, .mat-checkbox-indeterminate.mat-accent .mat-checkbox-background:active{
@@ -1464,6 +1464,25 @@ md-dialog-container{
     margin-top: 15px;
     border-top: 1px solid #ccc;
     padding-top: 10px;
+    position: relative;
+    .save{
+      display: inline-block;
+      left: 50%;
+      margin-left: -124px;
+      position: absolute;
+      top: 15px;
+      width:248px;
+      border: 0 none;
+      border-radius: 0px;
+      text-transform: uppercase;
+      background: $lightBlue;
+      height:30px;
+      line-height:30px;
+      color: white;
+      &:hover{
+        background: $blue;
+      }
+    }
     .prev{
       float: left;
       span.text{
@@ -1513,8 +1532,8 @@ md-dialog-container{
     }
   }
   .diff_line{
-    background:rgba(36, 71, 98, 0.76);
-    color:white;
+    background:rgba(36, 71, 98, 0.31);
+    color:black;
   }
   .first_diff,.second_diff{
     float: left;
@@ -1594,6 +1613,7 @@ md-dialog-container{
     background: $lightBlue;
     box-sizing: border-box;
     padding-left: 20px;
+    margin-bottom: 30px;
     &:hover{
       cursor: pointer;
     }
@@ -1660,9 +1680,10 @@ md-dialog-container{
   float: left;
   display: block;
   box-sizing: border-box;
-  padding: 30px 20px;
+  padding: 0px 20px;
   width:100%;
-  min-height:500px;
+  max-height: 50vh;
+  overflow-y: auto;
   &.no_data{
     h3{
       font-size: 20px;

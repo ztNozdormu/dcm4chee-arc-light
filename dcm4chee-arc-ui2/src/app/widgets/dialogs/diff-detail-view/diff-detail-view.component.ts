@@ -30,9 +30,53 @@ export class DiffDetailViewComponent implements OnInit {
     constructor(
         public dialogRef: MdDialogRef<DiffDetailViewComponent>
     ){}
-
+    activeTable;
+    setActiveTable(mode){
+        this.activeTable = mode;
+    }
+    clearActiveTable(){
+        this.activeTable = "";
+    }
+    scrollFirstTimer = null;
     ngOnInit() {
+        let $this = this;
         this.prepareStudyWithIndex(this._index);
+        $('.first_table').on('scroll', function () {
+/*                $('.second_table').animate({ scrollTop: $(".first_table").scrollTop() }, 300);
+            if($this.scrollFirstTimer !== null) {
+                clearTimeout($this.scrollFirstTimer);
+            }*/
+            if($this.activeTable === 'FIRST'){
+                $('.second_table').scrollTop($('.first_table').scrollTop());
+            }
+            $this.scrollFirstTimer = setTimeout(function() {
+                // $('.second_table').scrollTop($('.first_table').scrollTop());
+            }, 150);
+        });
+        $('.second_table').on('scroll', function () {
+            if($this.activeTable === 'SECOND'){
+                $('.first_table').scrollTop($('.second_table').scrollTop());
+            }
+        });
+    }
+    scrollFirst(event){
+/*        if(this.scrollFirstTimer !== null) {
+            clearTimeout(this.scrollFirstTimer);
+        }
+
+        this.scrollFirstTimer = setTimeout(function() {
+            // var x = (<HTMLScriptElement[]><any>document.getElementsByClassName("second_table"))[0];
+            // if(Math.abs(x.scrollTop - event.target.scrollTop) > 5){
+            //     x.scrollTop = event.target.scrollTop;
+                $(".second_table").animate({ scrollTop: $(".first_table").scrollTop() }, 300);
+            // }
+        }, 150);*/
+    }
+    scrollSecond(event){/*
+        var x = (<HTMLScriptElement[]><any>document.getElementsByClassName("first_table"))[0];
+        if(Math.abs(x.scrollTop - event.target.scrollTop) > 5){
+            x.scrollTop = event.target.scrollTop;
+        }*/
     }
     privateCreator(tag) {
         if ('02468ACE'.indexOf(tag.charAt(3)) < 0) {

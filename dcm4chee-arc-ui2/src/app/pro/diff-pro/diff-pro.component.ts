@@ -204,7 +204,7 @@ export class DiffProComponent implements OnInit {
         this.config.viewContainerRef = this.viewContainerRef;
         this.dialogRef = this.dialog.open(DiffDetailViewComponent, {
             height: 'auto',
-            width: '80%'
+            width: '90%'
         });
         this.dialogRef.componentInstance.studies = studies;
         this.dialogRef.componentInstance.index = i;

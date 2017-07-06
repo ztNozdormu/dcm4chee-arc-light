@@ -1,12 +1,12 @@
 <div class="vex vex-theme-os diff">
     <div class="vex-dialog-form">
         <h5>Compare Diff</h5>
-        <div md-dialog-content>
+        <div>
             <div class="first_diff table_block" [ngClass]="{selected: selectedVersion === 'FIRST'}">
                 <div class="header">
                     <h3>{{aet1}}</h3>
                 </div>
-                <div class="diff_content">
+                <div class="diff_content first_table" (scroll)="scrollFirst($event)"  (mouseenter)="setActiveTable('FIRST')" (mouseleave)="clearActiveTable()">
                     <!--{{currentStudy.primary | json}}-->
                     <table>
                         <tr *ngFor="let primaryKey of currentStudyIndex" [ngClass]="{diff_line: currentStudy.primary[primaryKey].diff,active:activeTr === primaryKey}" (mouseenter)="activateTr(primaryKey)" (mouseleave)="clearTr()">
@@ -27,7 +27,7 @@
                 <div class="header">
                     <h3>{{aet2}}</h3>
                 </div>
-                <div class=" diff_content">
+                <div class="diff_content second_table" (scroll)="scrollSecond($event)"  (mouseenter)="setActiveTable('SECOND')" (mouseleave)="clearActiveTable()">
                     <table>
                         <tr *ngFor="let secondaryKey of currentStudyIndex" [ngClass]="{diff_line: currentStudy.secondary[secondaryKey].diff,active:activeTr === secondaryKey}" (mouseenter)="activateTr(secondaryKey)" (mouseleave)="clearTr()">
                             <td>{{DCM4CHE.elementName.forTag(secondaryKey,privateCreator(secondaryKey))}}</td>
@@ -46,11 +46,12 @@
         </div>
         <div class="arrows">
             <a class="prev" [attr.disabled]="index === 0 ? true : null" (click)="$event.preventDefault();prepareStudyWithIndex(index-1)" title="Show previous diff"><span class="glyphicon glyphicon-chevron-left"></span> <span class="text">PREVIOUS</span></a>
+            <button class="save" type="button" (click)="dialogRef.close(null)">SYNCHRONIZE THIS ENTRYS</button>
             <a class="next" [attr.disabled]="index === (studies.length-1) ? true : null" (click)="$event.preventDefault();prepareStudyWithIndex(index+1)" title="Show next diff"><span class="text">NEXT</span> <span class="glyphicon glyphicon-chevron-right"></span></a>
         </div>
         <div class="dialogbuttons">
             <button class="cancle" type="button" (click)="dialogRef.close(null)">CLOSE</button>
-            <button class="save" type="button" (click)="dialogRef.close(null)">SYNCHRONIZE THIS ENTRYS</button>
+
         </div>
     </div>
 </div>
