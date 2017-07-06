@@ -200,13 +200,18 @@ export class DiffProComponent implements OnInit {
         };
     };
 
-    openDetailView(studies,i){
+    openDetailView(studies,i,groupName){
         this.config.viewContainerRef = this.viewContainerRef;
+        let width = "90%";
+        if(groupName === "missing"){
+            width = "60%"
+        }
         this.dialogRef = this.dialog.open(DiffDetailViewComponent, {
             height: 'auto',
-            width: '90%'
+            width: width
         });
         this.dialogRef.componentInstance.studies = studies;
+        this.dialogRef.componentInstance.groupName = groupName;
         this.dialogRef.componentInstance.index = i;
         this.dialogRef.componentInstance.aet1 = this.aet1;
         this.dialogRef.componentInstance.aet2 = this.aet2;

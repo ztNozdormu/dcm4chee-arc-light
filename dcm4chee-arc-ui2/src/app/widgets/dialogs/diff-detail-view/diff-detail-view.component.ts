@@ -22,6 +22,7 @@ export class DiffDetailViewComponent implements OnInit {
     _ = _;
     DCM4CHE = DCM4CHE;
     activeTr;
+    private _groupName;
     selectedVersion = 'FIRST';
     selectedVersions = {
         "FIRST":"SECOND",
@@ -38,46 +39,48 @@ export class DiffDetailViewComponent implements OnInit {
         this.activeTable = "";
     }
     scrollFirstTimer = null;
+    buttonLabel = "SYNCHRONIZE THIS ENTRYS";
+    titleLabel = "Compare Diff";
     ngOnInit() {
         let $this = this;
         this.prepareStudyWithIndex(this._index);
         $('.first_table').on('scroll', function () {
-/*                $('.second_table').animate({ scrollTop: $(".first_table").scrollTop() }, 300);
-            if($this.scrollFirstTimer !== null) {
-                clearTimeout($this.scrollFirstTimer);
-            }*/
             if($this.activeTable === 'FIRST'){
                 $('.second_table').scrollTop($('.first_table').scrollTop());
             }
-            $this.scrollFirstTimer = setTimeout(function() {
-                // $('.second_table').scrollTop($('.first_table').scrollTop());
-            }, 150);
         });
         $('.second_table').on('scroll', function () {
             if($this.activeTable === 'SECOND'){
                 $('.first_table').scrollTop($('.second_table').scrollTop());
             }
         });
-    }
-    scrollFirst(event){
-/*        if(this.scrollFirstTimer !== null) {
-            clearTimeout(this.scrollFirstTimer);
+        if(this._groupName === "missing"){
+            this.buttonLabel = "SEND STUDY TO SECONDARY AE";
+            this.titleLabel = "Missing study in " + this._aet2;
         }
+    }
+    addEffect(direction){
+        let element = $('.diff_main_content');
+        element.removeClass('fadeInRight').removeClass('fadeInLeft');
+        setTimeout(function(){
+            if (direction === 'left'){
+                element.addClass('animated').addClass('fadeOutRight');
+            }
+            if (direction === 'right'){
+                element.addClass('animated').addClass('fadeOutLeft');
+            }
+        }, 1);
+        setTimeout(function(){
+            element.removeClass('fadeOutRight').removeClass('fadeOutLeft');
+            if (direction === 'left'){
+                element.addClass('fadeInLeft').removeClass('animated');
+            }
+            if (direction === 'right'){
+                element.addClass('fadeInRight').removeClass('animated');
+            }
+        }, 301);
+    };
 
-        this.scrollFirstTimer = setTimeout(function() {
-            // var x = (<HTMLScriptElement[]><any>document.getElementsByClassName("second_table"))[0];
-            // if(Math.abs(x.scrollTop - event.target.scrollTop) > 5){
-            //     x.scrollTop = event.target.scrollTop;
-                $(".second_table").animate({ scrollTop: $(".first_table").scrollTop() }, 300);
-            // }
-        }, 150);*/
-    }
-    scrollSecond(event){/*
-        var x = (<HTMLScriptElement[]><any>document.getElementsByClassName("first_table"))[0];
-        if(Math.abs(x.scrollTop - event.target.scrollTop) > 5){
-            x.scrollTop = event.target.scrollTop;
-        }*/
-    }
     privateCreator(tag) {
         if ('02468ACE'.indexOf(tag.charAt(3)) < 0) {
             let block = tag.slice(4, 6);
@@ -103,6 +106,13 @@ export class DiffDetailViewComponent implements OnInit {
     }
     prepareStudyWithIndex(index?:number){
         if(_.hasIn(this._studies,index)){
+            let direction;
+            if(this._index < index){
+                direction = "right";
+            }
+            if(this._index > index){
+                direction = "left";
+            }
             this._index = index;
             this.currentStudy = {
                 "primary":{},
@@ -110,33 +120,49 @@ export class DiffDetailViewComponent implements OnInit {
             };
             let diffIndexes = [];
             let noDiffIndexes = [];
-            let modifyed = this._studies[this._index]["04000561"].Value[0]["04000550"].Value[0];
-            _.forEach(this._studies[this._index],(m,i)=>{
-                if(i != "04000561"){
-                    if(_.hasIn(modifyed,i)){
-                        this.currentStudy["secondary"][i] = {
-                            object:modifyed[i],
-                            diff:true
-                        };
-                        this.currentStudy["primary"][i] = {
-                            object:m,
-                            diff:true
-                        };
-                        diffIndexes.push(i);
-                    }else{
-                        this.currentStudy["secondary"][i] ={
-                            object:m,
-                            diff:false
-                        };
+            if(this._groupName === "missing"){
+                _.forEach(this._studies[this._index],(m,i)=>{
+                    if(i != "04000561"){
                         this.currentStudy["primary"][i] = {
                             object:m,
                             diff:false
-                        };
-                        noDiffIndexes.push(i);
+                        }
+                        diffIndexes.push(i)
                     }
-                }
-            });
-            this.currentStudyIndex = [...diffIndexes,...noDiffIndexes];
+                });
+                this.currentStudyIndex = diffIndexes;
+            }else{
+                let modifyed = this._studies[this._index]["04000561"].Value[0]["04000550"].Value[0];
+                _.forEach(this._studies[this._index],(m,i)=>{
+                    if(i != "04000561"){
+                        if(_.hasIn(modifyed,i)){
+                            this.currentStudy["secondary"][i] = {
+                                object:modifyed[i],
+                                diff:true
+                            };
+                            this.currentStudy["primary"][i] = {
+                                object:m,
+                                diff:true
+                            };
+                            diffIndexes.push(i);
+                        }else{
+                            this.currentStudy["secondary"][i] ={
+                                object:m,
+                                diff:false
+                            };
+                            this.currentStudy["primary"][i] = {
+                                object:m,
+                                diff:false
+                            };
+                            noDiffIndexes.push(i);
+                        }
+                    }
+                });
+                this.currentStudyIndex = [...diffIndexes,...noDiffIndexes];
+            }
+            if(direction){
+                this.addEffect(direction);
+            }
         }
     }
     get studies() {
@@ -169,5 +195,13 @@ export class DiffDetailViewComponent implements OnInit {
 
     set aet2(value) {
         this._aet2 = value;
+    }
+
+    get groupName() {
+        return this._groupName;
+    }
+
+    set groupName(value) {
+        this._groupName = value;
     }
 }

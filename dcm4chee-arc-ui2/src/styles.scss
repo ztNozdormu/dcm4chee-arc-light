@@ -1544,6 +1544,10 @@ md-dialog-container{
   }
   .first_diff{
     margin-right:2%;
+    &.missing_mode{
+      width:100%;
+      margin-right:0;
+    }
   }
   .second_diff{
   }

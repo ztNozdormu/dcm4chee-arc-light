@@ -1,15 +1,15 @@
 <div class="vex vex-theme-os diff">
     <div class="vex-dialog-form">
-        <h5>Compare Diff</h5>
-        <div>
-            <div class="first_diff table_block" [ngClass]="{selected: selectedVersion === 'FIRST'}">
+        <h5>{{titleLabel}}</h5>
+        <div class="diff_main_content">
+            <div class="first_diff table_block" [ngClass]="{selected: (selectedVersion === 'FIRST' && groupName != 'missing'),missing_mode: groupName === 'missing'}">
                 <div class="header">
                     <h3>{{aet1}}</h3>
                 </div>
                 <div class="diff_content first_table" (scroll)="scrollFirst($event)"  (mouseenter)="setActiveTable('FIRST')" (mouseleave)="clearActiveTable()">
                     <!--{{currentStudy.primary | json}}-->
                     <table>
-                        <tr *ngFor="let primaryKey of currentStudyIndex" [ngClass]="{diff_line: currentStudy.primary[primaryKey].diff,active:activeTr === primaryKey}" (mouseenter)="activateTr(primaryKey)" (mouseleave)="clearTr()">
+                        <tr *ngFor="let primaryKey of currentStudyIndex" [ngClass]="{diff_line: (_.hasIn(currentStudy,['primary',primaryKey,'diff']) && currentStudy.primary[primaryKey].diff) , active:activeTr === primaryKey}" (mouseenter)="activateTr(primaryKey)" (mouseleave)="clearTr()">
                             <td>{{DCM4CHE.elementName.forTag(primaryKey,privateCreator(primaryKey))}}</td>
                             <td>{{primaryKey}}</td>
                             <td>
@@ -19,11 +19,11 @@
                         </tr>
                     </table>
                 </div>
-                <div class="checkbox_content">
-                    <md-checkbox  [ngModel]="selectedVersion === 'FIRST'" (ngModelChange)="changeSelectedVersion('FIRST')">Select this version as the right one</md-checkbox>
+                <div class="checkbox_content" >
+                    <md-checkbox *ngIf="groupName != 'missing'"  [ngModel]="selectedVersion === 'FIRST'" (ngModelChange)="changeSelectedVersion('FIRST')">Select this version as the right one</md-checkbox>
                 </div>
             </div>
-            <div class="second_diff table_block" [ngClass]="{selected: selectedVersion === 'SECOND'}">
+            <div class="second_diff table_block" [ngClass]="{selected: selectedVersion === 'SECOND'}" *ngIf="groupName != 'missing'">
                 <div class="header">
                     <h3>{{aet2}}</h3>
                 </div>
@@ -46,7 +46,7 @@
         </div>
         <div class="arrows">
             <a class="prev" [attr.disabled]="index === 0 ? true : null" (click)="$event.preventDefault();prepareStudyWithIndex(index-1)" title="Show previous diff"><span class="glyphicon glyphicon-chevron-left"></span> <span class="text">PREVIOUS</span></a>
-            <button class="save" type="button" (click)="dialogRef.close(null)">SYNCHRONIZE THIS ENTRYS</button>
+            <button class="save" type="button" (click)="dialogRef.close(null)">{{buttonLabel}}</button>
             <a class="next" [attr.disabled]="index === (studies.length-1) ? true : null" (click)="$event.preventDefault();prepareStudyWithIndex(index+1)" title="Show next diff"><span class="text">NEXT</span> <span class="glyphicon glyphicon-chevron-right"></span></a>
         </div>
         <div class="dialogbuttons">
