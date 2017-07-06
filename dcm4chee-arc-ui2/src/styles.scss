@@ -1552,6 +1552,22 @@ md-dialog-container{
   .second_diff{
   }
 }
+.simple_table{
+  width:100%;
+  tr{
+    td,th{
+      padding:3px 7px;
+    }
+    &:hover{
+      background: transparent !important;
+    }
+    td{
+      md-select{
+        padding:0;
+      }
+    }
+  }
+}
 .dynamic_table{
   .table_header{
     .th{

@@ -1,0 +1,44 @@
+<div class="vex vex-theme-os dicom_operations" xmlns="http://www.w3.org/1999/html">
+    <div class="vex-dialog-form">
+        <h5>Setting DICOM Operations</h5>
+        <div class="content">
+            <table class="simple_table">
+                <tr>
+                    <th></th>
+                    <th>Primary AET DICOM Operations</th>
+                    <th>Secondary AET DICOM Operations</th>
+                </tr>
+                <tr>
+                    <td>STORE-SCP</td>
+                    <td>
+                        <md-select [(ngModel)]="copyScp1" class="col-md-12">
+                            <md-option *ngFor="let ae of aes" [value]="ae.dicomAETitle" title="{{ae.dicomDeviceName}} {{ ae.dicomAETitle }}">{{ ae.dicomAETitle }}</md-option>
+                        </md-select>
+                    </td>
+                    <td>
+                        <md-select [(ngModel)]="copyScp2" class="col-md-12">
+                            <md-option *ngFor="let ae of aes" [value]="ae.dicomAETitle" title="{{ae.dicomDeviceName}} {{ ae.dicomAETitle }}">{{ ae.dicomAETitle }}</md-option>
+                        </md-select>
+                    </td>
+                </tr>
+                <tr>
+                    <td>C-MOVE-SCP</td>
+                    <td>
+                        <md-select [(ngModel)]="cMoveScp1" class="col-md-12">
+                            <md-option *ngFor="let ae of aes" [value]="ae.dicomAETitle" title="{{ae.dicomDeviceName}} {{ ae.dicomAETitle }}">{{ ae.dicomAETitle }}</md-option>
+                        </md-select>
+                    </td>
+                    <td>
+                        <md-select [(ngModel)]="cMoveScp2" class="col-md-12">
+                            <md-option *ngFor="let ae of aes" [value]="ae.dicomAETitle" title="{{ae.dicomDeviceName}} {{ ae.dicomAETitle }}">{{ ae.dicomAETitle }}</md-option>
+                        </md-select>
+                    </td>
+                </tr>
+            </table>
+        </div>
+        <div class="dialogbuttons">
+            <button  class="save" type="button" (click)="dialogRef.close({copyScp1:copyScp1,copyScp2:copyScp2,cMoveScp1:cMoveScp1,cMoveScp2:cMoveScp2})">OK</button>
+            <button class="cancle" type="button" (click)="dialogRef.close(null)">CANCEL</button>
+        </div>
+    </div>
+</div>

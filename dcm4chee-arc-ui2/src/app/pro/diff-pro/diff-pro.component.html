@@ -82,10 +82,10 @@
                     Clear <span class="glyphicon glyphicon-remove"></span>
                 </a>
             </div>
-            <div class="diff_more_filters">
+<!--            <div class="diff_more_filters">
                 <a href="" (click)="$event.preventDefault();advancedConfig=true" *ngIf="!advancedConfig" class="more">Extended search<i class="glyphicon glyphicon-triangle-bottom"></i></a>
                 <a href="" (click)="$event.preventDefault();advancedConfig=false" *ngIf="advancedConfig" class="more ng-hide">Close extended search<i class="glyphicon glyphicon-triangle-top"></i></a>
-            </div>
+            </div>-->
             <div *ngIf="advancedConfig" class="ng-hide">
                 <div class="row ng-hide filter hidden_filters" *ngIf="advancedConfig">
                     <div class="col-md-3 block-2-1" >
@@ -228,7 +228,21 @@
 
                 </div>
             </div>
+            <div class="morefunctionblock">
+                <a href="" (click)="$event.preventDefault();advancedConfig=true" *ngIf="!advancedConfig" class="more">More filters<i class="glyphicon glyphicon-triangle-bottom"></i></a>
+                <a href="" (click)="$event.preventDefault();advancedConfig=false" *ngIf="advancedConfig" class="more [hidden]">Close more filters<i class="glyphicon glyphicon-triangle-top"></i></a>
+                <div class="more functions">
+                    <div class="mainbutton" (click)="moreFunctionsButtons = !moreFunctionsButtons">
+                        <span *ngIf="!moreFunctionsButtons" >More configurations<i class="glyphicon glyphicon-triangle-bottom"></i></span>
+                        <span *ngIf="moreFunctionsButtons">Close more configurations<i class="glyphicon glyphicon-triangle-top"></i></span>
+                    </div>
+                    <ul *ngIf="moreFunctionsButtons">
+                        <li (click)="moreFunctionsButtons = false;setDicomOperations()" title="Set the C-MOVE SCP and STORE-SCP AETs">Set DICOM operationts</li>
+                    </ul>
+                </div>
+            </div>
         </div>
+
         <div class="float_content">
             <h2>
                 Groups

@@ -7,6 +7,7 @@ import {DatePipe} from "@angular/common";
 import * as _ from 'lodash';
 import {DiffDetailViewComponent} from "../../widgets/dialogs/diff-detail-view/diff-detail-view.component";
 import {MdDialogConfig, MdDialog, MdDialogRef} from "@angular/material";
+import {DicomOperationsComponent} from "../../widgets/dialogs/dicom-operations/dicom-operations.component";
 
 @Component({
     selector: 'app-diff-pro',
@@ -138,8 +139,11 @@ export class DiffProComponent implements OnInit {
             calculatedWidth:"20%"
         }
     ];
-//http://192.168.2.124:8080/dcm4chee-arc/aets/DCM4CHEE/dimse/DCM4CHEE/diff/DCM4CHEE_CLONE/studies?includefield=all&comparefield=all
-//http://192.168.2.124:8080/dcm4chee-arc/aets/DCM4CHEE/dimse/DCM4CHEE/diff/DCM4CHEE_CLONE/studies?includefield=all
+    copyScp1;
+    cMoveScp1;
+    copyScp2;
+    cMoveScp2;
+    moreFunctionsButtons = false;
     toggleBar(mode){
         if(this.groupResults[mode] && this.groupResults[mode].length > 0){
             if(this.toggle === mode){
@@ -200,6 +204,29 @@ export class DiffProComponent implements OnInit {
         };
     };
 
+    setDicomOperations(){
+        this.config.viewContainerRef = this.viewContainerRef;
+        this.dialogRef = this.dialog.open(DicomOperationsComponent, {
+            height: 'auto',
+            width: '60%'
+        });
+        this.copyScp1 = this.copyScp1 || this.aet1;
+        this.cMoveScp1 = this.cMoveScp1 || this.aet1
+        this.copyScp2 = this.copyScp2 || this.aet2;
+        this.cMoveScp2 = this.cMoveScp2 || this.aet2
+        this.dialogRef.componentInstance.aes = this.aes;
+        this.dialogRef.componentInstance.aet1 = this.aet1;
+        this.dialogRef.componentInstance.aet2 = this.aet2;
+        this.dialogRef.componentInstance.copyScp1 = this.copyScp1;
+        this.dialogRef.componentInstance.cMoveScp1 = this.cMoveScp1;
+        this.dialogRef.componentInstance.copyScp2 = this.copyScp2;
+        this.dialogRef.componentInstance.cMoveScp2 = this.cMoveScp2;
+        this.dialogRef.afterClosed().subscribe((result) => {
+            console.log('result', result);
+            if (result){
+            }
+        });
+    }
     openDetailView(studies,i,groupName){
         this.config.viewContainerRef = this.viewContainerRef;
         let width = "90%";

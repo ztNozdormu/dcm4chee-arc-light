@@ -24,6 +24,7 @@ import { InfoComponent } from './dialogs/info/info.component';
 import { UploadFilesComponent } from './dialogs/upload-files/upload-files.component';
 import { HistogramDialogComponent } from './dialogs/histogram-dialog/histogram-dialog.component';
 import { DiffDetailViewComponent } from './dialogs/diff-detail-view/diff-detail-view.component';
+import { DicomOperationsComponent } from './dialogs/dicom-operations/dicom-operations.component';
 
 
 @NgModule({
@@ -57,5 +58,6 @@ export const WidgetsComponents = [
     InfoComponent,
     UploadFilesComponent,
     HistogramDialogComponent,
-    DiffDetailViewComponent
+    DiffDetailViewComponent,
+    DicomOperationsComponent
 ];
