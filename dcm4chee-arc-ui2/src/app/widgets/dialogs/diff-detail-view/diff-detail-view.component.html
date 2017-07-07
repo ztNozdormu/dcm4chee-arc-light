@@ -6,7 +6,7 @@
                 <div class="header">
                     <h3>{{aet1}}</h3>
                 </div>
-                <div class="diff_content first_table" (scroll)="scrollFirst($event)"  (mouseenter)="setActiveTable('FIRST')" (mouseleave)="clearActiveTable()">
+                <div class="diff_content first_table" (mouseenter)="setActiveTable('FIRST')" (mouseleave)="clearActiveTable()">
                     <!--{{currentStudy.primary | json}}-->
                     <table>
                         <tr *ngFor="let primaryKey of currentStudyIndex" [ngClass]="{diff_line: (_.hasIn(currentStudy,['primary',primaryKey,'diff']) && currentStudy.primary[primaryKey].diff) , active:activeTr === primaryKey}" (mouseenter)="activateTr(primaryKey)" (mouseleave)="clearTr()">
@@ -27,7 +27,7 @@
                 <div class="header">
                     <h3>{{aet2}}</h3>
                 </div>
-                <div class="diff_content second_table" (scroll)="scrollSecond($event)"  (mouseenter)="setActiveTable('SECOND')" (mouseleave)="clearActiveTable()">
+                <div class="diff_content second_table"  (mouseenter)="setActiveTable('SECOND')" (mouseleave)="clearActiveTable()">
                     <table>
                         <tr *ngFor="let secondaryKey of currentStudyIndex" [ngClass]="{diff_line: currentStudy.secondary[secondaryKey].diff,active:activeTr === secondaryKey}" (mouseenter)="activateTr(secondaryKey)" (mouseleave)="clearTr()">
                             <td>{{DCM4CHE.elementName.forTag(secondaryKey,privateCreator(secondaryKey))}}</td>

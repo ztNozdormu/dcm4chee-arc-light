@@ -46,7 +46,6 @@ export class DiffDetailViewComponent implements OnInit {
     clearActiveTable(){
         this.activeTable = "";
     }
-    scrollFirstTimer = null;
     buttonLabel = "SYNCHRONIZE THIS ENTRYS";
     titleLabel = "Compare Diff";
     ngOnInit() {

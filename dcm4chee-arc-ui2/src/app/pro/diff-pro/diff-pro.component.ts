@@ -389,14 +389,15 @@ export class DiffProComponent implements OnInit {
             }
             let queryParameters = this.createQueryParams(this.filters.limit + 1, this.createStudyFilterParams());
             _.forEach($this.diffAttributes,(m,i)=>{
-                if(m.name === "missing"){
+                if(m.id === "missing"){
                     delete queryParameters["comparefield"];
                     queryParameters["different"] = false;
                     queryParameters["missing"] = true;
                     $this.cfpLoadingBar.start();
                     $this.service.getDiff($this.homeAet,$this.aet1,$this.aet2,queryParameters).subscribe(
                         (partDiff)=>{
-                            $this.groupResults[m.name] = partDiff ? partDiff:[];
+                            $this.groupResults[m.id] = partDiff ? partDiff:[];
+                            $this.toggle = '';
                             $this.cfpLoadingBar.complete();
                         },
                         (err)=>{
@@ -404,11 +405,12 @@ export class DiffProComponent implements OnInit {
                         });
                 }else{
                     $this.cfpLoadingBar.start();
-                    queryParameters["comparefield"] = m.name;
+                    queryParameters["comparefield"] = m.id;
                     $this.service.getDiff($this.homeAet,$this.aet1,$this.aet2,queryParameters).subscribe(
                         (partDiff)=>{
                             $this.cfpLoadingBar.complete();
-                            $this.groupResults[m.name] = partDiff ? partDiff:[];
+                            $this.toggle = '';
+                            $this.groupResults[m.id] = partDiff ? partDiff:[];
                         },
                         (err)=>{
                             $this.cfpLoadingBar.complete();
@@ -438,8 +440,9 @@ export class DiffProComponent implements OnInit {
             (res)=>{
                 $this.diffAttributes = res;
                 $this.diffAttributes.push({
-                    name:"missing",
-                    description:"Missing studies"
+                    id:"missing",
+                    title:"Missing studies",
+                    descriptioin:"Compares only missing Studies"
                 })
 
             },
