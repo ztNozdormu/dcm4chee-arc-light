@@ -13,8 +13,8 @@
                             <td>{{DCM4CHE.elementName.forTag(primaryKey,privateCreator(primaryKey))}}</td>
                             <td>{{primaryKey}}</td>
                             <td>
-                                <ng-container *ngIf="_.hasIn(currentStudy.primary,[primaryKey,'object','Value',0]) && !_.hasIn(currentStudy.primary,[primaryKey,'object','Value',0,'Alphabetic'])">{{currentStudy.primary[primaryKey].object.Value[0]}}</ng-container>
-                                <ng-container *ngIf="_.hasIn(currentStudy.primary,[primaryKey,'object','Value',0,'Alphabetic'])">{{currentStudy.primary[primaryKey].object.Value[0].Alphabetic}}</ng-container>
+                                <ng-container *ngIf="_.hasIn(currentStudy.primary,[primaryKey,'object','Value',0]) && !_.hasIn(currentStudy.primary,[primaryKey,'object','Value',0,'Alphabetic']) && !(_.isEmpty(currentStudy.primary[primaryKey].object.Value[0]) && !_.isNumber(currentStudy.primary[primaryKey].object.Value[0]))">{{currentStudy.primary[primaryKey].object.Value[0]}}</ng-container>
+                                <ng-container *ngIf="_.hasIn(currentStudy.primary,[primaryKey,'object','Value',0,'Alphabetic']) && !_.isEmpty(currentStudy.primary[primaryKey].object.Value[0].Alphabetic)">{{currentStudy.primary[primaryKey].object.Value[0].Alphabetic}}</ng-container>
                             </td>
                         </tr>
                     </table>
@@ -46,7 +46,7 @@
         </div>
         <div class="arrows">
             <a class="prev" [attr.disabled]="index === 0 ? true : null" (click)="$event.preventDefault();prepareStudyWithIndex(index-1)" title="Show previous diff"><span class="glyphicon glyphicon-chevron-left"></span> <span class="text">PREVIOUS</span></a>
-            <button class="save" type="button" (click)="dialogRef.close(null)">{{buttonLabel}}</button>
+            <button class="save" type="button" (click)="executeProcess()">{{buttonLabel}}</button>
             <a class="next" [attr.disabled]="index === (studies.length-1) ? true : null" (click)="$event.preventDefault();prepareStudyWithIndex(index+1)" title="Show next diff"><span class="text">NEXT</span> <span class="glyphicon glyphicon-chevron-right"></span></a>
         </div>
         <div class="dialogbuttons">

@@ -1,6 +1,7 @@
 import { Component, OnInit } from '@angular/core';
 import {MdDialogRef} from "@angular/material";
 import * as _ from 'lodash';
+import {DiffDetailViewService} from "./diff-detail-view.service";
 declare var DCM4CHE: any;
 
 @Component({
@@ -13,6 +14,12 @@ export class DiffDetailViewComponent implements OnInit {
     private _index;
     private _aet1;
     private _aet2;
+    private _aes;
+    private _copyScp1;
+    private _cMoveScp1;
+    private _copyScp2;
+    private _cMoveScp2;
+    private _homeAet;
     currentStudyIndex = [];
     currentStudy = {
         "primary":{},
@@ -29,7 +36,8 @@ export class DiffDetailViewComponent implements OnInit {
         "SECOND":"FIRST"
     }
     constructor(
-        public dialogRef: MdDialogRef<DiffDetailViewComponent>
+        public dialogRef: MdDialogRef<DiffDetailViewComponent>,
+        public service:DiffDetailViewService
     ){}
     activeTable;
     setActiveTable(mode){
@@ -57,6 +65,23 @@ export class DiffDetailViewComponent implements OnInit {
         if(this._groupName === "missing"){
             this.buttonLabel = "SEND STUDY TO SECONDARY AE";
             this.titleLabel = "Missing study in " + this._aet2;
+        }
+    }
+    executeProcess(){
+        if(this._groupName === "missing"){
+            let studyInstanceUID = this.getStudyInstanceUID(this.currentStudy.primary);
+            if(studyInstanceUID && studyInstanceUID != ""){
+                this.service.exportStudyExternal(this._homeAet,this._cMoveScp1,studyInstanceUID,this._copyScp2).subscribe(
+                    (res)=>{
+                        console.log("success",res);
+                    },
+                    (err)=>{
+                        console.log("err",err);
+                    }
+                );
+            }else{
+                alert("StudyInstanceUID is empty");
+            }
         }
     }
     addEffect(direction){
@@ -103,6 +128,17 @@ export class DiffDetailViewComponent implements OnInit {
     }
     clearTr(){
         this.activeTr = "";
+    }
+    getStudyInstanceUID(object){
+        if(_.hasIn(object,"0020000D.Value.0")){
+            return _.get(object,"0020000D.Value.0");
+        }else{
+            if(_.hasIn(object,"0020000D.object.Value.0")){
+                return _.get(object,"0020000D.object.Value.0");
+            }else{
+                return "";
+            }
+        }
     }
     prepareStudyWithIndex(index?:number){
         if(_.hasIn(this._studies,index)){
@@ -203,5 +239,53 @@ export class DiffDetailViewComponent implements OnInit {
 
     set groupName(value) {
         this._groupName = value;
+    }
+
+    get aes() {
+        return this._aes;
+    }
+
+    set aes(value) {
+        this._aes = value;
+    }
+
+    get copyScp1() {
+        return this._copyScp1;
+    }
+
+    set copyScp1(value) {
+        this._copyScp1 = value;
+    }
+
+    get cMoveScp1() {
+        return this._cMoveScp1;
+    }
+
+    set cMoveScp1(value) {
+        this._cMoveScp1 = value;
+    }
+
+    get copyScp2() {
+        return this._copyScp2;
+    }
+
+    set copyScp2(value) {
+        this._copyScp2 = value;
+    }
+
+    get cMoveScp2() {
+        return this._cMoveScp2;
+    }
+
+    set cMoveScp2(value) {
+        this._cMoveScp2 = value;
+    }
+
+    get homeAet() {
+        return this._homeAet;
+    }
+
+    set homeAet(value) {
+        this._homeAet = value;
     }
 }

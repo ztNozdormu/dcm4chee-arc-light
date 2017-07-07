@@ -204,16 +204,27 @@ export class DiffProComponent implements OnInit {
         };
     };
 
+    setDicomOperationsFromPrimaryAndSecondaryAE(){
+        this.copyScp1 = this.aet1 || this.homeAet;
+        this.cMoveScp1 =  this.aet1 || this.homeAet;
+        this.copyScp2 = this.aet2;
+        this.cMoveScp2 =  this.aet2;
+    }
+    aetChanged(mode){
+        console.log("in changed");
+        this.setDicomOperationsFromPrimaryAndSecondaryAE();
+    }
     setDicomOperations(){
+        let $this = this;
         this.config.viewContainerRef = this.viewContainerRef;
         this.dialogRef = this.dialog.open(DicomOperationsComponent, {
             height: 'auto',
             width: '60%'
         });
         this.copyScp1 = this.copyScp1 || this.aet1;
-        this.cMoveScp1 = this.cMoveScp1 || this.aet1
+        this.cMoveScp1 = this.cMoveScp1 ||  this.aet1;
         this.copyScp2 = this.copyScp2 || this.aet2;
-        this.cMoveScp2 = this.cMoveScp2 || this.aet2
+        this.cMoveScp2 = this.cMoveScp2 ||  this.aet2;
         this.dialogRef.componentInstance.aes = this.aes;
         this.dialogRef.componentInstance.aet1 = this.aet1;
         this.dialogRef.componentInstance.aet2 = this.aet2;
@@ -224,6 +235,10 @@ export class DiffProComponent implements OnInit {
         this.dialogRef.afterClosed().subscribe((result) => {
             console.log('result', result);
             if (result){
+                $this.copyScp1 = (result.copyScp1)?result.copyScp1:$this.copyScp1;
+                $this.cMoveScp1 = (result.cMoveScp1)?result.cMoveScp1:$this.cMoveScp1;
+                $this.copyScp2 = (result.copyScp2)?result.copyScp2:$this.copyScp2;
+                $this.cMoveScp2 = (result.cMoveScp2)?result.cMoveScp2:$this.cMoveScp2;
             }
         });
     }
@@ -237,11 +252,21 @@ export class DiffProComponent implements OnInit {
             height: 'auto',
             width: width
         });
+        this.copyScp1 = this.copyScp1 || this.aet1;
+        this.cMoveScp1 = this.cMoveScp1 ||  this.aet1;
+        this.copyScp2 = this.copyScp2 || this.aet2;
+        this.cMoveScp2 = this.cMoveScp2 ||  this.aet2;
+        this.dialogRef.componentInstance.aet1 = this.aet1;
+        this.dialogRef.componentInstance.aet2 = this.aet2;
+        this.dialogRef.componentInstance.aes = this.aes;
+        this.dialogRef.componentInstance.homeAet = this.homeAet;
+        this.dialogRef.componentInstance.copyScp1 = this.copyScp1;
+        this.dialogRef.componentInstance.cMoveScp1 = this.cMoveScp1;
+        this.dialogRef.componentInstance.copyScp2 = this.copyScp2;
+        this.dialogRef.componentInstance.cMoveScp2 = this.cMoveScp2;
         this.dialogRef.componentInstance.studies = studies;
         this.dialogRef.componentInstance.groupName = groupName;
         this.dialogRef.componentInstance.index = i;
-        this.dialogRef.componentInstance.aet1 = this.aet1;
-        this.dialogRef.componentInstance.aet2 = this.aet2;
         this.dialogRef.afterClosed().subscribe((result) => {
             console.log('result', result);
             if (result){
@@ -298,11 +323,11 @@ export class DiffProComponent implements OnInit {
             }else{
                 this.filters['StudyDate'] = fromDate + '-' + toDate;
             }
-            if(fromTime === toTime){
+/*            if(fromTime === toTime){
                 this.filters['StudyTime'] = fromTime;
             }else{
                 this.filters['StudyTime'] = fromTime + '-' + toTime;
-            }
+            }*/
         }
     };
 

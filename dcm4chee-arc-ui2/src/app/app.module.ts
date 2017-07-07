@@ -65,6 +65,7 @@ import {DiffProService} from "./pro/diff-pro/diff-pro.service";
 import {ChartsModule} from "ng2-charts";
 import { StatisticsComponent } from './monitoring/statistics/statistics.component';
 import {StatisticsService} from "./monitoring/statistics/statistics.service";
+import {DiffDetailViewService} from "./widgets/dialogs/diff-detail-view/diff-detail-view.service";
 
 @NgModule({
     declarations: [
@@ -172,7 +173,8 @@ import {StatisticsService} from "./monitoring/statistics/statistics.service";
         UploadDicomService,
         WindowRefService,
         StudiesService,
-        StatisticsService
+        StatisticsService,
+        DiffDetailViewService
     ],
     bootstrap: [AppComponent]
 })

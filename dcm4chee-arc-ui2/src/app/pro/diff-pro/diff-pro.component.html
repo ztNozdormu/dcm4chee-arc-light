@@ -15,7 +15,7 @@
                     <div class="row">
                         <label class="col-md-6 text-right control-label">Primare AE:</label>
                         <div class="col-md-6">
-                            <md-select [(ngModel)]="aet1" class="col-md-12">
+                            <md-select [(ngModel)]="aet1" class="col-md-12" (change)="aetChanged('aet1')">
                                 <md-option *ngFor="let ae of aes" [value]="ae.dicomAETitle" title="{{ae.dicomDeviceName}} {{ ae.dicomAETitle }}">{{ ae.dicomAETitle }}</md-option>
                             </md-select>
                         </div>
@@ -23,7 +23,7 @@
                     <div class="row">
                         <label class="col-md-6 text-right control-label">Secondary AE:</label>
                         <div class="col-md-6">
-                            <md-select [(ngModel)]="aet2" class="col-md-12">
+                            <md-select [(ngModel)]="aet2" class="col-md-12" (change)="aetChanged('aet2')">
                                 <md-option *ngFor="let ae of aes" [value]="ae.dicomAETitle" title="{{ae.dicomDeviceName}} {{ ae.dicomAETitle }}">{{ ae.dicomAETitle }}</md-option>
                             </md-select>
                         </div>
@@ -31,33 +31,31 @@
                 </div>
                 <div class="col-md-3 block-1-1">
                     <div class="row">
-                        <label class="col-md-6 text-right control-label">Start date/time:</label>
+                        <label class="col-md-6 text-right control-label">Start date:</label>
                         <div class="col-md-6">
                             <p-calendar
                                     [(ngModel)]="StudyDateTime.from"
                                     dateFormat="yy-mm-dd"
-                                    showTime="showTime"
                                     hourFormat="24"
                                     monthNavigator="true"
                                     yearNavigator="true"
                                     yearRange="1800:2100"
-                                    placeholder="Start date/time"
+                                    placeholder="Start date"
                                     (ngModelChange)="studyDateTimeChanged($event,'from')"
                             ></p-calendar>
                         </div>
                     </div>
                     <div class="row">
-                        <label class="col-md-6 text-right control-label">End date/time:</label>
+                        <label class="col-md-6 text-right control-label">End date:</label>
                         <div class="col-md-6">
                             <p-calendar
                                     [(ngModel)]="StudyDateTime.to"
                                     dateFormat="yy-mm-dd"
-                                    showTime="showTime"
                                     hourFormat="24"
                                     monthNavigator="true"
                                     yearNavigator="true"
                                     yearRange="1800:2100"
-                                    placeholder="End date/time"
+                                    placeholder="End date"
                                     (ngModelChange)="studyDateTimeChanged($event,'to')"
                             ></p-calendar>
                         </div>
