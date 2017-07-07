@@ -243,6 +243,7 @@ export class DiffProComponent implements OnInit {
         });
     }
     openDetailView(studies,i,groupName){
+        let $this = this;
         this.config.viewContainerRef = this.viewContainerRef;
         let width = "90%";
         if(groupName === "missing"){
@@ -270,6 +271,9 @@ export class DiffProComponent implements OnInit {
         this.dialogRef.afterClosed().subscribe((result) => {
             console.log('result', result);
             if (result){
+                if(result === "last"){
+                    $this.search();
+                }
             }
         });
     };

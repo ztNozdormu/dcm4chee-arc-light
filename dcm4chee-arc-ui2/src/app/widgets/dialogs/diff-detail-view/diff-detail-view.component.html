@@ -46,7 +46,8 @@
         </div>
         <div class="arrows">
             <a class="prev" [attr.disabled]="index === 0 ? true : null" (click)="$event.preventDefault();prepareStudyWithIndex(index-1)" title="Show previous diff"><span class="glyphicon glyphicon-chevron-left"></span> <span class="text">PREVIOUS</span></a>
-            <button class="save" type="button" (click)="executeProcess()">{{buttonLabel}}</button>
+            <button *ngIf="groupName === 'missing'" class="save" type="button" (click)="executeProcess()">{{buttonLabel}}</button>
+            <button *ngIf="groupName != 'missing'" title="Coming soon..." [disabled]="true" class="save" type="button" (click)="executeProcess()">{{buttonLabel}}</button>
             <a class="next" [attr.disabled]="index === (studies.length-1) ? true : null" (click)="$event.preventDefault();prepareStudyWithIndex(index+1)" title="Show next diff"><span class="text">NEXT</span> <span class="glyphicon glyphicon-chevron-right"></span></a>
         </div>
         <div class="dialogbuttons">

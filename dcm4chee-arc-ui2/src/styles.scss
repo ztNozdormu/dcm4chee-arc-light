@@ -1482,6 +1482,12 @@ md-dialog-container{
       &:hover{
         background: $blue;
       }
+      &[disabled]{
+        background: gray;
+        &:hover{
+          background: gray;
+        }
+      }
     }
     .prev{
       float: left;
@@ -1491,6 +1497,7 @@ md-dialog-container{
         height: 35px;
         line-height: 35px;
         float: right;
+        margin-left:5px;
         &:hover{
           text-decoration: none;
           cursor: pointer;
@@ -1508,6 +1515,7 @@ md-dialog-container{
         height: 35px;
         line-height: 35px;
         float: left;
+        margin-right:5px;
         &:hover{
           text-decoration: none;
         }

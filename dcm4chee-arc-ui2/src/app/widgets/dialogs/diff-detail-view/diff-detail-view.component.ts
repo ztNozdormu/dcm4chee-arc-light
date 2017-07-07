@@ -2,6 +2,7 @@ import { Component, OnInit } from '@angular/core';
 import {MdDialogRef} from "@angular/material";
 import * as _ from 'lodash';
 import {DiffDetailViewService} from "./diff-detail-view.service";
+import {AppService} from "../../../app.service";
 declare var DCM4CHE: any;
 
 @Component({
@@ -37,7 +38,8 @@ export class DiffDetailViewComponent implements OnInit {
     }
     constructor(
         public dialogRef: MdDialogRef<DiffDetailViewComponent>,
-        public service:DiffDetailViewService
+        public service:DiffDetailViewService,
+        public mainservice:AppService
     ){}
     activeTable;
     setActiveTable(mode){
@@ -67,17 +69,35 @@ export class DiffDetailViewComponent implements OnInit {
         }
     }
     executeProcess(){
+        let $this = this;
         if(this._groupName === "missing"){
             let studyInstanceUID = this.getStudyInstanceUID(this.currentStudy.primary);
             if(studyInstanceUID && studyInstanceUID != ""){
-                this.service.exportStudyExternal(this._homeAet,this._cMoveScp1,studyInstanceUID,this._copyScp2).subscribe(
-                    (res)=>{
-                        console.log("success",res);
-                    },
-                    (err)=>{
-                        console.log("err",err);
-                    }
-                );
+
+                let r = confirm(`Are you sure you want to send this study to ${this._copyScp2}?`);
+                if (r == true) {
+                    this.service.exportStudyExternal(this._homeAet,this._cMoveScp1,studyInstanceUID,this._copyScp2).subscribe(
+                        (res)=>{
+                            console.log("res",res);
+                            let msg = `Process successfully accomplished!<br> - Completed:${res.completed}<br> - Failed:${res.failed}<br> - Warnings:${res.warning}`;
+                            $this.mainservice.setMessage({
+                                'title': 'Info',
+                                'text': msg,
+                                'status': 'info'
+                            });
+                            if($this._studies.length === 1){
+                                $this.dialogRef.close('last');
+                            }
+                        },
+                        (err)=>{
+                            $this.mainservice.setMessage({
+                                'title': 'Error ' + err.status,
+                                'text': err.statusText,
+                                'status': 'error'
+                            });
+                        }
+                    );
+                }
             }else{
                 alert("StudyInstanceUID is empty");
             }
