@@ -251,13 +251,13 @@
                     <span class="pull-right" *ngIf="counts[attributes.id] > 0 && counts[attributes.id] != groupResults[attributes.id]?.length">{{groupResults[attributes.id]?.length}} / {{counts[attributes.id]}}</span>
                     <span class="pull-right" *ngIf="counts[attributes.id] == 0 || counts[attributes.id] == groupResults[attributes.id]?.length">{{groupResults[attributes.id]?.length}}</span>
                 </div>
-                <div class="bluecontent" *ngIf="toggle === attributes.id">
-                    <div class="dynamic_table">
+                <div class="bluecontent {{attributes.id}}" *ngIf="toggle === attributes.id">
+                    <div class="dynamic_table ">
                         <div class="table_header"  (click)="openDetailView(groupResults[attributes.id],0,attributes.id)">
                             <div class="th" *ngFor="let header of table" title="{{header.description}}" [ngStyle]="{width: header.calculatedWidth}">{{header.title}}</div>
                         </div>
                         <div class="table_body">
-                            <div class="tr" *ngFor="let study of groupResults[attributes.id];let index = index" (click)="openDetailView(groupResults[attributes.id],index, attributes.id)">
+                            <div class="tr" *ngFor="let study of groupResults[attributes.id] | slice:moreGroupElements[attributes.id].start:moreGroupElements[attributes.id].limit;let index = index" (click)="openDetailView(groupResults[attributes.id],index, attributes.id)">
                                 <div class="td" *ngFor="let table_element of table" [ngStyle]="{width: table_element.calculatedWidth}">
                                     <span *ngIf="_.hasIn(study[table_element.code],'Value[0].Alphabetic')">{{study[table_element.code]?.Value[0].Alphabetic || ''}}</span>
                                     <span *ngIf="!_.hasIn(study[table_element.code],'Value[0].Alphabetic') && _.hasIn(study[table_element.code],'Value[0]')">{{study[table_element.code]?.Value[0] || ''}}</span>
@@ -265,6 +265,7 @@
                             </div>
                         </div>
                     </div>
+                    <button class="load_more {{attributes.id}}" *ngIf="groupResults[attributes.id] && moreGroupElements[attributes.id].limit <= groupResults[attributes.id].length" (click)="loadMore(attributes.id)"><i *ngIf="moreGroupElements[attributes.id].loaderActive" class="fa fa-spinner fa-spin fa-3x fa-fw"></i>More</button>
                 </div>
             </ng-container>
         </div>

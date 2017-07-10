@@ -143,22 +143,8 @@ export class DiffProComponent implements OnInit {
     cMoveScp1;
     copyScp2;
     cMoveScp2;
+    moreGroupElements = {};
     moreFunctionsButtons = false;
-    toggleBar(mode){
-        if(this.groupResults[mode] && this.groupResults[mode].length > 0){
-            if(this.toggle === mode){
-                this.toggle = '';
-            }else{
-                this.toggle = mode;
-            }
-        }
-    }
-    selectModality(key){
-        this.filters.ModalitiesInStudy = key;
-        this.filters['ScheduledProcedureStepSequence.Modality'] = key;
-        $('.Modality').show();
-        this.showModalitySelector = false;
-    };
     dialogRef: MdDialogRef<any>;
     constructor(
         private service:DiffProService,
@@ -202,6 +188,42 @@ export class DiffProComponent implements OnInit {
                 count:25
             }
         };
+        $(".diff .float_content").on("scroll",".bluecontent",function () {
+            console.log("scroll this",this);
+        });
+    };
+    toggleBar(mode){
+        if(this.groupResults[mode] && this.groupResults[mode].length > 0){
+            if(this.toggle === mode){
+                this.toggle = '';
+                this.setLoadMore();
+            }else{
+                this.toggle = mode;
+                this.setScrollEvent(mode,2);
+            }
+        }
+    }
+    setScrollEvent(id,retry){
+        let $this = this;
+        let selector = '.bluecontent.'+ id;
+        setTimeout(()=>{
+            if($(selector).length > 0){
+                $(selector).scroll(function () {
+                    $this.scrolling(id);
+                });
+            }else{
+                if(retry){
+                    console.log("in retry");
+                    this.setScrollEvent(id,retry-1);
+                }
+            }
+        },1000);
+    }
+    selectModality(key){
+        this.filters.ModalitiesInStudy = key;
+        this.filters['ScheduledProcedureStepSequence.Modality'] = key;
+        $('.Modality').show();
+        this.showModalitySelector = false;
     };
 
     setDicomOperationsFromPrimaryAndSecondaryAE(){
@@ -233,7 +255,6 @@ export class DiffProComponent implements OnInit {
         this.dialogRef.componentInstance.copyScp2 = this.copyScp2;
         this.dialogRef.componentInstance.cMoveScp2 = this.cMoveScp2;
         this.dialogRef.afterClosed().subscribe((result) => {
-            console.log('result', result);
             if (result){
                 $this.copyScp1 = (result.copyScp1)?result.copyScp1:$this.copyScp1;
                 $this.cMoveScp1 = (result.cMoveScp1)?result.cMoveScp1:$this.cMoveScp1;
@@ -269,7 +290,6 @@ export class DiffProComponent implements OnInit {
         this.dialogRef.componentInstance.groupName = groupName;
         this.dialogRef.componentInstance.index = i;
         this.dialogRef.afterClosed().subscribe((result) => {
-            console.log('result', result);
             if (result){
                 if(result === "last"){
                     // $this.search();
@@ -399,6 +419,7 @@ export class DiffProComponent implements OnInit {
                     queryParameters["different"] = false;
                     queryParameters["missing"] = true;
                     $this.cfpLoadingBar.start();
+
                     $this.service.getDiff($this.homeAet,$this.aet1,$this.aet2,queryParameters).subscribe(
                         (partDiff)=>{
                             $this.groupResults[m.id] = partDiff ? partDiff:[];
@@ -441,6 +462,31 @@ export class DiffProComponent implements OnInit {
             }
         );
     };
+    setLoadMore(){
+        let $this = this;
+        _.forEach(this.diffAttributes,(m,i)=>{
+            this.moreGroupElements[m.id] = {
+                limit: 30,
+                start: 0,
+                loaderActive: false
+            };
+        });
+    }
+    loadMore(id){
+        this.moreGroupElements[id].loaderActive = true;
+        this.moreGroupElements[id].limit += 20;
+        this.moreGroupElements[id].loaderActive = false;
+    }
+
+    scrolling(id){
+        let hT = ($('.load_more.'+id).offset()) ? $('.load_more.'+id).offset().top : 0,
+            hH = $('.load_more.'+id).outerHeight(),
+            wH = $('.bluecontent.'+id).height(),
+            wS = $('.bluecontent.'+id).scrollTop();
+        if (wS > (hT + hH - wH)){
+            this.loadMore(id);
+        }
+    }
     getDiffAttributeSet(retries){
         let $this = this;
         this.service.getDiffAttributeSet().subscribe(
@@ -451,7 +497,7 @@ export class DiffProComponent implements OnInit {
                     title:"Missing studies",
                     descriptioin:"Compares only missing Studies"
                 })
-
+                $this.setLoadMore();
             },
             (err)=>{
                 if (retries){

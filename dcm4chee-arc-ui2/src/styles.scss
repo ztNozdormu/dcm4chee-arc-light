@@ -1785,6 +1785,12 @@ md-dialog-container{
     right:auto;
   }
 }
+.diff{
+  .bluecontent{
+    max-height:400px;
+    overflow: auto;
+  }
+}
 .diff_count{
   float: right;
   margin-right:20px;
