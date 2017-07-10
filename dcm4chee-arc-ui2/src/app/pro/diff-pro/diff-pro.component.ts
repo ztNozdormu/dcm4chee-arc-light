@@ -272,7 +272,8 @@ export class DiffProComponent implements OnInit {
             console.log('result', result);
             if (result){
                 if(result === "last"){
-                    $this.search();
+                    // $this.search();
+                    $this.toggle = "";
                 }
             }
         });
@@ -376,7 +377,7 @@ export class DiffProComponent implements OnInit {
         }
         return params;
     };
-
+    counts ={};
     search(){
         let $this = this;
         this.cfpLoadingBar.start();
@@ -401,6 +402,7 @@ export class DiffProComponent implements OnInit {
                     $this.service.getDiff($this.homeAet,$this.aet1,$this.aet2,queryParameters).subscribe(
                         (partDiff)=>{
                             $this.groupResults[m.id] = partDiff ? partDiff:[];
+                            $this.counts[m.id] = partDiff ? partDiff.length : 0;
                             $this.toggle = '';
                             $this.cfpLoadingBar.complete();
                         },
@@ -413,6 +415,7 @@ export class DiffProComponent implements OnInit {
                     $this.service.getDiff($this.homeAet,$this.aet1,$this.aet2,queryParameters).subscribe(
                         (partDiff)=>{
                             $this.cfpLoadingBar.complete();
+                            $this.counts[m.id] = partDiff ? partDiff.length : 0;
                             $this.toggle = '';
                             $this.groupResults[m.id] = partDiff ? partDiff:[];
                         },

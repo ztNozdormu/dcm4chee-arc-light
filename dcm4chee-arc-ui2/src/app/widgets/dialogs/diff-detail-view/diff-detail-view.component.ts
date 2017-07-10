@@ -86,7 +86,11 @@ export class DiffDetailViewComponent implements OnInit {
                                 'status': 'info'
                             });
                             if($this._studies.length === 1){
+                                _.remove($this._studies, function(n,i){return i == $this._index});
                                 $this.dialogRef.close('last');
+                            }else{
+                                _.remove($this._studies, function(n,i){return i == $this._index});
+                                $this.prepareStudyWithIndex($this._index);
                             }
                         },
                         (err)=>{
