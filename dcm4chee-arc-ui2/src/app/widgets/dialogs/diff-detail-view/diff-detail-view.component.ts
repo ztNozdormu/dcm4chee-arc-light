@@ -1,8 +1,9 @@
-import { Component, OnInit } from '@angular/core';
-import {MdDialogRef} from "@angular/material";
+import {Component, OnInit, ViewContainerRef} from '@angular/core';
+import {MdDialogRef, MdDialogConfig, MdDialog} from "@angular/material";
 import * as _ from 'lodash';
 import {DiffDetailViewService} from "./diff-detail-view.service";
 import {AppService} from "../../../app.service";
+import {ConfirmComponent} from "../confirm/confirm.component";
 declare var DCM4CHE: any;
 
 @Component({
@@ -36,10 +37,14 @@ export class DiffDetailViewComponent implements OnInit {
         "FIRST":"SECOND",
         "SECOND":"FIRST"
     }
+    confDialogRef: MdDialogRef<any>;
     constructor(
         public dialogRef: MdDialogRef<DiffDetailViewComponent>,
         public service:DiffDetailViewService,
-        public mainservice:AppService
+        public mainservice:AppService,
+        public viewContainerRef: ViewContainerRef ,
+        public dialog: MdDialog,
+        public config: MdDialogConfig
     ){}
     activeTable;
     setActiveTable(mode){
@@ -68,40 +73,48 @@ export class DiffDetailViewComponent implements OnInit {
             this.titleLabel = "Missing study in " + this._aet2;
         }
     }
+    confirm(confirmparameters){
+        this.config.viewContainerRef = this.viewContainerRef;
+        this.confDialogRef = this.dialog.open(ConfirmComponent, this.config);
+        this.confDialogRef.componentInstance.parameters = confirmparameters;
+        return this.confDialogRef.afterClosed();
+    };
     executeProcess(){
         let $this = this;
         if(this._groupName === "missing"){
             let studyInstanceUID = this.getStudyInstanceUID(this.currentStudy.primary);
             if(studyInstanceUID && studyInstanceUID != ""){
-
-                let r = confirm(`Are you sure you want to send this study to ${this._copyScp2}?`);
-                if (r == true) {
-                    this.service.exportStudyExternal(this._homeAet,this._cMoveScp1,studyInstanceUID,this._copyScp2).subscribe(
-                        (res)=>{
-                            console.log("res",res);
-                            let msg = `Process successfully accomplished!<br> - Completed:${res.completed}<br> - Failed:${res.failed}<br> - Warnings:${res.warning}`;
-                            $this.mainservice.setMessage({
-                                'title': 'Info',
-                                'text': msg,
-                                'status': 'info'
-                            });
-                            if($this._studies.length === 1){
-                                _.remove($this._studies, function(n,i){return i == $this._index});
-                                $this.dialogRef.close('last');
-                            }else{
-                                _.remove($this._studies, function(n,i){return i == $this._index});
-                                $this.prepareStudyWithIndex($this._index);
+                $this.confirm({
+                    content: `Are you sure you want to send this study to ${this._copyScp2}?`
+                }).subscribe(result => {
+                    if (result) {
+                        $this.service.exportStudyExternal(this._homeAet,this._cMoveScp1,studyInstanceUID,this._copyScp2).subscribe(
+                            (res)=>{
+                                console.log("res",res);
+                                let msg = `Process successfully accomplished!<br> - Completed:${res.completed}<br> - Failed:${res.failed}<br> - Warnings:${res.warning}`;
+                                $this.mainservice.setMessage({
+                                    'title': 'Info',
+                                    'text': msg,
+                                    'status': 'info'
+                                });
+                                if($this._studies.length === 1){
+                                    _.remove($this._studies, function(n,i){return i == $this._index});
+                                    $this.dialogRef.close('last');
+                                }else{
+                                    _.remove($this._studies, function(n,i){return i == $this._index});
+                                    $this.prepareStudyWithIndex($this._index);
+                                }
+                            },
+                            (err)=>{
+                                $this.mainservice.setMessage({
+                                    'title': 'Error ' + err.status,
+                                    'text': err.statusText,
+                                    'status': 'error'
+                                });
                             }
-                        },
-                        (err)=>{
-                            $this.mainservice.setMessage({
-                                'title': 'Error ' + err.status,
-                                'text': err.statusText,
-                                'status': 'error'
-                            });
-                        }
-                    );
-                }
+                        );
+                    }
+                });
             }else{
                 alert("StudyInstanceUID is empty");
             }
