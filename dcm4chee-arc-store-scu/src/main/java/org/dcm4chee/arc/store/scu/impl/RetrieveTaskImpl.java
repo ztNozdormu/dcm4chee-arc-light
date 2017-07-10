@@ -130,7 +130,7 @@ final class RetrieveTaskImpl implements RetrieveTask {
             releaseStoreAssociation();
             waitForPendingCMoveForward();
             waitForPendingCStoreForward();
-            updateFailedSOPInstanceUIDList();
+            updateCompleteness();
             ctx.stopWritePendingRSP();
             if (rqas != null) {
                 writeFinalRSP();
@@ -263,9 +263,9 @@ final class RetrieveTaskImpl implements RetrieveTask {
             ctx.getRetrieveService().waitForPendingCStoreForward(ctx);
     }
 
-    private void updateFailedSOPInstanceUIDList() {
+    private void updateCompleteness() {
         if (ctx.getFallbackAssociation() != null)
-            ctx.getRetrieveService().updateFailedSOPInstanceUIDList(ctx);
+            ctx.getRetrieveService().updateCompleteness(ctx);
     }
 
     private void removeOutstandingRSP(InstanceLocations inst) {
