@@ -17,7 +17,7 @@
  *
  * The Initial Developer of the Original Code is
  * J4Care.
- * Portions created by the Initial Developer are Copyright (C) 2015
+ * Portions created by the Initial Developer are Copyright (C) 2015-2017
  * the Initial Developer. All Rights Reserved.
  *
  * Contributor(s):
@@ -43,7 +43,6 @@ package org.dcm4chee.arc.wado;
 import org.dcm4che3.data.*;
 import org.dcm4che3.imageio.plugins.dcm.DicomImageReadParam;
 import org.dcm4che3.io.DicomInputStream;
-import org.dcm4che3.io.SAXTransformer;
 import org.dcm4che3.io.TemplatesCache;
 import org.dcm4che3.net.ApplicationEntity;
 import org.dcm4che3.net.Device;
@@ -51,6 +50,8 @@ import org.dcm4che3.util.StringUtils;
 import org.dcm4che3.ws.rs.MediaTypes;
 import org.dcm4chee.arc.conf.ArchiveAEExtension;
 import org.dcm4chee.arc.retrieve.*;
+import org.dcm4chee.arc.qmgt.HttpServletRequestInfo;
+import org.dcm4chee.arc.store.InstanceLocations;
 import org.dcm4chee.arc.validation.constraints.*;
 import org.jboss.resteasy.spi.ResteasyProviderFactory;
 import org.slf4j.Logger;
@@ -71,9 +72,10 @@ import javax.ws.rs.container.CompletionCallback;
 import javax.ws.rs.container.Suspended;
 import javax.ws.rs.core.*;
 import javax.xml.transform.Templates;
-import javax.xml.transform.Transformer;
 import java.awt.*;
 import java.io.IOException;
+import java.io.PrintWriter;
+import java.io.StringWriter;
 import java.util.*;
 import java.util.List;
 
@@ -194,7 +196,7 @@ public class WadoURI {
         // org.jboss.resteasy.spi.LoggableFailure: Unable to find contextual data of type: javax.servlet.http.HttpServletRequest
         // s. https://issues.jboss.org/browse/RESTEASY-903
         request = ResteasyProviderFactory.getContextData(HttpServletRequest.class);
-        LOG.info("Process GET {} from {}@{}", this, request.getRemoteUser(), request.getRemoteHost());
+        LOG.info("Process GET {} from {}@{}", request.getRequestURI(), request.getRemoteUser(), request.getRemoteHost());
         try {
             checkAET();
             final RetrieveContext ctx = service.newRetrieveContextWADO(HttpServletRequestInfo.valueOf(request), aet, studyUID, seriesUID, objectUID);
@@ -207,7 +209,7 @@ public class WadoURI {
 
             Date lastModified = service.getLastModified(ctx);
             if (lastModified == null)
-                throw new WebApplicationException(Response.Status.NOT_FOUND);
+                throw new WebApplicationException(errResponse("Last Modified date is null.", Response.Status.NOT_FOUND));
             Response.ResponseBuilder respBuilder = evaluatePreConditions(lastModified);
 
             if (respBuilder == null)
@@ -221,7 +223,7 @@ public class WadoURI {
 
     private void buildResponse(@Suspended AsyncResponse ar, final RetrieveContext ctx, Date lastModified) throws IOException {
         if (!service.calculateMatches(ctx))
-            throw new WebApplicationException(Response.Status.NOT_FOUND);
+            throw new WebApplicationException(errResponse("No matches found.", Response.Status.NOT_FOUND));
 
         List<InstanceLocations> matches = ctx.getMatches();
         int numMatches = matches.size();
@@ -235,7 +237,7 @@ public class WadoURI {
         ObjectType objectType = ObjectType.objectTypeOf(ctx, inst, frameNumber);
         MediaType mimeType = selectMimeType(objectType);
         if (mimeType == null)
-            throw new WebApplicationException(Response.Status.NOT_ACCEPTABLE);
+            throw new WebApplicationException(errResponse("Mime type is null.", Response.Status.NOT_ACCEPTABLE));
 
         StreamingOutput entity;
         if (mimeType.isCompatible(MediaTypes.APPLICATION_DICOM_TYPE)) {
@@ -244,12 +246,9 @@ public class WadoURI {
         } else {
             entity = entityOf(ctx, inst, objectType, mimeType);
         }
-        ar.register(new CompletionCallback() {
-            @Override
-            public void onComplete(Throwable throwable) {
+        ar.register((CompletionCallback) throwable -> {
                 ctx.setException(throwable);
                 retrieveWado.fire(ctx);
-            }
         });
         ar.resume(Response.ok(entity, mimeType).lastModified(lastModified).tag(String.valueOf(lastModified.hashCode())).build());
     }
@@ -261,9 +260,9 @@ public class WadoURI {
     private void checkAET() {
         ApplicationEntity ae = device.getApplicationEntity(aet, true);
         if (ae == null || !ae.isInstalled())
-            throw new WebApplicationException(
+            throw new WebApplicationException(errResponse(
                     "No such Application Entity: " + aet,
-                    Response.Status.SERVICE_UNAVAILABLE);
+                    Response.Status.NOT_FOUND));
     }
 
     private StreamingOutput entityOf(RetrieveContext ctx, InstanceLocations inst, ObjectType objectType,
@@ -278,6 +277,8 @@ public class WadoURI {
             case UncompressedMultiFrameImage:
                 return renderImage(ctx, inst, mimeType, imageIndex);
             case EncapsulatedCDA:
+                return decapsulateCDA(service.openDicomInputStream(ctx, inst),
+                        ctx.getArchiveAEExtension().wadoCDA2HtmlTemplateURI());
             case EncapsulatedPDF:
                 return decapsulateDocument(service.openDicomInputStream(ctx, inst));
             case MPEG2Video:
@@ -306,9 +307,10 @@ public class WadoURI {
 
         ImageWriter imageWriter = getImageWriter(mimeType);
         ImageWriteParam writeParam = imageWriter.getDefaultWriteParam();
-        if (imageQuality != null)
+        if (imageQuality != null) {
+            writeParam.setCompressionMode(ImageWriteParam.MODE_EXPLICIT);
             writeParam.setCompressionQuality(parseInt(imageQuality) / 100.f);
-
+        }
         ImageReader imageReader = getDicomImageReader();
         return new RenderedImageOutput(service.openDicomInputStream(ctx, inst),
                 imageReader, readParam, parseInt(rows), parseInt(columns), imageIndex,
@@ -321,9 +323,9 @@ public class WadoURI {
 
         int n = Integer.parseInt(frameNumber);
         if (n > attrs.getInt(Tag.NumberOfFrames, 1))
-                throw new WebApplicationException("frameNumber=" + frameNumber
-                                + " exceeds number of frames of specified resource",
-                        Response.Status.NOT_FOUND);
+                throw new WebApplicationException(errResponse(
+                        "frameNumber=" + frameNumber + " exceeds number of frames of specified resource",
+                        Response.Status.NOT_FOUND));
         return n;
     }
 
@@ -338,12 +340,10 @@ public class WadoURI {
             attrs = dis.readDataset(-1, -1);
         }
         service.getAttributesCoercion(ctx, inst).coerce(attrs, null);
-        return new DicomXSLTOutput(attrs, getTemplate(ctx, mimeType), new SAXTransformer.SetupTransformer() {
-            @Override
-            public void setup(Transformer transformer) {
-                transformer.setParameter("wadoURL", request.getRequestURL().toString());
-            }
-        });
+        return new DicomXSLTOutput(
+                attrs,
+                getTemplate(ctx, mimeType),
+                transformer -> transformer.setParameter("wadoURL", request.getRequestURL().toString()));
     }
 
     private Templates getTemplate(RetrieveContext ctx, MediaType mimeType) {
@@ -355,7 +355,7 @@ public class WadoURI {
         try {
             return TemplatesCache.getDefault().get(uri);
         } catch (Exception e) {
-            throw new WebApplicationException(e);
+            throw new WebApplicationException(errResponseAsTextPlain(e));
         }
     }
 
@@ -369,12 +369,22 @@ public class WadoURI {
         return new StreamCopyOutput(dis, dis.length());
     }
 
+    private StreamingOutput decapsulateCDA(DicomInputStream dis, String templateURI) throws IOException {
+        seekEncapsulatedDocument(dis);
+        return templateURI != null
+                ? new CDAOutput(dis, dis.length(), templateURI)
+                : new StreamCopyOutput(dis, dis.length());
+    }
+
     private StreamingOutput decapsulateDocument(DicomInputStream dis) throws IOException {
+        seekEncapsulatedDocument(dis);
+        return new StreamCopyOutput(dis, dis.length());
+    }
+
+    private void seekEncapsulatedDocument(DicomInputStream dis) throws IOException {
         dis.readDataset(-1, Tag.EncapsulatedDocument);
         if (dis.tag() != Tag.EncapsulatedDocument)
             throw new IOException("No encapsulated document in requested object");
-
-        return new StreamCopyOutput(dis, dis.length());
     }
 
     private static ImageReader getDicomImageReader() {
@@ -385,16 +395,15 @@ public class WadoURI {
             if (!readers.hasNext())
                 throw new RuntimeException("DICOM Image Reader not registered");
         }
-        ImageReader reader = readers.next();
-        return reader;
+        return readers.next();
     }
 
     private static ImageWriter getImageWriter(MediaType mimeType) {
         String formatName = formatNameOf(mimeType);
         Iterator<ImageWriter> writers = ImageIO.getImageWritersByFormatName(formatName);
-        if (!writers.hasNext()) {
+        if (!writers.hasNext())
             throw new RuntimeException(formatName + " Image Writer not registered");
-        }
+
         return writers.next();
     }
 
@@ -407,12 +416,13 @@ public class WadoURI {
         RetrieveContext ctx = service.newRetrieveContextWADO(
                 HttpServletRequestInfo.valueOf(request), aet, studyUID, presentationSeriesUID, presentationUID);
         if (!service.calculateMatches(ctx))
-            throw new WebApplicationException(
-                    "Specified Presentation State does not exist", Response.Status.NOT_FOUND);
+            throw new WebApplicationException(errResponse(
+                    "Specified Presentation State does not exist", Response.Status.NOT_FOUND));
 
         Collection<InstanceLocations> matches = ctx.getMatches();
         if (matches.size() > 1)
-            throw new WebApplicationException("More than one matching Presentation State found");
+            throw new WebApplicationException(errResponse(
+                    "More than one matching Presentation State found", Response.Status.BAD_REQUEST));
 
         InstanceLocations inst = matches.iterator().next();
         try (DicomInputStream dis = service.openDicomInputStream(ctx, inst)) {
@@ -434,8 +444,6 @@ public class WadoURI {
     private Collection<String> tsuids() {
         if (transferSyntax == null)
             return Collections.singleton(UID.ExplicitVRLittleEndian);
-        if (transferSyntax.equals("*"))
-            return Collections.emptyList();
         return Arrays.asList(StringUtils.split(transferSyntax, ','));
     }
 
@@ -476,5 +484,16 @@ public class WadoURI {
                     (int) Math.ceil((right - left) * columns),
                     (int) Math.ceil((bottom - top) * rows));
         }
+    }
+
+    private Response errResponse(String errorMessage, Response.Status status) {
+        return Response.status(status).entity("{\"errorMessage\":\"" + errorMessage + "\"}").build();
+    }
+
+    private Response errResponseAsTextPlain(Exception e) {
+        StringWriter sw = new StringWriter();
+        e.printStackTrace(new PrintWriter(sw));
+        String exceptionAsString = sw.toString();
+        return Response.status(Response.Status.INTERNAL_SERVER_ERROR).entity(exceptionAsString).type("text/plain").build();
     }
 }

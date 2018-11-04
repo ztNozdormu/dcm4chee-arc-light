@@ -43,9 +43,13 @@ package org.dcm4chee.arc.audit;
 import org.dcm4che3.audit.AuditMessages;
 import org.dcm4che3.net.Device;
 import org.dcm4che3.net.audit.AuditLoggerDeviceExtension;
-import org.dcm4chee.arc.ArchiveServiceEvent;
+import org.dcm4chee.arc.AssociationEvent;
+import org.dcm4chee.arc.HL7ConnectionEvent;
+import org.dcm4chee.arc.event.ArchiveServiceEvent;
 import org.dcm4chee.arc.ConnectionEvent;
 import org.dcm4chee.arc.delete.StudyDeleteContext;
+import org.dcm4chee.arc.event.BulkQueueMessageEvent;
+import org.dcm4chee.arc.event.QueueMessageEvent;
 import org.dcm4chee.arc.event.SoftwareConfiguration;
 import org.dcm4chee.arc.retrieve.ExternalRetrieveContext;
 import org.dcm4chee.arc.event.RejectionNoteSent;
@@ -55,7 +59,7 @@ import org.dcm4chee.arc.procedure.ProcedureContext;
 import org.dcm4chee.arc.query.QueryContext;
 import org.dcm4chee.arc.retrieve.RetrieveContext;
 import org.dcm4chee.arc.retrieve.RetrieveWADO;
-import org.dcm4chee.arc.stgcmt.StgCmtEventInfo;
+import org.dcm4chee.arc.stgcmt.StgCmtContext;
 import org.dcm4chee.arc.store.StoreContext;
 import org.dcm4chee.arc.retrieve.RetrieveEnd;
 import org.dcm4chee.arc.retrieve.RetrieveStart;
@@ -86,7 +90,7 @@ public class AuditTriggerObserver {
 
     public void onStore(@Observes StoreContext ctx) {
         if (deviceHasAuditLoggers())
-            auditService.spoolInstanceStored(ctx);
+            auditService.spoolStoreEvent(ctx);
     }
 
     public void onQuery(@Observes QueryContext ctx) {
@@ -96,12 +100,12 @@ public class AuditTriggerObserver {
 
     public void onRetrieveStart(@Observes @RetrieveStart RetrieveContext ctx) {
         if (deviceHasAuditLoggers())
-            auditService.spoolRetrieve(AuditServiceUtils.EventType.RTRV_BEGIN, ctx);
+            auditService.spoolRetrieve(AuditUtils.EventType.RTRV_BEGIN, ctx);
     }
 
     public void onRetrieveEnd(@Observes @RetrieveEnd RetrieveContext ctx) {
         if (deviceHasAuditLoggers())
-            auditService.spoolRetrieve(AuditServiceUtils.EventType.RTRV___TRF, ctx);
+            auditService.spoolRetrieve(AuditUtils.EventType.RTRV___TRF, ctx);
     }
 
     public void onRetrieveWADO(@Observes @RetrieveWADO RetrieveContext ctx) {
@@ -123,12 +127,12 @@ public class AuditTriggerObserver {
         if (deviceHasAuditLoggers())
             switch (event.getType()) {
                 case ESTABLISHED:
-                case FAILED:
                 case REJECTED_BLACKLISTED:
                 case ACCEPTED:
                     break;
+                case FAILED:
                 case REJECTED:
-                    auditService.spoolConnectionRejected(event);
+                    auditService.spoolConnectionFailure(event);
                     break;
             }
     }
@@ -151,9 +155,9 @@ public class AuditTriggerObserver {
             auditService.spoolProcedureRecord(ctx);
     }
 
-    public void onStorageCommit(@Observes StgCmtEventInfo stgCmtEventInfo) {
+    public void onStorageCommit(@Observes StgCmtContext stgCmtContext) {
         if (deviceHasAuditLoggers())
-            auditService.spoolStgCmt(stgCmtEventInfo);
+            auditService.spoolStgCmt(stgCmtContext);
     }
 
     public void onRejectionNoteSent(@Observes RejectionNoteSent rejectionNoteSent) {
@@ -169,6 +173,35 @@ public class AuditTriggerObserver {
     public void onSoftwareConfiguration(@Observes SoftwareConfiguration softwareConfiguration) {
         if (deviceHasAuditLoggers())
             auditService.spoolSoftwareConfiguration(softwareConfiguration);
+    }
+
+    public void onQueueMessageEvent(@Observes QueueMessageEvent queueMsgEvent) {
+        if (deviceHasAuditLoggers())
+            auditService.spoolQueueMessageEvent(queueMsgEvent);
+    }
+
+    public void onBulkQueueMessageEvent(@Observes BulkQueueMessageEvent bulkQueueMsgEvent) {
+        if (deviceHasAuditLoggers())
+            auditService.spoolBulkQueueMessageEvent(bulkQueueMsgEvent);
+    }
+
+    public void onHL7Message(@Observes HL7ConnectionEvent hl7ConnectionEvent) {
+        if (deviceHasAuditLoggers())
+            auditService.spoolHL7Message(hl7ConnectionEvent);
+    }
+
+    public void onAssociation(@Observes AssociationEvent associationEvent) {
+        if (deviceHasAuditLoggers()) {
+            switch (associationEvent.getType()) {
+                case ACCEPTED:
+                case ESTABLISHED:
+                    break;
+                case FAILED:
+                case REJECTED:
+                    auditService.spoolAssociationFailure(associationEvent);
+                    break;
+            }
+        }
     }
 
     private boolean deviceHasAuditLoggers() {

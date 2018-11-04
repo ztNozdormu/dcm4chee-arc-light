@@ -1,22 +1,16 @@
 import {Component} from '@angular/core';
-import {MdDialogRef} from '@angular/material';
+import {MatDialogRef} from '@angular/material';
 import * as _ from 'lodash';
 
 @Component({
     selector: 'app-confirm',
-    templateUrl: './confirm.component.html',
-    styles: [`
-        .vex-theme-os.confirm{
-            width:500px;
-            
-        }
-    `]
+    templateUrl: './confirm.component.html'
 })
 export class ConfirmComponent{
     _ = _;
 
     private _parameters;
-    constructor(public dialogRef: MdDialogRef<ConfirmComponent>) {
+    constructor(public dialogRef: MatDialogRef<ConfirmComponent>) {
     }
     get parameters() {
         return this._parameters;

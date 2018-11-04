@@ -35,7 +35,10 @@ public class JsonArchivHL7Configuration implements JsonHL7ConfigurationExtension
         writer.writeNotNullOrDef("hl7ScheduledProtocolCodeInOrder", ext.getHl7ScheduledProtocolCodeInOrder(), null);
         writer.writeNotNullOrDef("hl7ScheduledStationAETInOrder", ext.getHl7ScheduledStationAETInOrder(), null);
         writer.writeNotEmpty("hl7NoPatientCreateMessageType", ext.getHl7NoPatientCreateMessageTypes());
+        writer.writeNotNull("hl7UseNullValue", ext.getHl7UseNullValue());
         JsonArchiveConfiguration.writeHL7ForwardRules(writer, ext.getHL7ForwardRules());
+        JsonArchiveConfiguration.writeHL7PrefetchRules(writer, ext.getHL7PrefetchRules());
+        JsonArchiveConfiguration.writeHL7StudyRetentionPolicies(writer, ext.getHL7StudyRetentionPolicies());
         JsonArchiveConfiguration.writeScheduledStations(writer, ext.getHL7OrderScheduledStations());
         JsonArchiveConfiguration.writeHL7OrderSPSStatus(writer, ext.getHL7OrderSPSStatuses());
         writer.writeEnd();
@@ -87,8 +90,17 @@ public class JsonArchivHL7Configuration implements JsonHL7ConfigurationExtension
                 case "hl7NoPatientCreateMessageType":
                     ext.setHl7NoPatientCreateMessageTypes(reader.stringArray());
                     break;
+                case "hl7UseNullValue":
+                    ext.setHl7UseNullValue(reader.booleanValue());
+                    break;
                 case "hl7ForwardRule":
                     JsonArchiveConfiguration.loadHL7ForwardRules(ext.getHL7ForwardRules(), reader);
+                    break;
+                case "hl7PrefetchRule":
+                    JsonArchiveConfiguration.loadHL7PrefetchRules(ext.getHL7PrefetchRules(), reader);
+                    break;
+                case "hl7StudyRetentionPolicy":
+                    JsonArchiveConfiguration.loadHL7StudyRetentionPolicy(ext.getHL7StudyRetentionPolicies(), reader);
                     break;
                 case "hl7OrderScheduledStation":
                     JsonArchiveConfiguration.loadScheduledStations(ext.getHL7OrderScheduledStations(), reader, config);

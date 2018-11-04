@@ -53,6 +53,7 @@
             <module name="org.dcm4che.conf.ldap-imageio" export="TRUE"/>
             <module name="org.dcm4che.core" export="TRUE"/>
             <module name="org.dcm4che.dcmr" export="TRUE"/>
+            <module name="org.dcm4che.deident" export="TRUE"/>
             <module name="org.dcm4che.dict-arc" export="TRUE"/>
             <module name="org.dcm4che.json" export="TRUE"/>
             <module name="org.dcm4che.mime" export="TRUE"/>
@@ -64,6 +65,7 @@
             <module name="org.dcm4che.imageio" export="TRUE" services="export"/>
             <module name="org.dcm4che.image" export="TRUE"/>
             <module name="org.dcm4che.soundex" export="TRUE"/>
+            <module name="org.dcm4che.xdsi" export="TRUE"/>
             <!-- apache-cxf modules -->
             <module name="org.apache.cxf.impl" export="TRUE"/>
             <!-- querydsl modules -->
@@ -74,6 +76,7 @@
             <!-- keycloak modules -->
             <module name="org.keycloak.keycloak-core" export="TRUE" services="export"/>
             <module name="org.keycloak.keycloak-adapter-core" export="TRUE" services="export"/>
+            <module name="org.keycloak.admin-client" export="TRUE"/>
             <!-- emc-ecs modules -->
             <module name="com.emc.ecs" export="TRUE"/>
         </dependencies>

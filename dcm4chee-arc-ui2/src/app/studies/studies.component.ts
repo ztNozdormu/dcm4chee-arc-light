@@ -1,14 +1,13 @@
-import {Component, ViewContainerRef, OnDestroy, trigger, transition, style, animate} from '@angular/core';
+import {Component, ViewContainerRef, OnDestroy, trigger, transition, style, animate, OnInit} from '@angular/core';
 import {Http, Headers, RequestOptionsArgs} from '@angular/http';
 import {StudiesService} from './studies.service';
 import {AppService} from '../app.service';
 import {User} from '../models/user';
 import {Globalvar} from '../constants/globalvar';
-import {SlimLoadingBarService} from 'ng2-slim-loading-bar';
 import * as _ from 'lodash';
 import {MessagingComponent} from '../widgets/messaging/messaging.component';
 import {SelectItem} from 'primeng/components/common/api';
-import {MdDialogConfig, MdDialog, MdDialogRef} from '@angular/material';
+import {MatDialogConfig, MatDialog, MatDialogRef} from '@angular/material';
 import {EditPatientComponent} from '../widgets/dialogs/edit-patient/edit-patient.component';
 import {EditMwlComponent} from '../widgets/dialogs/edit-mwl/edit-mwl.component';
 import {CopyMoveObjectsComponent} from '../widgets/dialogs/copy-move-objects/copy-move-objects.component';
@@ -26,26 +25,20 @@ import {FormatAttributeValuePipe} from "../pipes/format-attribute-value.pipe";
 import {FormatDAPipe} from "../pipes/format-da.pipe";
 import {FormatTMPipe} from "../pipes/format-tm.pipe";
 import {HttpErrorHandler} from "../helpers/http-error-handler";
+import {J4careHttpService} from "../helpers/j4care-http.service";
+import {j4care} from "../helpers/j4care.service";
+import {ViewerComponent} from "../widgets/dialogs/viewer/viewer.component";
+import {PermissionService} from "../helpers/permissions/permission.service";
+import {LoadingBarModule, LoadingBarService} from "@ngx-loading-bar/core";
+import {ActivatedRoute} from "@angular/router";
 declare var Keycloak: any;
+declare var $: any;
 
 @Component({
     selector: 'app-studies',
-    templateUrl: './studies.component.html',
-    animations: [
-        trigger('enterAnimation', [
-                transition(':enter', [
-                    style({transform: 'translateY(-50%)', opacity: 0}),
-                    animate('500ms', style({transform: 'translateY(0)', opacity: 1}))
-                ]),
-                transition(':leave', [
-                    style({transform: 'translateY(0)', opacity: 1}),
-                    animate('500ms', style({transform: 'translateY(-50%)', opacity: 0}))
-                ])
-            ]
-        )
-    ],
+    templateUrl: './studies.component.html'
 })
-export class StudiesComponent implements OnDestroy{
+export class StudiesComponent implements OnDestroy,OnInit{
 
     // @ViewChildren(MessagingComponent) msg;
 
@@ -65,13 +58,18 @@ export class StudiesComponent implements OnDestroy{
     trashaktive = false;
     clipboard: any = {};
     showCheckboxes = false;
-    disabled = {};
+    disabled = {
+        IssuerOfPatientID:false,
+        LocalNamespaceEntityID:false
+    };
     patientmode = false;
+    withoutstudies = false;
     ExternalRetrieveAETchecked = false;
     StudyReceiveDateTime = {
         from: undefined,
         to: undefined
     };
+    diffFilter = false;
     externalInternalAetMode = "internal";
     filter = {
         orderby: '-StudyDate,-StudyTime',
@@ -80,21 +78,36 @@ export class StudiesComponent implements OnDestroy{
         'ScheduledProcedureStepSequence.ScheduledProcedureStepStatus': '',
         returnempty: false,
         PatientSex: '',
-        PatientBirthDate: ''
+        PatientName:'',
+        PatientBirthDate: '',
+        PatientID:'',
+        StudyDate:'',
+        IssuerOfPatientID:'',
+        fuzzymatching:'',
+        StudyTime:'',
+        SplitStudyDateRange:'',
+        compressionfailed:false
     };
+    diffQueue = false;
+    missing = true;
+    different = true;
+    diffAttributeSet;
+    batchID;
+    comparefield;
     queryMode = 'queryStudies';
-    ScheduledProcedureStepSequence: any = {
-        ScheduledProcedureStepStartTime: {
-            from: '',
-            to: ''
-        },
-        ScheduledProcedureStepStartDate: {
-            from: this.service.getTodayDate(),
-            to: this.service.getTodayDate(),
-            toObject: new Date(),
-            fromObject: new Date()
-        }
-    };
+    moreDiffs;
+    // ScheduledProcedureStepSequence: any = {
+    //     ScheduledProcedureStepStartTime: {
+    //         from: '',
+    //         to: ''
+    //     },
+    //     ScheduledProcedureStepStartDate: {
+    //         from: this.service.getTodayDate(),
+    //         to: this.service.getTodayDate(),
+    //         toObject: new Date(),
+    //         fromObject: new Date()
+    //     }
+    // };
     moreMWL;
     morePatients;
     moreStudies;
@@ -105,6 +118,7 @@ export class StudiesComponent implements OnDestroy{
     clipboardHasScrollbar = false;
     target;
     allAes;
+    diffModeShow = false;
     // birthDate;
     clipBoardNotEmpty(){
         if (this.clipboard && ((_.size(this.clipboard.otherObjects) > 0) || (_.size(this.clipboard.patients) > 0))){
@@ -117,6 +131,8 @@ export class StudiesComponent implements OnDestroy{
     jsonHeader = new Headers({ 'Content-Type': 'application/json' });
     aet1;
     aet2;
+    count;
+    size;
     studyDateChanged(){
         console.log('on studydate changed', this.studyDate);
         if (this.studyDate.from === '' && this.studyDate.to === ''){
@@ -130,7 +146,9 @@ export class StudiesComponent implements OnDestroy{
         this.studyDate.toObject = null;
         this.studyDate.from = '';
         this.studyDate.to = '';
+        this.filter.StudyDate = "";
     }
+
     clearForm(){
         _.forEach(this.filter, (m, i) => {
             if (i != 'orderby'){
@@ -151,14 +169,14 @@ export class StudiesComponent implements OnDestroy{
         // this.birthDate = {};
         // this.birthDate.object = null;
         // this.birthDate.opened = false;
-        this.ScheduledProcedureStepSequence.ScheduledProcedureStepStartDate.fromObject = null;
+/*        this.ScheduledProcedureStepSequence.ScheduledProcedureStepStartDate.fromObject = null;
         this.ScheduledProcedureStepSequence.ScheduledProcedureStepStartDate.toObject = null;
         this.ScheduledProcedureStepSequence.ScheduledProcedureStepStartDate.from = '';
         this.ScheduledProcedureStepSequence.ScheduledProcedureStepStartDate.to = '';
         this.ScheduledProcedureStepSequence.ScheduledProcedureStepStartTime.fromObject = null;
         this.ScheduledProcedureStepSequence.ScheduledProcedureStepStartTime.toObject = null;
         this.ScheduledProcedureStepSequence.ScheduledProcedureStepStartTime.from = '';
-        this.ScheduledProcedureStepSequence.ScheduledProcedureStepStartTime.to = '';
+        this.ScheduledProcedureStepSequence.ScheduledProcedureStepStartTime.to = '';*/
     };
     options = {genders:
                         [
@@ -190,7 +208,9 @@ export class StudiesComponent implements OnDestroy{
         modus: 'patient',
         showmwls: true
     };
-    isRole: any;
+    isRole(rule){
+        return true;
+    };
     study =  {
         modus: 'study',
         selected: false
@@ -244,222 +264,301 @@ export class StudiesComponent implements OnDestroy{
     };
     pressedKey;
     selectModality(key){
-        this.filter.ModalitiesInStudy = key;
-        this.filter['ScheduledProcedureStepSequence.Modality'] = key;
+        this.filter.ModalitiesInStudy = '';
+        this.filter['ScheduledProcedureStepSequence.Modality'] = '';
+        if(this.filterMode === 'mwl')
+            this.filter['ScheduledProcedureStepSequence.Modality'] = key;
+        else
+            this.filter.ModalitiesInStudy = key;
         $('.Modality').show();
         this.showModalitySelector = false;
     };
 
-    dialogRef: MdDialogRef<any>;
+    showGetSizeLoader;
+    showGetCountLoader;
+    dialogRef: MatDialogRef<any>;
     subscription: Subscription;
-
+    taskPK;
     constructor(
-        public $http: Http,
+        public $http: J4careHttpService,
         public service: StudiesService,
         public mainservice: AppService,
-        public cfpLoadingBar: SlimLoadingBarService,
-        public messaging: MessagingComponent,
+        public cfpLoadingBar: LoadingBarService,
+        private loadingBar:LoadingBarService,
         public viewContainerRef: ViewContainerRef ,
-        public dialog: MdDialog,
-        public config: MdDialogConfig,
-        public httpErrorHandler:HttpErrorHandler
-    ) {
-        // $('.clockpicker').clockpicker()
-        //     .find('input').change(function(){
-        //     // TODO: time changed
-        //     console.log(this.value);
-        // });
-        this.showFilterWarning = true;
-        console.log('getglobal', this.mainservice.global);
+        public dialog: MatDialog,
+        public config: MatDialogConfig,
+        public httpErrorHandler:HttpErrorHandler,
+        public j4care:j4care,
+        public permissionService:PermissionService,
+        private route: ActivatedRoute
+    ) {}
+    ngOnInit(){
+        this.initCheck(10);
+    }
+    initCheck(retries){
         let $this = this;
-        let dateset = localStorage.getItem('dateset');
-        console.log('dateset', dateset);
-        if (dateset === 'no'){
-            this.clearStudyDate();
-            this.filter['ScheduledProcedureStepSequence.ScheduledProcedureStepStartDate'] = null;
-            this.ScheduledProcedureStepSequence.ScheduledProcedureStepStartDate.fromObject = null;
-            this.ScheduledProcedureStepSequence.ScheduledProcedureStepStartDate.toObject = null;
-            this.ScheduledProcedureStepSequence.ScheduledProcedureStepStartDate.from = '';
-            this.ScheduledProcedureStepSequence.ScheduledProcedureStepStartDate.to = '';
-        }
-
-        if (_.hasIn(this.mainservice.global, 'state')){
-            // $this = $this.mainservice.global.studyThis;
-            // _.merge(this,$this.mainservice.global.studyThis);
-            let selectedAet;
-            _.forEach(this.mainservice.global.state, (m, i) => {
-                if (m && i != 'aetmodel'){
-                    $this[i] = m;
-                }
-                if (i === 'aetmodel'){
-                    selectedAet = m;
-                }
-            });
-            let selectedAetIndex = _.indexOf($this.aes, selectedAet);
-            if (selectedAetIndex > -1){
-                $this.aetmodel = $this.aes[selectedAetIndex];
-            }
-        }
-        // if(_.hasIn(this.mainservice.global,"patients")){
-        //     this.patients = this.mainservice.global.patients;
-        // }
-        this.cfpLoadingBar.interval = 200;
-        this.modalities = Globalvar.MODALITIES;
-        console.log('modalities', this.modalities);
-        this.initAETs(2);
-        this.getAllAes(2);
-        this.initAttributeFilter('Patient', 1);
-        this.initExporters(2);
-        this.initRjNotes(2);
-        // this.user = this.mainservice.user;
-        if (!this.mainservice.user){
-            // console.log("in if studies ajax");
-            this.mainservice.user = this.mainservice.getUserInfo().share();
-            this.mainservice.user
-                .subscribe(
-                    (response) => {
-                        $this.user.user  = response.user;
-                        $this.mainservice.user.user = response.user;
-                        $this.user.roles = response.roles;
-                        $this.mainservice.user.roles = response.roles;
-                        $this.isRole = (role) => {
-                            if (response.user === null && response.roles.length === 0){
-                                return true;
-                            }else{
-                                if (response.roles && response.roles.indexOf(role) > -1){
-                                    return true;
-                                }else{
-                                    return false;
-                                }
-                            }
-                        };
-                    },
-                    (response) => {
-                        // $this.user = $this.user || {};
-                        console.log('get user error');
-                        $this.user.user = 'user';
-                        $this.mainservice.user.user = 'user';
-                        $this.user.roles = ['user', 'admin'];
-                        $this.mainservice.user.roles = ['user', 'admin'];
-                        $this.isRole = (role) => {
-                            if (role === 'admin'){
-                                return false;
-                            }else{
-                                return true;
-                            }
-                        };
-                    }
-                );
-
+        if(_.hasIn(this.mainservice,"global.authentication") || (_.hasIn(this.mainservice,"global.notSecure") && this.mainservice.global.notSecure)){
+            this.init();
         }else{
-            this.user = this.mainservice.user;
-            this.isRole = this.mainservice.isRole;
-            // console.log("isroletest",this.user.applyisRole("admin"));
-        }
-        this.hoverdic.forEach((m, i) => {
-            $(document.body).on('mouseover mouseleave', m, function(e){
-
-                if (e.type === 'mouseover' && $this.visibleHeaderIndex != i){
-                    $($this).addClass('hover');
-                    $(m).addClass('hover');
-                    $('.headerblock .header_block .thead').addClass('animated fadeOut');
-                    setTimeout(function(){
-                        $this.visibleHeaderIndex = i;
-                        $('.div-table .header_block .thead').removeClass('fadeOut').addClass('fadeIn');
-                    }, 200);
-                    setTimeout(function(){
-                        $('.headerblock .header_block .thead').removeClass('animated');
-                    }, 200);
-                }
-            });
-        });
-
-        console.log('thisrole=', this.isRole);
-        $(document).keydown(function(e){
-
-            $this.pressedKey = e.keyCode;
-            // Do we already know it's down?
-            if ($this.keysdown && $this.keysdown[e.keyCode]) {
-                // Ignore it
-                return;
-            }
-            console.log('$this.keysdown', this.keysdown);
-            console.log('e.keyCode', e.keyCode);
-            console.log('isrole admin=', $this.isRole('admin'));
-            // console.log("isrole admin=",this.mainservice.isRole);
-            // Remember it's down
-            let validKeys = [16, 17, 67, 77, 86, 88, 91, 93, 224];
-            if (validKeys.indexOf(e.keyCode) > -1){
-                console.log('in if ');
-                $this.keysdown[e.keyCode] = true;
-            }
-            //ctrl + c clicked
-            if ($this.keysdown && ($this.keysdown[17] === true || $this.keysdown[91] === true || $this.keysdown[93] === true || $this.keysdown[224] === true) && $this.keysdown[67] === true && $this.isRole('admin')){
-                console.log('ctrl + c');
-                $this.ctrlC();
-                $this.keysdown = {};
-            }
-            //ctrl + v clicked
-            if ($this.keysdown && ($this.keysdown[17] === true || $this.keysdown[91] === true || $this.keysdown[93] === true || $this.keysdown[224] === true) && $this.keysdown[86] === true && $this.isRole('admin')){
-                $this.ctrlV();
-                $this.keysdown = {};
-            }
-            //ctrl + m clicked
-            if ($this.keysdown && ($this.keysdown[17] === true || $this.keysdown[91] === true || $this.keysdown[93] === true || $this.keysdown[224] === true) && $this.keysdown[77] === true && $this.isRole('admin')){
-                $this.merge();
-                $this.keysdown = {};
-            }
-            //ctrl + x clicked
-            if ($this.keysdown && ($this.keysdown[17] === true || $this.keysdown[91] === true || $this.keysdown[93] === true || $this.keysdown[224] === true) && $this.keysdown[88] === true && $this.isRole('admin')){
-                console.log('ctrl + x');
-                $this.ctrlX();
-                $this.keysdown = {};
-            }
-
-        });
-        $(document).keyup(function(e){
-            console.log('keyUP', e.keyCode);
-            $this.pressedKey = null;
-            console.log('$this.keysdown', this.keysdown);
-            delete $this.keysdown[e.keyCode];
-        });
-
-        //Detect in witch column is the mouse position and select the header.
-        $(document.body).on('mouseover mouseleave', '.hover_cell', function(e){
-            let $this = this;
-            if (e.type === 'mouseover'){
-                $('.headerblock > .header_block > .thead').each((i, m) => {
-                    $(m).find('.cellhover').removeClass('cellhover');
-                    $(m).find('.th:eq(' + $($this).index() + ')').addClass('cellhover');
-                });
+            if (retries){
+                setTimeout(()=>{
+                    $this.initCheck(retries-1);
+                },20);
             }else{
-                $('.headerblock > .header_block > .thead > .tr_row > .cellhover').removeClass('cellhover');
+                this.init();
             }
-        });
-
-        this.headers.forEach((m, i) => {
-            this.items[i] = this.items[i] || {};
-            $(window).scroll(() => {
-                if ($(m).length){
-                    $this.items[i].itemOffset = $(m).offset().top;
-                    $this.items[i].scrollTop = $(window).scrollTop();
-                    if ($this.items[i].scrollTop >= $this.items[i].itemOffset){
-                        $this.items[i].itemOffsetOld = $this.items[i].itemOffsetOld || $(m).offset().top;
-                        $('.headerblock').addClass('fixed');
-                    }
-                    if ($this.items[i].itemOffsetOld  && ($this.items[i].scrollTop < $this.items[i].itemOffsetOld)){
-                        $('.headerblock').removeClass('fixed');
-                    }
-                }
-            });
-        });
-
-        this.subscription = this.mainservice.createPatient$.subscribe(patient => {
-            console.log('patient in subscribe messagecomponent ', patient);
-            this.createPatient();
-        });
+        }
     }
 
+    private init(){
+        this.route.queryParams.subscribe(params => {
+            console.log("params",params);
+            this.checkDiffView(params);
+            this.showFilterWarning = true;
+            console.log('getglobal', this.mainservice.global);
+            let $this = this;
+            let dateset = localStorage.getItem('dateset');
+            console.log('dateset', dateset);
+            if (dateset === 'no'){
+                this.clearStudyDate();
+                this.filter['ScheduledProcedureStepSequence.ScheduledProcedureStepStartDate'] = null;
+    /*            this.ScheduledProcedureStepSequence.ScheduledProcedureStepStartDate.fromObject = null;
+                this.ScheduledProcedureStepSequence.ScheduledProcedureStepStartDate.toObject = null;
+                this.ScheduledProcedureStepSequence.ScheduledProcedureStepStartDate.from = '';
+                this.ScheduledProcedureStepSequence.ScheduledProcedureStepStartDate.to = '';*/
+            }
+
+            if (_.hasIn(this.mainservice.global, 'state')){
+                // $this = $this.mainservice.global.studyThis;
+                // _.merge(this,$this.mainservice.global.studyThis);
+                let selectedAet;
+                _.forEach(this.mainservice.global.state, (m, i) => {
+                    if (m && i != 'aetmodel'){
+                        $this[i] = m;
+                    }
+                    if (i === 'aetmodel'){
+                        selectedAet = m;
+                    }
+                });
+                let selectedAetIndex = _.indexOf($this.aes, selectedAet);
+                if (selectedAetIndex > -1){
+                    $this.aetmodel = $this.aes[selectedAetIndex];
+                }
+            }
+            // if(_.hasIn(this.mainservice.global,"patients")){
+            //     this.patients = this.mainservice.global.patients;
+            // }
+            this.modalities = Globalvar.MODALITIES;
+
+            this.initAETs(2,);
+            this.getAllAes(2);
+            this.initAttributeFilter('Patient', 1);
+            this.initExporters(2);
+            this.initRjNotes(2);
+            this.getDiffAttributeSet();
+            // this.user = this.mainservice.user;
+    /*        if (!this.mainservice.user){
+                // console.log("in if studies ajax");
+                this.mainservice.user = this.mainservice.getUserInfo().share();
+                this.mainservice.user
+                    .subscribe(
+                        (response) => {
+                            $this.user.user  = response.user;
+                            $this.mainservice.user.user = response.user;
+                            $this.user.roles = response.roles;
+                            $this.mainservice.user.roles = response.roles;
+                            $this.isRole = (role) => {
+                                if (response.user === null && response.roles.length === 0){
+                                    return true;
+                                }else{
+                                    if (response.roles && response.roles.indexOf(role) > -1){
+                                        return true;
+                                    }else{
+                                        return false;
+                                    }
+                                }
+                            };
+                        },
+                        (response) => {
+                            // $this.user = $this.user || {};
+                            $this.user.user = 'user';
+                            $this.mainservice.user.user = 'user';
+                            $this.user.roles = ['user', 'admin'];
+                            $this.mainservice.user.roles = ['user', 'admin'];
+                            $this.isRole = (role) => {
+                                if (role === 'admin'){
+                                    return false;
+                                }else{
+                                    return true;
+                                }
+                            };
+                        }
+                    );
+
+            }else{
+                this.user = this.mainservice.user;
+                this.isRole = this.mainservice.isRole;
+                // console.log("isroletest",this.user.applyisRole("admin"));
+            }*/
+            this.hoverdic.forEach((m, i) => {
+                $(document.body).on('mouseover mouseleave', m, function(e){
+                    if (e.type === 'mouseover' && $this.visibleHeaderIndex != i){
+                        $($this).addClass('hover');
+                        $(m).addClass('hover');
+                        $('.headerblock .header_block .thead').addClass('animated fadeOut');
+                        setTimeout(function(){
+                            $this.visibleHeaderIndex = i;
+                            $('.div-table .header_block .thead').removeClass('fadeOut').addClass('fadeIn');
+                        }, 200);
+                        setTimeout(function(){
+                            $('.headerblock .header_block .thead').removeClass('animated');
+                        }, 200);
+                    }
+                });
+            });
+            $(document).keydown(function(e){
+                $this.pressedKey = e.keyCode;
+                if ($this.keysdown && $this.keysdown[e.keyCode]) {
+                    // Ignore it
+                    return;
+                }
+                console.log('$this.keysdown', this.keysdown);
+                console.log('e.keyCode', e.keyCode);
+                // console.log('isrole admin=', $this.isRole('admin'));
+                // console.log("isrole admin=",this.mainservice.isRole);
+                // Remember it's down
+                let validKeys = [16, 17, 67, 77, 86, 88, 91, 93, 224];
+                if (validKeys.indexOf(e.keyCode) > -1){
+                    console.log('in if ');
+                    $this.keysdown[e.keyCode] = true;
+                }
+                //ctrl + c clicked
+                if ($this.keysdown && ($this.keysdown[17] === true || $this.keysdown[91] === true || $this.keysdown[93] === true || $this.keysdown[224] === true) && $this.keysdown[67] === true && $this.isRole('admin')){
+                    console.log('ctrl + c');
+                    $this.ctrlC();
+                    $this.keysdown = {};
+                }
+                //ctrl + v clicked
+                if ($this.keysdown && ($this.keysdown[17] === true || $this.keysdown[91] === true || $this.keysdown[93] === true || $this.keysdown[224] === true) && $this.keysdown[86] === true && $this.isRole('admin')){
+                    $this.ctrlV();
+                    $this.keysdown = {};
+                }
+                //ctrl + m clicked
+                if ($this.keysdown && ($this.keysdown[17] === true || $this.keysdown[91] === true || $this.keysdown[93] === true || $this.keysdown[224] === true) && $this.keysdown[77] === true && $this.isRole('admin')){
+                    $this.merge();
+                    $this.keysdown = {};
+                }
+                //ctrl + x clicked
+                if ($this.keysdown && ($this.keysdown[17] === true || $this.keysdown[91] === true || $this.keysdown[93] === true || $this.keysdown[224] === true) && $this.keysdown[88] === true && $this.isRole('admin')){
+                    console.log('ctrl + x');
+                    $this.ctrlX();
+                    $this.keysdown = {};
+                }
+
+            });
+            $(document).keyup(function(e){
+                console.log('keyUP', e.keyCode);
+                $this.pressedKey = null;
+                console.log('$this.keysdown', this.keysdown);
+                delete $this.keysdown[e.keyCode];
+            });
+
+            //Detect in witch column is the mouse position and select the header.
+            $(document.body).on('mouseover mouseleave', '.hover_cell', function(e){
+                let $this = this;
+                if (e.type === 'mouseover'){
+                    $('.headerblock > .header_block > .thead').each((i, m) => {
+                        $(m).find('.cellhover').removeClass('cellhover');
+                        $(m).find('.th:eq(' + $($this).index() + ')').addClass('cellhover');
+                    });
+                }else{
+                    $('.headerblock > .header_block > .thead > .tr_row > .cellhover').removeClass('cellhover');
+                }
+            });
+
+            this.headers.forEach((m, i) => {
+                this.items[i] = this.items[i] || {};
+                $(window).scroll(() => {
+                    if ($(m).length){
+                        $this.items[i].itemOffset = $(m).offset().top;
+                        $this.items[i].scrollTop = $(window).scrollTop();
+                        if ($this.items[i].scrollTop >= $this.items[i].itemOffset){
+                            $this.items[i].itemOffsetOld = $this.items[i].itemOffsetOld || $(m).offset().top;
+                            $('.headerblock').addClass('fixed');
+                        }
+                        if ($this.items[i].itemOffsetOld  && ($this.items[i].scrollTop < $this.items[i].itemOffsetOld)){
+                            $('.headerblock').removeClass('fixed');
+                        }
+                    }
+                });
+            });
+
+            this.subscription = this.mainservice.createPatient$.subscribe(patient => {
+                console.log('patient in subscribe messagecomponent ', patient);
+                this.createPatient();
+            });
+        });
+    }
+    orderByChanged(order){
+        this.setOrderByParam(order);
+        this.extendedFilter(false);
+        this.fireQueryOnChange(order)
+    }
+    setOrderByParam(order){
+        this.showoptionlist = false;
+        this.filter.orderby = order.value;
+        this.orderbytext = order.label;
+        this.filterMode = order.mode;
+    }
+    checkDiffView(params){
+        if(_.hasIn(params, "mode") && params.mode === "diff"){
+            setTimeout(()=>{
+                this.diffModeShow = true;
+                this.taskPK = params["pk"];
+                this.setOrderByParam(this.orderby.filter(orderby =>orderby.mode === "diff")[0]);
+                let filters = Object.assign({},params);
+                delete filters['mode'];
+                this.getDiffTaskResults(filters, 0);
+            },1);
+        }
+    }
+    getDiffTaskResults(params,offset?){
+        let filter = Object.assign({},params);
+        filter['offset'] = offset ? offset:0;
+        filter['limit'] = this.limit + 1;
+        let mode = 'pk';
+        this.cfpLoadingBar.start();
+        if(this.taskPK != ''){
+            filter['pk'] = this.taskPK;
+        }else{
+            mode = 'batch';
+            filter['batchID'] = this.batchID;
+        }
+        this.service.gitDiffTaskResults(filter,mode).subscribe(res=>{
+            console.log("res",res);
+            this.patients = [];
+            this.morePatients = undefined;
+            this.moreDiffs = undefined;
+            this.moreStudies = undefined;
+
+            if (_.size(res) > 0) {
+                // this.moreDiffs = res.length > this.limit;
+                this.prepareDiffData(res, offset);
+            }else{
+                this.mainservice.setMessage({
+                    'title': 'Info',
+                    'text': 'No Diff Results found!',
+                    'status': 'info'
+                });
+            }
+            this.cfpLoadingBar.complete();
+        },err=>{
+            this.patients = [];
+            this.httpErrorHandler.handleError(err);
+            this.cfpLoadingBar.complete();
+        });
+    }
     // initAETs(retries) {
     //
     //     this.$http.get("/dcm4chee-arc/aets")
@@ -478,22 +577,23 @@ export class StudiesComponent implements OnDestroy{
     // }
 
     aetModeChange(e){
-        console.log("in aetmodechange e=",e);
         if(e === "internal"){
             this.aetmodel = this.aes[0];
             this.showoptionlist = false;
             this.filter.orderby = "-StudyDate,-StudyTime";
             this.orderbytext = '<label>Study</label><span class=\"orderbydateasc\"></span>';
             this.filterMode = "study";
-
+            this.patients = [];
         }
         if(e === "external"){
+            this.patients = [];
             this.externalInternalAetModel = this.allAes[0];
             this.showoptionlist = false;
             this.filter.orderby = "";
             this.orderbytext = "Study";
             this.filterMode = "study";
         }
+        this.filter.SplitStudyDateRange = '';
     }
 
     /*
@@ -502,7 +602,10 @@ export class StudiesComponent implements OnDestroy{
     confirm(confirmparameters){
         this.scrollToDialog();
         this.config.viewContainerRef = this.viewContainerRef;
-        this.dialogRef = this.dialog.open(ConfirmComponent, this.config);
+        this.dialogRef = this.dialog.open(ConfirmComponent, {
+            height: 'auto',
+            width: '500px'
+        });
         this.dialogRef.componentInstance.parameters = confirmparameters;
 /*        this.dialogRef.afterClosed().subscribe(result => {
             if(result){
@@ -656,6 +759,14 @@ export class StudiesComponent implements OnDestroy{
             if (_.hasIn(param, 'orderby')){
                 delete param['orderby'];
             }
+            if(_.size(param) < 1){
+                return true
+            }else{
+                for(let p in param){
+                    if(param[p] == "")
+                        delete param[p];
+                }
+            }
             return (_.size(param) < 1) ? true : false;
         }else{
             return false;
@@ -674,20 +785,21 @@ export class StudiesComponent implements OnDestroy{
                 //           $this.studies = [];
                 $this.morePatients = undefined;
                 $this.moreStudies = undefined;
+                $this.count = "";
+                $this.size = "";
                 if (_.size(res) > 0) {
-                    //Add number of patient related studies manuelly hex(00201200) => dec(2101760)
                     let index = 0;
-                    while ($this.attributeFilters.Patient.dcmTag[index] && ($this.attributeFilters.Patient.dcmTag[index] < 2101760)) {
+                    let pat, study, patAttrs, tags = $this.attributeFilters.Patient.dcmTag;
+                    while (tags && (tags[index] < '00201200')) {
                         index++;
                     }
-                    $this.attributeFilters.Patient.dcmTag.splice(index, 0, 2101760);
-
-                    let pat, study, patAttrs, tags = $this.attributeFilters.Patient.dcmTag;
+                    tags.splice(index, 0, '00201200');
+                    tags.push('77770010','77771010','77771011','77771012','77771013','77771014');
                     console.log('res', res);
                     res.forEach(function (studyAttrs, index) {
                         patAttrs = {};
                         $this.extractAttrs(studyAttrs, tags, patAttrs);
-                        if (!(pat && _.isEqual(pat.attrs, patAttrs))) { //angular.equals replaced with Rx.helpers.defaultComparer
+                        if (!(pat && $this.equalsIgnoreSpecificCharacterSet(pat.attrs, patAttrs))) { //angular.equals replaced with Rx.helpers.defaultComparer
                             pat = {
                                 attrs: patAttrs,
                                 studies: [],
@@ -757,18 +869,7 @@ export class StudiesComponent implements OnDestroy{
     queryDiff(queryParameters, offset){
         let $this = this;
         if (offset < 0 || offset === undefined) offset = 0;
-        let haederCodes = [
-            "00200010",
-            "0020000D",
-            "00080020",
-            "00080030",
-            "00080090",
-            "00080050",
-            "00080061",
-            "00081030",
-            "00201206",
-            "00201208"
-        ];
+
         if(!this.aet2) {
             this.mainservice.setMessage({
                 'title': 'Warning',
@@ -783,80 +884,41 @@ export class StudiesComponent implements OnDestroy{
             queryParameters
         ).subscribe(
             (res) => {
-
                 $this.patients = [];
                 //           $this.studies = [];
                 $this.morePatients = undefined;
                 $this.moreStudies = undefined;
                 if (_.size(res) > 0) {
                     //Add number of patient related studies manuelly hex(00201200) => dec(2101760)
-                    let index = 0;
-                    while ($this.attributeFilters.Patient.dcmTag[index] && ($this.attributeFilters.Patient.dcmTag[index] < 2101760)) {
-                        index++;
-                    }
-                    $this.attributeFilters.Patient.dcmTag.splice(index, 0, 2101760);
-
-                    let pat, study, patAttrs, tags = $this.attributeFilters.Patient.dcmTag;
-                    console.log('res', res);
-                    res.forEach(function (studyAttrs, index) {
-                        patAttrs = {};
-                        $this.extractAttrs(studyAttrs, tags, patAttrs);
-                        if (!(pat && _.isEqual(pat.attrs, patAttrs))) { //angular.equals replaced with Rx.helpers.defaultComparer
-                            pat = {
-                                attrs: patAttrs,
-                                studies: [],
-                                showAttributes: false,
-                                showStudies:true
-                            };
-                            // $this.$apply(function () {
-                            $this.patients.push(pat);
-                            // });
-                        }
-                        let showBorder = false;
-                        let diffHeaders = {};
-                        _.forEach(haederCodes,(m)=>{
-                            diffHeaders[m] = $this.getDiffHeader(studyAttrs,m);
-                        });
-                        study = {
-                            patient: pat,
-                            offset: offset + index,
-                            moreSeries: false,
-                            attrs: studyAttrs,
-                            series: null,
-                            showAttributes: false,
-                            fromAllStudies: false,
-                            selected: false,
-                            showBorder:false,
-                            diffHeaders:diffHeaders
-                        };
-                        pat.studies.push(study);
-                        $this.extendedFilter(false);
-                        //                   $this.studies.push(study); //sollte weg kommen
-                    });
-                    if ($this.moreStudies = (res.length > $this.limit)) {
-                        pat.studies.pop();
-                        if (pat.studies.length === 0) {
-                            $this.patients.pop();
-                        }
-                        // this.studies.pop();
-                    }
+                    this.prepareDiffData(res, offset);
                     console.log('global set', $this.mainservice.global);
                     $this.cfpLoadingBar.complete();
 
                 } else {
-                    console.log('in else setmsg');
-                    $this.patients = [];
+                    if(queryParameters['queue']){
+                        $this.mainservice.setMessage({
+                            'title': 'Info',
+                            'text': 'Command executed successfully!',
+                            'status': 'info'
+                        });
+                    }else{
+                        if(res === null)
+                            $this.mainservice.setMessage({
+                                'title': 'Info',
+                                'text': 'No matching study found at primary C-FIND SCP',
+                                'status': 'info'
+                            });
+                        else
+                            $this.mainservice.setMessage({
+                                'title': 'Info',
+                                'text': 'No diffs found!',
+                                'status': 'info'
+                            });
+                    }
 
-                    $this.mainservice.setMessage({
-                        'title': 'Info',
-                        'text': 'No matching Studies found!',
-                        'status': 'info'
-                    });
+                    $this.patients = [];
                     $this.cfpLoadingBar.complete();
                 }
-                // setTimeout(function(){
-                //     togglePatientsHelper("hide");
-                // }, 1000);
                 $this.cfpLoadingBar.complete();
             },(err)=>{
                 $this.cfpLoadingBar.complete();
@@ -864,6 +926,70 @@ export class StudiesComponent implements OnDestroy{
             }
         );
     };
+    prepareDiffData(res, offset){
+        let haederCodes = [
+            "00200010",
+            "0020000D",
+            "00080020",
+            "00080030",
+            "00080090",
+            "00080050",
+            "00080061",
+            "00081030",
+            "00201206",
+            "00201208"
+        ];
+        let index = 0;
+        while (this.attributeFilters.Patient.dcmTag[index] && (this.attributeFilters.Patient.dcmTag[index] < '00201200')) {
+            index++;
+        }
+        this.attributeFilters.Patient.dcmTag.splice(index, 0, '00201200');
+
+        let pat, study, patAttrs, tags = this.attributeFilters.Patient.dcmTag;
+        console.log('res', res);
+        res.forEach((studyAttrs, index)=> {
+            patAttrs = {};
+            this.extractAttrs(studyAttrs, tags, patAttrs);
+            if (!(pat && this.equalsIgnoreSpecificCharacterSet(pat.attrs, patAttrs))) { //angular.equals replaced with Rx.helpers.defaultComparer
+                pat = {
+                    attrs: patAttrs,
+                    studies: [],
+                    showAttributes: false,
+                    showStudies:true
+                };
+                // this.$apply(function () {
+                this.patients.push(pat);
+                // });
+            }
+            let showBorder = false;
+            let diffHeaders = {};
+            _.forEach(haederCodes,(m)=>{
+                diffHeaders[m] = this.getDiffHeader(studyAttrs,m);
+            });
+            study = {
+                patient: pat,
+                offset: offset + index,
+                moreSeries: false,
+                attrs: studyAttrs,
+                series: null,
+                showAttributes: false,
+                fromAllStudies: false,
+                selected: false,
+                showBorder:false,
+                diffHeaders:diffHeaders
+            };
+            pat.studies.push(study);
+            this.extendedFilter(false);
+            //                   this.studies.push(study); //sollte weg kommen
+        });
+        if (this.moreStudies = (res.length > this.limit)) {
+            pat.studies.pop();
+            if (pat.studies.length === 0) {
+                this.patients.pop();
+            }
+            // this.studies.pop();
+        }
+    }
     getDiffHeader(study,code){
         let value;
         let sqValue;
@@ -985,12 +1111,26 @@ export class StudiesComponent implements OnDestroy{
         this.queryDiffs(0);
     }
     queryDiffs(offset){
-        this.queryMode = 'queryDiff';
-        this.moreMWL = undefined;
-        this.morePatients = undefined;
-        let $this = this;
-        let queryParameters = this.createQueryParams(offset, this.limit + 1, this.createStudyFilterParams());
-        this.queryDiff(queryParameters, offset);
+        if(this.diffModeShow){
+            let params = {
+/*                offset:offset,
+                limit: this.limit + 1,
+                pk:this.taskPK,
+                batchID:this.batchID*/
+            };
+            this.getDiffTaskResults(params, offset);
+        }else{
+            this.queryMode = 'queryDiff';
+            this.moreMWL = undefined;
+            this.morePatients = undefined;
+            let queryParameters = this.createQueryParams(offset, this.limit + 1, this.createStudyFilterParams());
+            queryParameters['queue'] = this.diffQueue;
+            queryParameters['missing'] = this.missing;
+            queryParameters['different'] = this.different;
+            if(this.batchID) queryParameters['batchID'] = this.batchID;
+            if(this.comparefield && this.different) queryParameters['comparefield'] = this.comparefield;
+            this.queryDiff(queryParameters, offset);
+        }
     };
     setExpiredDate(study){
         this.setExpiredDateQuery(study,false);
@@ -1088,9 +1228,12 @@ export class StudiesComponent implements OnDestroy{
     studyReceiveDateTimeChanged(e, mode){
         this.filter['StudyReceiveDateTime'] = this.filter['StudyReceiveDateTime'] || {};
         this['StudyReceiveDateTime'][mode] = e;
+        let datePipeEn = new DatePipe('us-US');
         if (this.StudyReceiveDateTime.from && this.StudyReceiveDateTime.to){
-            let datePipeEn = new DatePipe('us-US');
             this.filter['StudyReceiveDateTime'] = datePipeEn.transform(this.StudyReceiveDateTime.from, 'yyyyMMddHHmmss') + '-' + datePipeEn.transform(this.StudyReceiveDateTime.to, 'yyyyMMddHHmmss');
+        }
+        if ((this.StudyReceiveDateTime.from && !this.StudyReceiveDateTime.to) || (!this.StudyReceiveDateTime.from && this.StudyReceiveDateTime.to)){
+            this.filter['StudyReceiveDateTime'] = (this.StudyReceiveDateTime.from) ? datePipeEn.transform(this.StudyReceiveDateTime.from, 'yyyyMMddHHmmss') + '-' : '-' + datePipeEn.transform(this.StudyReceiveDateTime.to, 'yyyyMMddHHmmss');
         }
     }
     deleteRejectedInstances(){
@@ -1100,7 +1243,10 @@ export class StudiesComponent implements OnDestroy{
         let $this = this;
         this.scrollToDialog();
         this.config.viewContainerRef = this.viewContainerRef;
-        this.dialogRef = this.dialog.open(DeleteRejectedInstancesComponent, this.config);
+        this.dialogRef = this.dialog.open(DeleteRejectedInstancesComponent, {
+            height: 'auto',
+            width: '500px'
+        });
         this.dialogRef.componentInstance.rjnotes = this.rjnotes;
         this.dialogRef.componentInstance.results = result;
         this.dialogRef.afterClosed().subscribe(re => {
@@ -1522,6 +1668,7 @@ export class StudiesComponent implements OnDestroy{
             }
         }, 50);
     }
+
     getHl7ApplicationNameFormAETtitle(aet){
         for(let i = 0; i < this.allAes.length; i++){
             if(aet === this.allAes[i].dicomAETitle){
@@ -1534,7 +1681,7 @@ export class StudiesComponent implements OnDestroy{
         this.config.viewContainerRef = this.viewContainerRef;
         let oldPatientID;
         this.lastPressedCode = 0;
-
+        let modifyPatientService;
         if (mode === 'edit'){
             _.forEach(patient.attrs, function(value, index) {
                 let checkValue = '';
@@ -1551,8 +1698,8 @@ export class StudiesComponent implements OnDestroy{
             oldPatientID = this.service.getPatientId(patient.attrs);
         }
         let $this = this;
-        this.service.getPatientIod().subscribe((res) => {
-            $this.service.patientIod = res;
+        this.service.getPatientIod().subscribe((iod) => {
+            $this.service.patientIod = iod;
 
             $this.service.initEmptyValue(patient.attrs);
             $this.scrollToDialog();
@@ -1564,17 +1711,84 @@ export class StudiesComponent implements OnDestroy{
             $this.dialogRef.componentInstance.mode = mode;
             $this.dialogRef.componentInstance.patient = patient;
             $this.dialogRef.componentInstance.patientkey = patientkey;
-            $this.dialogRef.componentInstance.dropdown = $this.service.getArrayFromIod(res);
-            $this.dialogRef.componentInstance.iod = $this.service.replaceKeyInJson(res, 'items', 'Value');
+            $this.dialogRef.componentInstance.dropdown = $this.service.getArrayFromIod(iod);
+            $this.dialogRef.componentInstance.iod = $this.service.replaceKeyInJson(iod, 'items', 'Value');
             $this.dialogRef.componentInstance.saveLabel = $this.saveLabel;
             $this.dialogRef.componentInstance.titleLabel = $this.titleLabel;
+            $this.dialogRef.componentInstance.externalInternalAetMode = $this.externalInternalAetMode;
             $this.dialogRef.afterClosed().subscribe(result => {
                 //If user clicked save
                 if (result){
-                    console.log("oldPatientID",oldPatientID);
-                    console.log("$this.service.getPatientId(patient.attrs)",$this.service.getPatientId(patient.attrs));
-                    if(oldPatientID === $this.service.getPatientId(patient.attrs) || $this.externalInternalAetMode === "internal" || mode === "create"){
-                        let modifyPatientService = $this.service.modifyPatient(patient, res, oldPatientID, $this.aet, $this.getHl7ApplicationNameFormAETtitle($this.aet), $this.externalInternalAetModel.hl7ApplicationName,  mode, $this.externalInternalAetMode);
+                    if(mode === "create"){
+                        if(this.service.getPatientId(patient.attrs))
+                            modifyPatientService = $this.service.modifyPatient(patient, iod, oldPatientID, $this.aet, $this.service.getHl7ApplicationNameFormAETtitle($this.aet, $this.allAes), $this.externalInternalAetModel.hl7ApplicationName,  mode, $this.externalInternalAetMode);
+                            if(modifyPatientService){
+                                modifyPatientService.save.subscribe((response)=>{
+                                    this.fireRightQuery();
+                                    this.mainservice.setMessage({
+                                        'title': 'Info',
+                                        'text': modifyPatientService.successMsg,
+                                        'status': 'info'
+                                    });
+                                },(err)=>{
+                                    _.assign(patient, originalPatientObject);
+                                    $this.httpErrorHandler.handleError(err);
+                                });
+                            }
+                        else{
+                            this.service.createPatient(
+                                patient.attrs,
+                                this.aet,
+                                this.service.getHl7ApplicationNameFormAETtitle($this.aet, $this.allAes),
+                                this.externalInternalAetModel.hl7ApplicationName,
+                                this.externalInternalAetMode
+                            ).subscribe((res)=>{
+                                this.mainservice.setMessage({
+                                    'title': 'Info',
+                                    'text': 'Patient created successfully!',
+                                    'status': 'info'
+                                });
+                            },(err)=>{
+                                this.httpErrorHandler.handleError(err);
+                            });
+                        }
+                    }else{
+                        this.service.changePatientID(
+                            oldPatientID,
+                            this.service.getPatientId(patient.attrs),
+                            patient.attrs,
+                            this.aet,
+                            this.service.getHl7ApplicationNameFormAETtitle($this.aet, $this.allAes),
+                            this.externalInternalAetModel.hl7ApplicationName,
+                            this.externalInternalAetMode
+                        ).subscribe((idChanged)=>{
+                            let id = oldPatientID;
+                            if(idChanged)
+                                id = this.service.getPatientId(patient.attrs);
+                            modifyPatientService = $this.service.modifyPatient(patient, iod, id, $this.aet, $this.service.getHl7ApplicationNameFormAETtitle($this.aet, $this.allAes), $this.externalInternalAetModel.hl7ApplicationName,  mode, $this.externalInternalAetMode);
+                            if(modifyPatientService){
+                                modifyPatientService.save.subscribe((response)=>{
+                                    this.fireRightQuery();
+                                    this.mainservice.setMessage({
+                                        'title': 'Info',
+                                        'text': modifyPatientService.successMsg,
+                                        'status': 'info'
+                                    });
+                                },(err)=>{
+                                    _.assign(patient, originalPatientObject);
+                                    $this.httpErrorHandler.handleError(err);
+                                });
+                            }else{
+                                _.assign(patient, originalPatientObject);
+                            }
+                        },(err)=>{
+                            _.assign(patient, originalPatientObject);
+                            this.httpErrorHandler.handleError(err);
+                        });
+                    }
+/*
+                    if(oldPatientID === $this.service.getPatientId(patient.attrs) && ($this.externalInternalAetMode === "internal" || mode === "create")){
+                        let modifyPatientService = $this.service.modifyPatient(patient, iod, oldPatientID, $this.aet, $this.service.getHl7ApplicationNameFormAETtitle($this.aet, $this.allAes), $this.externalInternalAetModel.hl7ApplicationName,  mode, $this.externalInternalAetMode);
                         if(modifyPatientService){
                             modifyPatientService.save.subscribe((response)=>{
                                 this.fireRightQuery();
@@ -1590,7 +1804,7 @@ export class StudiesComponent implements OnDestroy{
                         }
                     }else{
                         //If patient id was changed and the aetmode is external than change the patient id first than update the patient
-                        let changeExternalPatientIdService = $this.service.changeExternalPatientID($this.service.preparePatientObjectForExternalPatiendIdChange(originalPatientObject.attrs, patient.attrs), $this.getHl7ApplicationNameFormAETtitle($this.aet) ,  $this.externalInternalAetModel.hl7ApplicationName, oldPatientID);
+                        let changeExternalPatientIdService = $this.service.changeExternalPatientID($this.service.preparePatientObjectForExternalPatiendIdChange(originalPatientObject.attrs, patient.attrs), $this.service.getHl7ApplicationNameFormAETtitle($this.aet, $this.allAes) ,  $this.externalInternalAetModel.hl7ApplicationName, oldPatientID);
                         if(changeExternalPatientIdService){
                             changeExternalPatientIdService.save.subscribe((response)=>{
                                 this.mainservice.setMessage({
@@ -1598,32 +1812,35 @@ export class StudiesComponent implements OnDestroy{
                                     'text': changeExternalPatientIdService.successMsg,
                                     'status': 'info'
                                 });
-                                let modifyPatientService = $this.service.modifyPatient(patient, res, oldPatientID,$this.aet, $this.getHl7ApplicationNameFormAETtitle($this.aet), $this.externalInternalAetModel.hl7ApplicationName,  mode, $this.externalInternalAetMode);
-                                if(modifyPatientService){
-                                    modifyPatientService.save.subscribe((response)=>{
-                                        this.fireRightQuery();
-                                        this.mainservice.setMessage({
-                                            'title': 'Info',
-                                            'text': modifyPatientService.successMsg,
-                                            'status': 'info'
+                                if(this.service.otherAttributesButIDWasChanged(originalPatientObject.attrs,patient.attrs)){
+                                    let modifyPatientService = $this.service.modifyPatient(patient, iod, oldPatientID,$this.aet, $this.service.getHl7ApplicationNameFormAETtitle($this.aet, $this.allAes), $this.externalInternalAetModel.hl7ApplicationName,  mode, $this.externalInternalAetMode);
+                                    if(modifyPatientService){
+                                        modifyPatientService.save.subscribe((response)=>{
+                                            this.fireRightQuery();
+                                            this.mainservice.setMessage({
+                                                'title': 'Info',
+                                                'text': modifyPatientService.successMsg,
+                                                'status': 'info'
+                                            });
+                                        },(err)=>{
+                                            _.assign(patient, $this.service.preparePatientObjectForExternalPatiendIdChange(originalPatientObject.attrs, patient.attrs));
+                                            $this.httpErrorHandler.handleError(err);
                                         });
-                                    },(err)=>{
-                                        _.assign(patient, $this.service.preparePatientObjectForExternalPatiendIdChange(originalPatientObject.attrs, patient.attrs));
-                                        $this.httpErrorHandler.handleError(err);
-                                    });
+                                    }
                                 }
                             },(err)=>{
                                 _.assign(patient, originalPatientObject);
                                 $this.httpErrorHandler.handleError(err);
                             });
                         }
-                    }
+                    }*/
                 }else{
                     _.assign(patient, originalPatientObject);
                 }
                 $this.dialogRef = null;
             });
         }, (err) => {
+            $this.httpErrorHandler.handleError(err);
             console.log('error', err);
         });
     };
@@ -1731,18 +1948,8 @@ export class StudiesComponent implements OnDestroy{
                 result: {select: this.rjnotes[0].codeValue + '^' + this.rjnotes[0].codingSchemeDesignator},
                 saveButton: 'REJECT'
             };
-            console.log('rejectstudy', parameters);
-/*            let parameters: any = {
-                content: 'Select rejected type',
-                selectoptions: this.rjnotes,
-                result: this.rjnotes[0].codeValue+'^'+this.rjnotes[0].codingSchemeDesignator,
-                saveButton: "REJECT"
-            };*/
-            console.log('parameters', parameters);
             this.confirm(parameters).subscribe(result => {
                 if (result) {
-                    console.log('result', result);
-                    console.log('parameters', parameters);
                     $this.cfpLoadingBar.start();
                     $this.$http.post(
                         $this.studyURL(study.attrs) + '/reject/' + parameters.result.select,
@@ -2001,29 +2208,172 @@ export class StudiesComponent implements OnDestroy{
             this.fireRightQuery();
         }
     }
-
+    retrieveMultipleStudies(){
+/*        this.cfpLoadingBar.start();
+        this.service.getCount(
+            this.rsURL(),
+            'studies',
+            this.createStudyFilterParams()
+        ).subscribe((res)=>{
+            this.cfpLoadingBar.complete();
+            this.count = res.count;
+        });*/
+            this.exporter(
+                // `/aets/${this.aet}/dimse/${this.externalAET}/studies/query:${this.queryAET}/export/dicom:${destinationAET}`,
+                '',
+                'Retrieve matching studies depending on selected filters, from external C-MOVE SCP',
+                '',
+                'multiple',
+                {},
+                ""
+            );
+    }
+    exportMultipleStudies(){
+        this.exporter(
+            '',
+            'Export all matching studies',
+            'Studies will not be sent!',
+            'multipleExport',
+            {},
+            "study"
+        );
+    }
+    storageVerification(){
+        this.confirm({
+            content: 'Schedule Storage Verification of matching Studies',
+            form_id:"storage_verification",
+            form_schema:[
+                [
+                    [
+                        {
+                            tag:"label",
+                            text:"Failed storage verification"
+                        },
+                        {
+                            tag:"checkbox",
+                            filterKey:"storageVerificationFailed"
+                        }
+                    ],[
+                        {
+                            tag:"label",
+                            text:"Verification Policy"
+                        },
+                        {
+                            tag:"select",
+                            options:[
+                                {
+                                    value:"DB_RECORD_EXISTS",
+                                    text:"DB_RECORD_EXISTS",
+                                    title:"Check for existence of DB records"
+                                },
+                                {
+                                    value:"OBJECT_EXISTS",
+                                    text:"OBJECT_EXISTS",
+                                    title:"check if object exists on Storage System"
+                                },
+                                {
+                                    value:"OBJECT_SIZE",
+                                    text:"OBJECT_SIZE",
+                                    title:"check size of object on Storage System"
+                                },
+                                {
+                                    value:"OBJECT_FETCH",
+                                    text:"OBJECT_FETCH",
+                                    title:"Fetch object from Storage System"
+                                },
+                                {
+                                    value:"OBJECT_CHECKSUM",
+                                    text:"OBJECT_CHECKSUM",
+                                    title:"recalculate checksum of object on Storage System"
+                                },
+                                {
+                                    value:"S3_MD5SUM",
+                                    text:"S3_MD5SUM",
+                                    title:"Check MD5 checksum of object on S3 Storage System"
+                                }
+                            ],
+                            showStar:true,
+                            filterKey:"storageVerificationPolicy",
+                            description:"Verification Policy",
+                            placeholder:"Verification Policy"
+                        }
+                    ],[
+                        {
+                            tag:"label",
+                            text:"Update Location DB"
+                        },
+                        {
+                            tag:"checkbox",
+                            filterKey:"storageVerificationUpdateLocationStatus"
+                        }
+                    ],[
+                        {
+                            tag:"label",
+                            text:"Batch ID"
+                        },
+                        {
+                            tag:"input",
+                            type:"text",
+                            filterKey:"batchID",
+                            description:"Batch ID",
+                            placeholder:"Batch ID"
+                        }
+                    ]
+                ]
+            ],
+            result: {
+                schema_model: {}
+            },
+            saveButton: 'SAVE'
+        }).subscribe((ok)=>{
+            if(ok){
+                this.cfpLoadingBar.start();
+                this.service.scheduleStorageVerification(_.merge(ok.schema_model , this.createStudyFilterParams()), this.aetmodel.dicomAETitle).subscribe(res=>{
+                    console.log("res");
+                    this.cfpLoadingBar.complete();
+                    this.mainservice.setMessage({
+                        'title': 'Info',
+                        'text': 'Storage Verification scheduled successfully!',
+                        'status': 'info'
+                    });
+                },err=>{
+                    this.cfpLoadingBar.complete();
+                    this.httpErrorHandler.handleError(err);
+                });
+            }
+        });
+    }
     exportStudy(study) {
         this.exporter(
             this.studyURL(study.attrs),
             'Export study',
-            'Study will not be sent!'
+            'Study will not be sent!',
+            'single',
+            study.attrs,
+            "study"
         );
     };
     exportSeries(series) {
         this.exporter(
             this.seriesURL(series.attrs),
             'Export series',
-            'Series will not be sent!'
+            'Series will not be sent!',
+            'single',
+            series.attrs,
+            "series"
         );
     };
     exportInstance(instance) {
         this.exporter(
             this.instanceURL(instance.attrs),
             'Export instance',
-            'Instance will not be sent!'
+            'Instance will not be sent!',
+            'single',
+            instance.attrs,
+            "instance"
         );
     };
-    exporter(url, title, warning){
+    exporter(url, title, warning, mode, objectAttr, dicomMode){
         let $this = this;
         let id;
         let urlRest;
@@ -2037,27 +2387,68 @@ export class StudiesComponent implements OnDestroy{
             }
         });
         this.config.viewContainerRef = this.viewContainerRef;
-        this.dialogRef = this.dialog.open(ExportDialogComponent, this.config);
+        let config = {
+            height: 'auto',
+            width: '500px'
+        };
+        if(mode === "multiple"){
+            config = {
+                height: 'auto',
+                width: '600px'
+            };
+        }
+        this.dialogRef = this.dialog.open(ExportDialogComponent, config);
         this.dialogRef.componentInstance.noDicomExporters = noDicomExporters;
         this.dialogRef.componentInstance.dicomPrefixes = dicomPrefixes;
         this.dialogRef.componentInstance.externalInternalAetMode = this.externalInternalAetMode;
         this.dialogRef.componentInstance.title = title;
+        this.dialogRef.componentInstance.mode = mode;
         this.dialogRef.componentInstance.warning = warning;
+        this.dialogRef.componentInstance.count = this.count;
+        if($this.externalInternalAetMode === 'external') {
+            this.dialogRef.componentInstance.preselectedExternalAET = this.externalInternalAetModel.dicomAETitle;
+        }
         this.dialogRef.afterClosed().subscribe(result => {
             if (result){
-
+                let batchID = "";
+                if(result.batchID)
+                    batchID = `batchID=${result.batchID}&`;
                 $this.cfpLoadingBar.start();
-                if($this.externalInternalAetMode === 'external'){
-                    id = 'dicom:' + result.selectedAet;
-                    urlRest = url  + '/export/' + id + '?' + this.mainservice.param({queue:result.queue});
+                if(mode === "multiple"){
+                    urlRest = `../aets/${result.selectedAet}/dimse/${result.externalAET}/studies/query:${result.queryAET}/export/dicom:${result.destinationAET}?${batchID}${ this.mainservice.param(this.createStudyFilterParams())}` ;
                 }else{
-                    if (result.exportType === 'dicom'){
-                        //id = result.dicomPrefix + result.selectedAet;
-                        id = 'dicom:' + result.selectedAet;
+                    if(mode === 'multipleExport'){
+                        let checkbox = `${(result.checkboxes['only-stgcmt'] && result.checkboxes['only-stgcmt'] === true)? 'only-stgcmt=true':''}${(result.checkboxes['only-ian'] && result.checkboxes['only-ian'] === true)? 'only-ian=true':''}`;
+                        if(checkbox != '' && this.mainservice.param(this.createStudyFilterParams()) != '')
+                            checkbox = '&' + checkbox;
+                        urlRest = `../aets/${this.aet}/export/${result.selectedExporter}/studies?${batchID}${this.mainservice.param(this.createStudyFilterParams())}${checkbox}`;
                     }else{
-                        id = result.selectedExporter;
+                        if($this.externalInternalAetMode === 'external'){
+                            let param = result.queue ? `?${batchID}queue=true` : '';
+                            urlRest = `../aets/${this.aet}/dimse/${result.externalAET}/studies/${objectAttr['0020000D'].Value[0]}/export/dicom:${result.selectedAet}${param}`;
+    /*                        switch (dicomMode){
+                                case 'study':
+                                    console.log("newUrl",this.studyURL(objectAttr));
+                                    break;
+                                case 'series':
+                                    console.log("newUrl",this.seriesURL(objectAttr));
+                                    break;
+                                case 'instance':
+                                    console.log("newUrl",this.instanceURL(objectAttr));
+                                    break;
+                            }
+                            id = 'dicom:' + result.selectedAet;
+                            urlRest = url  + '/export/' + id + '?' + this.mainservice.param({queue:result.queue});*/
+                        }else{
+                            if (result.exportType === 'dicom'){
+                                //id = result.dicomPrefix + result.selectedAet;
+                                id = 'dicom:' + result.selectedAet;
+                            }else{
+                                id = result.selectedExporter;
+                            }
+                            urlRest = url  + '/export/' + id + '?'+ batchID + this.mainservice.param(result.checkboxes);
+                        }
                     }
-                    urlRest = url  + '/export/' + id + '?' + this.mainservice.param(result.checkboxes);
                 }
                 $this.$http.post(
                     urlRest,
@@ -2092,6 +2483,17 @@ export class StudiesComponent implements OnDestroy{
         if (offset < 0 || offset === undefined) offset = 0;
         this.cfpLoadingBar.start();
         let $this = this;
+        if(this.externalInternalAetMode === 'internal'){
+            this.service.getCount(
+                this.rsURL(),
+                'mwlitems',
+                this.createPatientFilterParams()
+            ).subscribe((res)=>{
+                this.count = res.count;
+            });
+        }else{
+            this.count = "";
+        }
         this.service.queryMwl(
             this.rsURL(),
             this.createQueryParams(offset, this.limit + 1, this.createMwlFilterParams())
@@ -2154,6 +2556,7 @@ export class StudiesComponent implements OnDestroy{
                 $this.cfpLoadingBar.complete();
             },
             (err) => {
+                $this.cfpLoadingBar.complete();
                 $this.httpErrorHandler.handleError(err);
             }
         );
@@ -2268,7 +2671,8 @@ export class StudiesComponent implements OnDestroy{
                     series.instances = res.map(function(attrs, index) {
                         let numberOfFrames = $this.valueOf(attrs['00280008']),
                             gspsQueryParams = $this.createGSPSQueryParams(attrs),
-                            video = $this.isVideo(attrs);
+                            video = $this.isVideo(attrs),
+                            image = $this.isImage(attrs);
                         $this.cfpLoadingBar.complete();
                         return {
                             series: series,
@@ -2282,6 +2686,7 @@ export class StudiesComponent implements OnDestroy{
                                 objectUID: attrs['00080018'].Value[0]
                             },
                             video: video,
+                            image: image,
                             numberOfFrames: numberOfFrames,
                             gspsQueryParams: gspsQueryParams,
                             views: $this.createArray(video || numberOfFrames || gspsQueryParams.length || 1),
@@ -2343,6 +2748,88 @@ export class StudiesComponent implements OnDestroy{
             this.cfpLoadingBar.complete();
         });
     };
+    getCount(){
+        let mode;
+        let filters;
+        if(this.queryMode === "queryStudies"){
+            mode = "studies"
+            filters = this.createStudyFilterParams();
+        }
+        if(this.queryMode === "queryPatients"){
+            mode = "patients"
+            filters = this.createPatientFilterParams();
+        }
+        if(this.queryMode === "queryMWL"){
+            mode = "mwlitems"
+            filters = this.createMwlFilterParams();
+        }
+        if (this.showNoFilterWarning(filters)) {
+            this.confirm({
+                content: 'No filter are set, are you sure you want to continue?'
+            }).subscribe(result => {
+                if (result){
+                    this.getCountService(mode,filters);
+                }
+            });
+        }else{
+            this.getCountService(mode,filters);
+        }
+    }
+    getCountService(mode, filters){
+        let clonedFilters = _.cloneDeep(filters);
+        delete clonedFilters.orderby;
+        delete clonedFilters.limit;
+        this.showGetCountLoader = true;
+        this.service.getCount(
+            this.rsURL(),
+            mode,
+            clonedFilters
+        ).subscribe((res)=>{
+            this.showGetCountLoader = false;
+            try{
+                this.count = res.count;
+            }catch (e){
+                console.error("count error",e);
+            }
+        },(err)=>{
+            this.showGetCountLoader = false;
+            this.httpErrorHandler.handleError(err);
+        });
+    }
+    getSize(){
+        let filters = this.createStudyFilterParams();
+        if (this.showNoFilterWarning(filters)) {
+            this.confirm({
+                content: 'No filter are set, are you sure you want to continue?'
+            }).subscribe(result => {
+                if (result){
+                    this.getSizeService(filters);
+                }
+            });
+        }else{
+            this.getSizeService(filters);
+        }
+    }
+    getSizeService(filters){
+        let clonedFilters = _.cloneDeep(filters);
+        delete clonedFilters.orderby;
+        delete clonedFilters.limit;
+        this.showGetSizeLoader = true;
+        this.service.getSize(
+            this.rsURL(),
+            clonedFilters
+        ).subscribe((res)=>{
+            this.showGetSizeLoader = false;
+            try {
+                this.size = j4care.convertBtoHumanReadable(res.size,1);
+            }catch (e){
+                console.log("convert byte error:",e);
+            }
+        },(err)=>{
+            this.showGetSizeLoader = false;
+            this.httpErrorHandler.handleError(err);
+        });
+    }
     queryPatients = function(offset){
         this.queryMode = 'queryPatients';
         this.moreStudies = undefined;
@@ -2350,6 +2837,17 @@ export class StudiesComponent implements OnDestroy{
         this.cfpLoadingBar.start();
         let $this = this;
         if (offset < 0) offset = 0;
+        if(this.externalInternalAetMode === 'internal'){
+            this.service.getCount(
+                this.rsURL(),
+                'patients',
+                this.createPatientFilterParams()
+            ).subscribe((res)=>{
+                this.count = res.count;
+            });
+        }else{
+            this.count = "";
+        }
         this.service.queryPatients(
             this.rsURL(),
             this.createQueryParams(offset, this.limit + 1, this.createPatientFilterParams())
@@ -2415,37 +2913,119 @@ export class StudiesComponent implements OnDestroy{
     //     }
     // };
     downloadURL(inst, transferSyntax) {
-        let exQueryParams = { contentType: 'application/dicom'};
-        if (transferSyntax){
-            exQueryParams["transferSyntax"] = {};
-            exQueryParams["transferSyntax"] = transferSyntax;
+        let token;
+        this.$http.refreshToken().subscribe((response)=>{
+            if(!this.mainservice.global.notSecure){
+                if(response && response.length != 0){
+                    this.$http.resetAuthenticationInfo(response);
+                    token = response['token'];
+                }else{
+                    token = this.mainservice.global.authentication.token;
+                }
+            }
+            let exQueryParams = { contentType: 'application/dicom'};
+            if (transferSyntax){
+                exQueryParams["transferSyntax"] = {};
+                exQueryParams["transferSyntax"] = transferSyntax;
+            }
+            if(!this.mainservice.global.notSecure){
+                WindowRefService.nativeWindow.open(this.wadoURL(inst.wadoQueryParams, exQueryParams) + `&access_token=${token}`);
+            }else{
+                WindowRefService.nativeWindow.open(this.wadoURL(inst.wadoQueryParams, exQueryParams));
+            }
+        });
+    };
+    downloadZip(object, level, mode){
+        let token;
+        let param = 'accept=application/zip';
+        let url = this.studyURL(object.attrs);;
+        if(mode === 'compressed'){
+            param += ';transfer-syntax=*';
         }
-        return this.wadoURL(inst.wadoQueryParams, exQueryParams);
+        if(level === 'serie'){
+            url = this.seriesURL(object.attrs);
+        }
+        this.$http.refreshToken().subscribe((response)=>{
+            if(!this.mainservice.global.notSecure){
+                if(response && response.length != 0){
+                    this.$http.resetAuthenticationInfo(response);
+                    token = response['token'];
+                }else{
+                    token = this.mainservice.global.authentication.token;
+                }
+            }
+            if(!this.mainservice.global.notSecure){
+                WindowRefService.nativeWindow.open(`${url}?${param}&access_token=${token}`);
+            }else{
+                WindowRefService.nativeWindow.open(`${url}?${param}`);
+            }
+        });
     };
     viewInstance(inst) {
-        this.select_show = false;
-        if(this.isVideo(inst.attrs)){
-            console.log("isvideo");
-        }else{
-
-        }
-        this.$http.head(this.renderURL(inst)).subscribe((res)=>{
-/*            console.log("res",res);
-            console.log("res",res.headers.get("content-type"));*/
-            let contentType = res.headers.get("content-type");
-            // if(contentType === )
+        let $this = this;
+        let token;
+        let url;
+        let contentType;
+        this.$http.refreshToken().subscribe((response)=>{
+            if(!this.mainservice.global.notSecure){
+                if(response && response.length != 0){
+                    $this.$http.resetAuthenticationInfo(response);
+                    token = response['token'];
+                }else{
+                    token = this.mainservice.global.authentication.token;
+                }
+            }
+            this.select_show = false;
+            if(inst.video || inst.image || inst.numberOfFrames || inst.gspsQueryParams.length){
+                if (inst.gspsQueryParams.length){
+                    url =  this.wadoURL(inst.gspsQueryParams[inst.view - 1]);
+                }
+                if (inst.numberOfFrames || inst.image){
+                    contentType = 'image/jpeg';
+                    url =  this.wadoURL(inst.wadoQueryParams, { contentType: 'image/jpeg'});
+                }
+                if (inst.video){
+                    contentType = 'video/mpeg';
+                    url =  this.wadoURL(inst.wadoQueryParams, { contentType: 'video/mpeg' });
+                }
+            }else{
+                url = this.wadoURL(inst.wadoQueryParams);
+            }
+            if(!contentType){
+                if(_.hasIn(inst,"attrs.00420012.Value.0") && inst.attrs['00420012'].Value[0] != ''){
+                    contentType = inst.attrs['00420012'].Value[0];
+                }
+            }
+            if(!contentType || contentType.toLowerCase() === 'application/pdf' || contentType.toLowerCase() === 'video/mpeg' || contentType.toLowerCase() === 'text/xml'){
+                // this.j4care.download(url);
+                if(!this.mainservice.global.notSecure){
+                    WindowRefService.nativeWindow.open(this.renderURL(inst) + `&access_token=${token}`);
+                }else{
+                    WindowRefService.nativeWindow.open(this.renderURL(inst));
+                }
+            }else{
+                this.config.viewContainerRef = this.viewContainerRef;
+                this.dialogRef = this.dialog.open(ViewerComponent, {
+                    height: 'auto',
+                    width: 'auto',
+                    panelClass:"viewer_dialog"
+                });
+                this.dialogRef.componentInstance.views = inst.views;
+                this.dialogRef.componentInstance.view = inst.view;
+                this.dialogRef.componentInstance.contentType = contentType;
+                this.dialogRef.componentInstance.url = url;
+                this.dialogRef.afterClosed().subscribe((result) => {
+                    console.log('result', result);
+                    if (result){
+                    }
+                });
+                console.log("this.renderURL(inst)",this.renderURL(inst));
+            }
+        // window.open(this.renderURL(inst));
         });
-        window.open(this.renderURL(inst));
     };
     select(object, modus, keys, fromcheckbox){
-        console.log('in select = fromcheckbox', fromcheckbox);
         // let test = true;
-        console.log('object', object);
-        console.log('object.selected', object.selected);
-        // console.log("patient object selected",this.patients[keys.patientkey].studies[keys.studykey].selected);
-        console.log('object', object);
-        console.log('modus', modus);
-        console.log('keys', keys);
         let clickFromCheckbox = (fromcheckbox && fromcheckbox === 'fromcheckbox');
         if (this.isRole('admin')){
             this.anySelected = true;
@@ -2581,7 +3161,7 @@ export class StudiesComponent implements OnDestroy{
                 // this.selected['otherObjects'] = {};
             }
             if (modus === 'patient'){
-                console.log('this.selected', this.selected); //TODO when you have have a patient list, on ctrl and click the haspatient is still false
+                console.log('this.selected', this.selected);
                 //console.log("this.selectedkeys",Object.keys(this.selected.patients).length);
                 //console.log("patient.length",_.size(this.selected.patients));
                 if (_.size(this.selected.patients) > 0){
@@ -2650,6 +3230,7 @@ export class StudiesComponent implements OnDestroy{
                         patientInSelectedObject = true;
                     }
                 });
+                patientobject["attrs"] = object.attrs || {};
                 console.log('patientobject =', this.service.getPatientId(patientobject));
                 if (!patientInSelectedObject){
                     this.selected['patients'].push(patientobject);
@@ -2796,14 +3377,14 @@ export class StudiesComponent implements OnDestroy{
         console.log('this.selected[\'otherObjects\']', this.selected['otherObjects']);
     }
     rsURL() {
-        let url;
+/*        let url;
         if(this.externalInternalAetMode === "external"){
             url = `../aets/${this.aetmodel.dicomAETitle}/dimse/${this.externalInternalAetModel.dicomAETitle}`;
         }
         if(this.externalInternalAetMode === "internal"){
             url = `../aets/${this.aet}/rs`;
-        }
-        return url;
+        }*/
+        return this.service.rsURL(this.externalInternalAetMode,this.aet,this.aetmodel.dicomAETitle,this.externalInternalAetModel.dicomAETitle);
     }
     diffUrl(){
         if(!this.aet1){
@@ -2835,18 +3416,22 @@ export class StudiesComponent implements OnDestroy{
     }
     createStudyFilterParams() {
         let filter = Object.assign({}, this.filter);
-        this.appendFilter(filter, 'StudyDate', this.studyDate, /-/g);
-        this.appendFilter(filter, 'ScheduledProcedureStepSequence.ScheduledProcedureStepStartDate', this.ScheduledProcedureStepSequence.ScheduledProcedureStepStartDate, /-/g);
-        this.appendFilter(filter, 'StudyTime', this.studyTime, /:/g);
-        this.appendFilter(filter, 'ScheduledProcedureStepSequence.ScheduledProcedureStepStartTime', this.ScheduledProcedureStepSequence.ScheduledProcedureStepStartTime, /-/g);
+        delete filter['ScheduledProcedureStepSequence.ScheduledProcedureStepStartDate'];
+        delete filter['ScheduledProcedureStepSequence.ScheduledProcedureStepStartTime'];
+        // this.appendFilter(filter, 'StudyDate', this.studyDate, /-/g);
+        // this.appendFilter(filter, 'ScheduledProcedureStepSequence.ScheduledProcedureStepStartDate', this.ScheduledProcedureStepSequence.ScheduledProcedureStepStartDate, /-/g);
+        // this.appendFilter(filter, 'StudyTime', this.studyTime, /:/g);
+        // this.appendFilter(filter, 'ScheduledProcedureStepSequence.ScheduledProcedureStepStartTime', this.ScheduledProcedureStepSequence.ScheduledProcedureStepStartTime, /-/g);
         return filter;
     }
     createMwlFilterParams() {
         let filter = Object.assign({}, this.filter);
-        this.appendFilter(filter, 'ScheduledProcedureStepSequence.ScheduledProcedureStepStartDate', this.studyDate, /-/g);
+        delete filter.StudyDate;
+        delete filter.StudyTime;
+/*        this.appendFilter(filter, 'ScheduledProcedureStepSequence.ScheduledProcedureStepStartDate', this.studyDate, /-/g);
         this.appendFilter(filter, 'ScheduledProcedureStepSequence.ScheduledProcedureStepStartDate', this.ScheduledProcedureStepSequence.ScheduledProcedureStepStartDate, /-/g);
         this.appendFilter(filter, 'StudyTime', this.studyTime, /:/g);
-        this.appendFilter(filter, 'ScheduledProcedureStepSequence.ScheduledProcedureStepStartTime', this.ScheduledProcedureStepSequence.ScheduledProcedureStepStartTime, /-/g);
+        this.appendFilter(filter, 'ScheduledProcedureStepSequence.ScheduledProcedureStepStartTime', this.ScheduledProcedureStepSequence.ScheduledProcedureStepStartTime, /-/g);*/
         return filter;
     }
 
@@ -2865,7 +3450,7 @@ export class StudiesComponent implements OnDestroy{
             limit: limit
         };
         for (let key in filter){
-            if (filter[key] || filter === false){
+            if (filter[key] || filter[key] === false){
                 params[key] = filter[key];
             }
         }
@@ -2909,7 +3494,8 @@ export class StudiesComponent implements OnDestroy{
                         'status': 'info'
                     });
                 }else{
-                    this.service.MergeRecursive(this.clipboard, this.selected);
+                    // this.service.MergeRecursive(this.clipboard, this.selected);
+                    _.merge(this.clipboard, this.selected);
                     if (this.clipboard.action && this.clipboard.action === 'copy'){
                         let $this = this;
                         this.confirm({
@@ -3054,7 +3640,13 @@ export class StudiesComponent implements OnDestroy{
                         });
                         $this.clipboard.action = 'move';
                     }
-                    console.log("reject",this.reject);
+                    if(this.externalInternalAetMode === 'external' && ($this.selected.patients.length > 1 || $this.clipboard.patients.length > 1)){
+                        $this.mainservice.setMessage({
+                            'title': 'Warning',
+                            'text': 'External merge of multiple patients is not allowed, just the first selected patient will be taken for merge!',
+                            'status': 'warning'
+                        });
+                    }
                     this.dialogRef.componentInstance.clipboard = this.clipboard;
                     this.dialogRef.componentInstance.rjnotes = this.rjnotes;
                     this.dialogRef.componentInstance.selected = this.selected['otherObjects'];
@@ -3063,24 +3655,38 @@ export class StudiesComponent implements OnDestroy{
                     this.dialogRef.componentInstance.reject = this.reject;
                     this.dialogRef.componentInstance.saveLabel = action;
                     this.dialogRef.componentInstance.title = title;
-                    this.cfpLoadingBar.stop();
+                    this.cfpLoadingBar.complete();
                     this.dialogRef.afterClosed().subscribe(result => {
                         $this.cfpLoadingBar.start();
                         if (result) {
                             $this.reject = result;
                             console.log("reject",$this.reject);
                             if ($this.clipboard.action === 'merge') {
-                                let object = {
-                                    priorPatientID: $this.clipboard.patients
-                                };
-                                console.log('object', object);
+/*                                console.log('object', object);
                                 console.log('in merge clipboard', $this.clipboard);
                                 console.log('in merge selected', $this.selected['otherObjects']);
                                 console.log('in merge selected', $this.selected.patients[0].PatientID);
-                                console.log('getpatientid', $this.service.getPatientId($this.selected.patients));
+                                console.log('getpatientid', $this.service.getPatientId($this.selected.patients));*/
+                                let object;
+                                let url;
+                                if(this.externalInternalAetMode === 'external'){
+                                    url = `../hl7apps/${$this.service.getHl7ApplicationNameFormAETtitle($this.aet, $this.allAes)}/hl7/${$this.externalInternalAetModel.hl7ApplicationName}/patients/${$this.service.getPatientId($this.clipboard.patients)}/merge`;
+                                    object = $this.selected.patients[0].attrs;
+
+                                }else{
+                                    delete $this.clipboard.patients[0].attrs;
+                                    _.forEach($this.clipboard.patients,(pat,ind)=>{
+                                        if(_.hasIn(pat,"attrs")){
+                                            delete $this.clipboard.patients[ind].attrs;
+                                        }
+                                    });
+                                    object =  $this.clipboard.patients;
+                                    url = '../aets/' + $this.aet + '/rs/patients/' + $this.service.getPatientId($this.selected.patients) + '/merge';
+                                }
+                                console.log("url",url);
                                 $this.$http.post(
-                                    '../aets/' + $this.aet + '/rs/patients/' + $this.service.getPatientId($this.selected.patients) + '/merge',
-                                    object.priorPatientID,
+                                    url,
+                                    object,
                                     headers
                                 )
                                     .subscribe((response) => {
@@ -3101,9 +3707,9 @@ export class StudiesComponent implements OnDestroy{
                                         $this.selected = {};
                                         $this.clipboard = {};
                                         $this.fireRightQuery();
-                                        $this.cfpLoadingBar.stop();
+                                        $this.cfpLoadingBar.complete();
                                     }, (response) => {
-                                        $this.cfpLoadingBar.stop();
+                                        $this.cfpLoadingBar.complete();
                                         $this.httpErrorHandler.handleError(response);
                                     });
                             }
@@ -3161,17 +3767,18 @@ export class StudiesComponent implements OnDestroy{
                                                         .subscribe((response) => {
                                                             console.log('in then function', response);
                                                             $this.clipboard = {};
+                                                            $this.selected = {};
                                                              $this.mainservice.setMessage({
                                                              'title': 'Info',
                                                              'text': 'Object with the Study Instance UID ' + m.StudyInstanceUID + ' copied successfully!',
                                                              'status': 'info'
                                                              });
-                                                            $this.cfpLoadingBar.stop();
+                                                            $this.cfpLoadingBar.complete();
                                                             // $this.callBackFree = true;
                                                         }, (response) => {
                                                             console.log('resin err', response);
                                                             $this.clipboard = {};
-                                                            $this.cfpLoadingBar.stop();
+                                                            $this.cfpLoadingBar.complete();
                                                             $this.httpErrorHandler.handleError(response);
                                                             // $this.callBackFree = true;
                                                         });
@@ -3179,7 +3786,7 @@ export class StudiesComponent implements OnDestroy{
                                                 $this.fireRightQuery();
                                             },
                                             (response) => {
-                                                $this.cfpLoadingBar.stop();
+                                                $this.cfpLoadingBar.complete();
                                                 $this.httpErrorHandler.handleError(response);
                                                 console.log('response', response);
                                             }
@@ -3208,17 +3815,18 @@ export class StudiesComponent implements OnDestroy{
                                             })
                                             .subscribe((response) => {
                                                 console.log('in then function');
-                                                $this.clipboard = {};
-                                                $this.cfpLoadingBar.stop();
+                                                $this.cfpLoadingBar.complete();
                                                 $this.mainservice.setMessage({
                                                     'title': 'Info',
                                                     'text': 'Object with the Study Instance UID ' + $this.target.attrs['0020000D'].Value[0] + ' copied successfully!',
                                                     'status': 'info'
                                                 });
+                                                $this.clipboard = {};
+                                                $this.selected = {};
                                                 $this.fireRightQuery();
                                                 // $this.callBackFree = true;
                                             }, (response) => {
-                                                $this.cfpLoadingBar.stop();
+                                                $this.cfpLoadingBar.complete();
                                                 $this.httpErrorHandler.handleError(response);
                                                 // $this.callBackFree = true;
                                             });
@@ -3276,7 +3884,8 @@ export class StudiesComponent implements OnDestroy{
                                                         .subscribe((response) => {
                                                             console.log('in then function');
                                                             $this.clipboard = {};
-                                                            $this.cfpLoadingBar.stop();
+                                                            $this.selected = {};
+                                                            $this.cfpLoadingBar.complete();
                                                             $this.mainservice.setMessage({
                                                                 'title': 'Info',
                                                                 'text': 'Object with the Study Instance UID ' + m.StudyInstanceUID + ' moved successfully!',
@@ -3284,13 +3893,13 @@ export class StudiesComponent implements OnDestroy{
                                                             });
                                                             $this.fireRightQuery();
                                                         }, (response) => {
-                                                            $this.cfpLoadingBar.stop();
+                                                            $this.cfpLoadingBar.complete();
                                                             $this.httpErrorHandler.handleError(response);
                                                         });
                                                 });
                                             },
                                             (response) => {
-                                                $this.cfpLoadingBar.stop();
+                                                $this.cfpLoadingBar.complete();
                                                 $this.httpErrorHandler.handleError(response);
                                                 console.log('response', response);
                                             }
@@ -3328,7 +3937,7 @@ export class StudiesComponent implements OnDestroy{
                                             })
                                             .subscribe((response) => {
                                                 console.log('in then function');
-                                                $this.cfpLoadingBar.stop();
+                                                $this.cfpLoadingBar.complete();
                                                 $this.mainservice.setMessage({
                                                     'title': 'Info',
                                                     'text': 'Object with the Study Instance UID ' + $this.target.attrs['0020000D'].Value[0] + ' moved successfully!',
@@ -3340,7 +3949,7 @@ export class StudiesComponent implements OnDestroy{
                                                 }
                                                 $this.fireRightQuery();
                                             }, (response) => {
-                                                $this.cfpLoadingBar.stop();
+                                                $this.cfpLoadingBar.complete();
                                                 $this.httpErrorHandler.handleError(response);
                                                 if(index == Object.keys($this.clipboard.otherObjects).length){
                                                     $this.clipboard = {};
@@ -3357,7 +3966,7 @@ export class StudiesComponent implements OnDestroy{
                             $this.selected = {};
                             $this.clipboard = {};
                         }
-                        $this.cfpLoadingBar.stop();
+                        $this.cfpLoadingBar.complete();
                         this.dialogRef = null;
                     });
             }else {
@@ -3477,6 +4086,12 @@ export class StudiesComponent implements OnDestroy{
         //     }
         // });
     }
+    equalsIgnoreSpecificCharacterSet(attrs, other) {
+        return Object.keys(attrs).filter(tag => tag != '00080005')
+                .every(tag => _.isEqual(attrs[tag],other[tag]))
+            && Object.keys(other).filter(tag => tag != '00080005')
+                .every(tag => attrs[tag]);
+    }
     binarySearch(ar, el) {
         let m = 0;
         let n = ar.length - 1;
@@ -3522,6 +4137,11 @@ export class StudiesComponent implements OnDestroy{
             '1.2.840.10008.5.1.4.1.1.77.1.4.1']
             .indexOf(sopClass) != -1 ? 1 : 0;
     }
+    isImage(attrs){
+        let sopClass = this.valueOf(attrs['00080016']);
+        let bitsAllocated = this.valueOf(attrs['00280100']);
+        return ((bitsAllocated && bitsAllocated != "") && (sopClass != '1.2.840.10008.5.1.4.1.1.481.2'));
+    }
     valuesOf(attr) {
         return attr && attr.Value;
     }
@@ -3535,82 +4155,48 @@ export class StudiesComponent implements OnDestroy{
         return a;
     }
     aesdropdown: SelectItem[] = [];
-    initAETs(retries) {
+    initAETs(retries, mode?) {
         if (!this.aes){
             let $this = this;
+            if(!mode){
+                mode = "internal";
+            }
            this.$http.get('../aets')
-                .map(res => {let resjson; try{
-                    let pattern = new RegExp("[^:]*:\/\/[^\/]*\/auth\/");
-                    if(pattern.exec(res.url)){
-                        WindowRefService.nativeWindow.location = "/dcm4chee-arc/ui2/";
-                    }
-                    resjson = res.json(); }catch (e){resjson = {}; } return resjson; })
-                .subscribe(
-                    function (res) {
-                        console.log('before call getAes', res, 'this user=', $this.user);
-                        $this.aes = $this.service.getAes($this.user, res);
-                        console.log('aes', $this.aes);
-                        // $this.aesdropdown = $this.aes;
-/*                        $this.aes.map((ae, i) => {
-                            console.log('in map ae', ae);
-                            console.log('in map i', i);
-                            console.log('aesi=', $this.aes[i]);
-                            $this.aesdropdown.push({label: ae.title, value: ae.title});
-                            $this.aes[i]['label'] = ae.title;
-                            $this.aes[i]['value'] = ae.value;
-
-                        });*/
-                        console.log('$this.aes after map', $this.aes);
-                        $this.aet = $this.aes[0].dicomAETitle.toString();
-                        if (!$this.aetmodel){
-                            $this.aetmodel = $this.aes[0];
+                .map(res => j4care.redirectOnAuthResponse(res))
+                .map(aet=> this.permissionService.filterAetDependingOnUiConfig(aet,mode))
+                .subscribe((res)=> {
+                        $this.aes = j4care.extendAetObjectWithAlias($this.service.getAes($this.mainservice.user, res));
+                        try{
+                            $this.aet = $this.aes[0].dicomAETitle.toString();
+                            if (!$this.aetmodel){
+                                $this.aetmodel = $this.aes[0];
+                            }
+                        }catch(e){
+                            console.warn(e);
                         }
                         // $this.mainservice.setGlobal({aet:$this.aet,aetmodel:$this.aetmodel,aes:$this.aes, aesdropdown:$this.aesdropdown});
                     },
-                    function (res) {
+                    (res)=> {
                         if (retries)
-                            $this.initAETs(retries - 1);
+                            $this.initAETs(retries - 1, mode);
                 });
         }
     }
     getAllAes(retries) {
         let $this = this;
         this.$http.get('../aes')
-            .map(res => {let resjson; try{
-                let pattern = new RegExp("[^:]*:\/\/[^\/]*\/auth\/");
-                if(pattern.exec(res.url)){
-                    WindowRefService.nativeWindow.location = "/dcm4chee-arc/ui2/";
-                }
-                resjson = res.json(); }catch (e){resjson = {}; } return resjson; })
+            .map(res => j4care.redirectOnAuthResponse(res))
+            .map(aet=> this.permissionService.filterAetDependingOnUiConfig(aet,"external"))
             .subscribe(
-                function (res) {
-                    console.log('before call getAes', res, 'this user=', $this.user);
-                    $this.allAes = res.map((res)=>{
+                (res)=> {
+                    $this.allAes = j4care.extendAetObjectWithAlias(res.map((res)=>{
                         res['title'] = res['dicomAETitle'];
                         res['description'] = res['dicomDescription'];
                         return res;
-                    });
+                    }));
                     $this.externalInternalAetModel = $this.allAes[0];
-                    // $this.aes = $this.service.getAes($this.user, res);
-/*                    console.log('aes', $this.aes);
-                    // $this.aesdropdown = $this.aes;
-                    $this.aes.map((ae, i) => {
-                        console.log('in map ae', ae);
-                        console.log('in map i', i);
-                        console.log('aesi=', $this.aes[i]);
-                        $this.aesdropdown.push({label: ae.title, value: ae.title});
-                        $this.aes[i]['label'] = ae.title;
-                        $this.aes[i]['value'] = ae.value;
-
-                    });
-                    console.log('$this.aes after map', $this.aes);
-                    $this.aet = $this.aes[0].title.toString();
-                    if (!$this.aetmodel){
-                        $this.aetmodel = $this.aes[0];
-                    }*/
-                    // $this.mainservice.setGlobal({aet:$this.aet,aetmodel:$this.aetmodel,aes:$this.aes, aesdropdown:$this.aesdropdown});
                 },
-                function (res) {
+                (res)=> {
                     if (retries)
                         $this.getAllAes(retries - 1);
             });
@@ -3642,6 +4228,9 @@ export class StudiesComponent implements OnDestroy{
 
             // this[model] = newValue;
         // }
+        if(model === 'aetmodel' || model === 'externalInternalAetModel'){
+         //TODO Show ForceQueryByStudyUID only if bouth selected aets are parte of an device the primary device type ARCHIVE
+        }
         if (model === 'aetmodel'){
             this.aet = newValue.dicomAETitle;
             // this.aetmodel = newValue;
@@ -3679,14 +4268,14 @@ export class StudiesComponent implements OnDestroy{
         let url = '../aets/' + this.aet + '/rs/studies/';
         switch (mode) {
             case 'study':
-                url += object.attrs['0020000D'].Value[0] + '/stgcmt';
+                url += object.attrs['0020000D'].Value[0] + '/stgver';
                 break;
             case 'series':
-                url += object.attrs['0020000D'].Value[0] + '/series/' + object.attrs['0020000E'].Value[0] + '/stgcmt';
+                url += object.attrs['0020000D'].Value[0] + '/series/' + object.attrs['0020000E'].Value[0] + '/stgver';
                 break;
             default:
             case 'instance':
-                url += object.attrs['0020000D'].Value[0] + '/series/' + object.attrs['0020000E'].Value[0] + '/instances/' + object.attrs['00080018'].Value[0] + '/stgcmt';
+                url += object.attrs['0020000D'].Value[0] + '/series/' + object.attrs['0020000E'].Value[0] + '/instances/' + object.attrs['00080018'].Value[0] + '/stgver';
                 break;
         }
         let $this = this;
@@ -3904,44 +4493,80 @@ export class StudiesComponent implements OnDestroy{
     }
 
     testToken(){
-/*        var keycloak = new Keycloak('./assets/keycloak.json');
-
-        keycloak.init().success(function(authenticated) {
-            console.log(authenticated ? 'authenticated' : 'not authenticated');
-        }).error(function() {
-            console.log('failed to initialize');
-        });
-        keycloak.updateToken(30).success(function() {
-            console.log("success")
-        }).error(function() {
-            console.log('Failed to refresh token');
-        });*/
-/*        var x = document.cookie;
-        console.log("cookie",x);
-        this.mainservice.getRealmOfLogedinUser()
+        this.$http.get('../aes')
+            .map(res => {let resjson; try{
+                let pattern = new RegExp("[^:]*:\/\/[^\/]*\/auth\/");
+                if(pattern.exec(res.url)){
+                    WindowRefService.nativeWindow.location = "/dcm4chee-arc/ui2/";
+                }
+                resjson = res.json(); }catch (e){resjson = {}; } return resjson; })
             .subscribe((res)=>{
-                let token = res.token;
-                // this.$http.get('../reject')
-                this.kc.init().then(init => {
-                    console.log("init",init);
-                this.kc.getToken(token)
-                    .then(token => {
-                        console.log("token",token);
-                        let headers = new Headers({
-                            'Accept': 'application/json',
-                            'Authorization': 'Bearer ' + token
-                        });
+                console.log("testres",res);
+            },(err)=>{
 
-        /!*                let options = new RequestOptions({ headers });
-
-                        this.http.get('/database/products', options)
-                            .map(res => res.json())
-                            .subscribe(prods => this.products = prods,
-                                error => console.log(error));*!/
-                    })
-                    .catch(error => console.log(error));
-                }).catch(error => console.log(error));
-            });*/
+            });
+        // var keycloak = new Keycloak('./assets/keycloak.json');
+        //
+        // keycloak.init().success(function(authenticated) {
+        //     console.log(authenticated ? 'authenticated' : 'not authenticated');
+        // }).error(function() {
+        //     console.log('failed to initialize');
+        // });
+        // keycloak.updateToken(30).success(function() {
+        //     console.log("success")
+        // }).error(function() {
+        //     console.log('Failed to refresh token');
+        // });
+        // var x = document.cookie;
+        // console.log("cookie",x);
+        // this.mainservice.getRealmOfLogedinUser()
+        //     .subscribe((res)=>{
+        //         let token = res.token;
+        //         // this.$http.get('../reject')
+        //         this.kc.init().then(init => {
+        //             console.log("init",init);
+        //         this.kc.getToken(token)
+        //             .then(token => {
+        //                 console.log("token",token);
+        //                 let headers = new Headers({
+        //                     'Accept': 'application/json',
+        //                     'Authorization': 'Bearer ' + token
+        //                 });
+        //
+        // /*                let options = new RequestOptions({ headers });
+        //
+        //                 this.http.get('/database/products', options)
+        //                     .map(res => res.json())
+        //                     .subscribe(prods => this.products = prods,
+        //                         error => console.log(error));*/
+        //             })
+        //             .catch(error => console.log(error));
+        //         }).catch(error => console.log(error));
+        //     });
+    }
+    queryNationalPationtRegister(patientId){
+        if(patientId.xroad){
+            delete patientId.xroad;
+        }else{
+            this.cfpLoadingBar.start();
+            this.service.queryNationalPationtRegister(this.service.getPatientId(patientId.attrs)).subscribe((xroadAttr)=>{
+                patientId.xroad = xroadAttr;
+                this.cfpLoadingBar.complete();
+            },(err)=>{
+                console.error("Error Querieng National Pation Register",err);
+                this.httpErrorHandler.handleError(err);
+                this.cfpLoadingBar.complete();
+            });
+        }
+    }
+    getDiffAttributeSet(){
+        this.service.getDiffAttributeSet()
+            .retry(2)
+            .subscribe((res)=>{
+                this.diffAttributeSet = res.filter(attr => attr.type ==='DIFF_RS' && attr.id != 'all');
+            },(err)=>{
+                console.error("Error getting Diff Attribute Set",err);
+            });
     }
     ngOnDestroy() {
         // Save state of the study page in a global variable after leaving it
@@ -3961,7 +4586,7 @@ export class StudiesComponent implements OnDestroy{
             limit: this.limit,
             trashaktive: this.trashaktive,
             patientmode: this.patientmode,
-            ScheduledProcedureStepSequence: this.ScheduledProcedureStepSequence,
+            // ScheduledProcedureStepSequence: this.ScheduledProcedureStepSequence,
             filterMode: this.filterMode,
             user: this.user,
             patients: this.patients,
@@ -3973,13 +4598,16 @@ export class StudiesComponent implements OnDestroy{
             studyDate: this.studyDate,
             studyTime: this.studyTime,
             orderbytext: this.orderbytext,
-            rjcode: this.rjcode
+            rjcode: this.rjcode,
+            count: this.count
         };
+        let global = this.mainservice.global;
+        global.state = state || {};
         // if(_.hasIn(this.mainservice.global,"state")){
         //     this.mainservice.setGlobal({state:{}});
         //     this.mainservice.setGlobal({state:state});
         // }else{
-            this.mainservice.setGlobal({state: state});
+            this.mainservice.setGlobal(global);
         // }
     }
 }

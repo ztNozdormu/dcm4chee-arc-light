@@ -40,8 +40,6 @@
 
 package org.dcm4chee.arc.qido;
 
-import com.querydsl.core.types.Order;
-import com.querydsl.core.types.OrderSpecifier;
 import com.querydsl.core.types.dsl.NumberPath;
 import org.dcm4che3.data.*;
 import org.dcm4che3.io.SAXTransformer;
@@ -50,14 +48,15 @@ import org.dcm4che3.net.ApplicationEntity;
 import org.dcm4che3.net.Device;
 import org.dcm4che3.net.service.DicomServiceException;
 import org.dcm4che3.net.service.QueryRetrieveLevel2;
+import org.dcm4che3.ws.rs.MediaTypes;
 import org.dcm4chee.arc.conf.ArchiveAEExtension;
 import org.dcm4chee.arc.conf.ArchiveDeviceExtension;
 import org.dcm4chee.arc.entity.*;
-import org.dcm4chee.arc.query.util.*;
-import org.dcm4che3.ws.rs.MediaTypes;
 import org.dcm4chee.arc.query.Query;
 import org.dcm4chee.arc.query.QueryContext;
 import org.dcm4chee.arc.query.QueryService;
+import org.dcm4chee.arc.query.util.QIDO;
+import org.dcm4chee.arc.query.util.QueryAttributes;
 import org.dcm4chee.arc.validation.constraints.ValidUriInfo;
 import org.hibernate.Transaction;
 import org.jboss.resteasy.annotations.cache.NoCache;
@@ -72,12 +71,15 @@ import javax.json.stream.JsonGenerator;
 import javax.servlet.http.HttpServletRequest;
 import javax.validation.constraints.Pattern;
 import javax.ws.rs.*;
-import javax.ws.rs.QueryParam;
-import javax.ws.rs.core.*;
+import javax.ws.rs.core.Context;
+import javax.ws.rs.core.Response;
+import javax.ws.rs.core.StreamingOutput;
+import javax.ws.rs.core.UriInfo;
 import javax.xml.transform.stream.StreamResult;
-import java.io.IOException;
-import java.io.OutputStream;
-import java.util.*;
+import java.io.PrintWriter;
+import java.io.StringWriter;
+import java.util.ArrayList;
+import java.util.Iterator;
 
 /**
  * @author Gunter Zeilinger <gunterze@gmail.com>
@@ -138,17 +140,23 @@ public class QidoRS {
     @Pattern(regexp = "true|false")
     private String retrievefailed;
 
-    @QueryParam("SendingApplicationEntityTitleOfSeries")
-    private String sendingApplicationEntityTitleOfSeries;
+    @QueryParam("storageVerificationFailed")
+    @Pattern(regexp = "true|false")
+    private String storageVerificationFailed;
 
-    @QueryParam("StudyReceiveDateTime")
-    private String studyReceiveDateTime;
+    @QueryParam("compressionfailed")
+    @Pattern(regexp = "true|false")
+    private String compressionfailed;
 
     @QueryParam("ExternalRetrieveAET")
     private String externalRetrieveAET;
 
     @QueryParam("ExternalRetrieveAET!")
     private String externalRetrieveAETNot;
+
+    @QueryParam("patientVerificationStatus")
+    @Pattern(regexp = "UNVERIFIED|VERIFIED|NOT_FOUND|VERIFICATION_FAILED")
+    private String patientVerificationStatus;
 
     @Override
     public String toString() {
@@ -159,7 +167,7 @@ public class QidoRS {
     @NoCache
     @Path("/patients")
     @Produces("multipart/related;type=application/dicom+xml")
-    public Response searchForPatientsXML() throws Exception {
+    public Response searchForPatientsXML() {
         return search("SearchForPatients", Model.PATIENT, null, null, QIDO.PATIENT, Output.DICOM_XML);
     }
 
@@ -167,7 +175,7 @@ public class QidoRS {
     @NoCache
     @Path("/patients")
     @Produces("application/dicom+json,application/json")
-    public Response searchForPatientsJSON() throws Exception {
+    public Response searchForPatientsJSON() {
         return search("SearchForPatients", Model.PATIENT, null, null, QIDO.PATIENT, Output.JSON);
     }
 
@@ -175,7 +183,7 @@ public class QidoRS {
     @NoCache
     @Path("/studies")
     @Produces("multipart/related;type=application/dicom+xml")
-    public Response searchForStudiesXML() throws Exception {
+    public Response searchForStudiesXML() {
         return search("SearchForStudies", Model.STUDY, null, null, QIDO.STUDY, Output.DICOM_XML);
     }
 
@@ -183,7 +191,7 @@ public class QidoRS {
     @NoCache
     @Path("/studies")
     @Produces("application/dicom+json,application/json")
-    public Response searchForStudiesJSON() throws Exception {
+    public Response searchForStudiesJSON() {
         return search("SearchForStudies", Model.STUDY, null, null, QIDO.STUDY, Output.JSON);
     }
 
@@ -199,7 +207,7 @@ public class QidoRS {
     @NoCache
     @Path("/series")
     @Produces("application/dicom+json,application/json")
-    public Response searchForSeriesJSON() throws Exception {
+    public Response searchForSeriesJSON() {
         return search("SearchForSeries", Model.SERIES, null, null, QIDO.STUDY_SERIES, Output.JSON);
     }
 
@@ -208,7 +216,7 @@ public class QidoRS {
     @Path("/studies/{StudyInstanceUID}/series")
     @Produces("multipart/related;type=application/dicom+xml")
     public Response searchForSeriesOfStudyXML(
-            @PathParam("StudyInstanceUID") String studyInstanceUID) throws Exception {
+            @PathParam("StudyInstanceUID") String studyInstanceUID) {
         return search("SearchForStudySeries", Model.SERIES, studyInstanceUID, null, QIDO.SERIES, Output.DICOM_XML);
     }
 
@@ -217,7 +225,7 @@ public class QidoRS {
     @Path("/studies/{StudyInstanceUID}/series")
     @Produces("application/dicom+json,application/json")
     public Response searchForSeriesOfStudyJSON(
-            @PathParam("StudyInstanceUID") String studyInstanceUID) throws Exception {
+            @PathParam("StudyInstanceUID") String studyInstanceUID) {
         return search("SearchForStudySeries", Model.SERIES, studyInstanceUID, null, QIDO.SERIES, Output.JSON);
     }
 
@@ -225,7 +233,7 @@ public class QidoRS {
     @NoCache
     @Path("/instances")
     @Produces("multipart/related;type=application/dicom+xml")
-    public Response searchForInstancesXML() throws Exception {
+    public Response searchForInstancesXML() {
         return search("SearchForInstances", Model.INSTANCE, null, null, QIDO.STUDY_SERIES_INSTANCE, Output.DICOM_XML);
     }
 
@@ -233,7 +241,7 @@ public class QidoRS {
     @NoCache
     @Path("/instances")
     @Produces("application/dicom+json,application/json")
-    public Response searchForInstancesJSON() throws Exception {
+    public Response searchForInstancesJSON() {
         return search("SearchForInstances", Model.INSTANCE, null, null, QIDO.STUDY_SERIES_INSTANCE, Output.JSON);
     }
 
@@ -242,7 +250,7 @@ public class QidoRS {
     @Path("/studies/{StudyInstanceUID}/instances")
     @Produces("multipart/related;type=application/dicom+xml")
     public Response searchForInstancesOfStudyXML(
-            @PathParam("StudyInstanceUID") String studyInstanceUID) throws Exception {
+            @PathParam("StudyInstanceUID") String studyInstanceUID) {
         return search("SearchForStudyInstances", Model.INSTANCE,
                 studyInstanceUID, null, QIDO.SERIES_INSTANCE, Output.DICOM_XML);
     }
@@ -252,7 +260,7 @@ public class QidoRS {
     @Path("/studies/{StudyInstanceUID}/instances")
     @Produces("application/dicom+json,application/json")
     public Response searchForInstancesOfStudyJSON(
-            @PathParam("StudyInstanceUID") String studyInstanceUID) throws Exception {
+            @PathParam("StudyInstanceUID") String studyInstanceUID) {
         return search("SearchForStudyInstances", Model.INSTANCE,
                 studyInstanceUID, null, QIDO.SERIES_INSTANCE, Output.JSON);
     }
@@ -263,7 +271,7 @@ public class QidoRS {
     @Produces("multipart/related;type=application/dicom+xml")
     public Response searchForInstancesOfSeriesXML(
             @PathParam("StudyInstanceUID") String studyInstanceUID,
-            @PathParam("SeriesInstanceUID") String seriesInstanceUID) throws Exception {
+            @PathParam("SeriesInstanceUID") String seriesInstanceUID) {
         return search("SearchForStudySeriesInstances", Model.INSTANCE,
                 studyInstanceUID, seriesInstanceUID, QIDO.INSTANCE, Output.DICOM_XML);
     }
@@ -274,7 +282,7 @@ public class QidoRS {
     @Produces("application/dicom+json,application/json")
     public Response searchForInstancesOfSeriesJSON(
             @PathParam("StudyInstanceUID") String studyInstanceUID,
-            @PathParam("SeriesInstanceUID") String seriesInstanceUID) throws Exception {
+            @PathParam("SeriesInstanceUID") String seriesInstanceUID) {
         return search("SearchForStudySeriesInstances", Model.INSTANCE,
                 studyInstanceUID, seriesInstanceUID, QIDO.INSTANCE, Output.JSON);
     }
@@ -283,7 +291,7 @@ public class QidoRS {
     @NoCache
     @Path("/mwlitems")
     @Produces("multipart/related;type=application/dicom+xml")
-    public Response searchForSPSXML() throws Exception {
+    public Response searchForSPSXML() {
         return search("SearchForSPS", Model.MWL, null, null, QIDO.MWL, Output.DICOM_XML);
     }
 
@@ -291,28 +299,134 @@ public class QidoRS {
     @NoCache
     @Path("/mwlitems")
     @Produces("application/dicom+json,application/json")
-    public Response searchForSPSJSON() throws Exception {
+    public Response searchForSPSJSON() {
         return search("SearchForSPS", Model.MWL, null, null, QIDO.MWL, Output.JSON);
     }
 
-    private Response search(String method, Model model, String studyInstanceUID, String seriesInstanceUID,
-                            QIDO qido, Output output)
-            throws Exception {
-        LOG.info("Process GET {} from {}@{}", this, request.getRemoteUser(), request.getRemoteHost());
+    @GET
+    @NoCache
+    @Path("/patients/count")
+    @Produces("application/json")
+    public Response countPatients() {
+        return count("CountPatients", Model.PATIENT, null, null);
+    }
+
+    @GET
+    @NoCache
+    @Path("/studies/count")
+    @Produces("application/json")
+    public Response countStudies() {
+        return count("CountStudies", Model.STUDY, null, null);
+    }
+
+    @GET
+    @NoCache
+    @Path("/series/count")
+    @Produces("application/json")
+    public Response countSeries() {
+        return count("CountSeries", Model.SERIES, null, null);
+    }
+
+    @GET
+    @NoCache
+    @Path("/studies/{StudyInstanceUID}/series/count")
+    @Produces("application/json")
+    public Response countSeriesOfStudy(
+            @PathParam("StudyInstanceUID") String studyInstanceUID) {
+        return count("CountStudySeries", Model.SERIES, studyInstanceUID, null);
+    }
+
+    @GET
+    @NoCache
+    @Path("/instances/count")
+    @Produces("application/json")
+    public Response countInstances() {
+        return count("CountInstances", Model.INSTANCE, null, null);
+    }
+
+    @GET
+    @NoCache
+    @Path("/studies/{StudyInstanceUID}/instances/count")
+    @Produces("application/json")
+    public Response countInstancesOfStudy(
+            @PathParam("StudyInstanceUID") String studyInstanceUID) {
+        return count("CountStudyInstances", Model.INSTANCE, studyInstanceUID, null);
+    }
+
+    @GET
+    @NoCache
+    @Path("/studies/{StudyInstanceUID}/series/{SeriesInstanceUID}/instances/count")
+    @Produces("application/json")
+    public Response countInstancesOfSeries(
+            @PathParam("StudyInstanceUID") String studyInstanceUID,
+            @PathParam("SeriesInstanceUID") String seriesInstanceUID) {
+        return count("CountStudySeriesInstances", Model.INSTANCE, studyInstanceUID, seriesInstanceUID);
+    }
+
+    @GET
+    @NoCache
+    @Path("/mwlitems/count")
+    @Produces("application/json")
+    public Response countSPS() {
+        return count("CountSPS", Model.MWL, null, null);
+    }
+
+    @GET
+    @NoCache
+    @Path("/studies/size")
+    @Produces("application/json")
+    public Response sizeOfStudies() {
+        logRequest();
         QueryAttributes queryAttrs = new QueryAttributes(uriInfo);
-        QueryContext ctx = newQueryContext(method, queryAttrs, studyInstanceUID, seriesInstanceUID, qido.includetags, model);
+        QueryContext ctx = newQueryContext(
+                "SizeOfStudies", queryAttrs, null, null, Model.STUDY);
+        try (Query query = service.createStudyQuery(ctx)) {
+            Transaction transaction = query.beginTransaction();
+            try {
+                Iterator<Long> studyPks = query.withUnknownSize(device.getDeviceExtension(ArchiveDeviceExtension.class).getQueryFetchSize());
+                while (studyPks.hasNext())
+                    ctx.getQueryService().calculateStudySize(studyPks.next());
+            } catch (Exception e) {
+                throw new WebApplicationException(errResponseAsTextPlain(e));
+            } finally {
+                try {
+                    transaction.commit();
+                } catch (Exception e) {
+                    LOG.warn("Failed to commit transaction:\n{}", e);
+                }
+            }
+        }
+        try (Query query = service.createStudyQuery(ctx)) {
+            return Response.ok("{\"size\":" + query.fetchSize() + '}').build();
+        }
+    }
+
+    private Response count(String method, Model model, String studyInstanceUID, String seriesInstanceUID) {
+        logRequest();
+        QueryAttributes queryAttrs = new QueryAttributes(uriInfo);
+        QueryContext ctx = newQueryContext(method, queryAttrs, studyInstanceUID, seriesInstanceUID, model);
+        try (Query query = model.createQuery(service, ctx)) {
+            return Response.ok("{\"count\":" + query.fetchCount() + '}').build();
+        } catch (Exception e) {
+            throw new WebApplicationException(errResponseAsTextPlain(e));
+        }
+    }
+
+    private Response search(String method, Model model, String studyInstanceUID, String seriesInstanceUID,
+                            QIDO qido, Output output) {
+        logRequest();
+        QueryAttributes queryAttrs = new QueryAttributes(uriInfo);
+        QueryContext ctx = newQueryContext(method, queryAttrs, studyInstanceUID, seriesInstanceUID, model);
+        ctx.setReturnKeys(queryAttrs.getReturnKeys(qido.includetags));
         ArchiveAEExtension arcAE = ctx.getArchiveAEExtension();
-        Query query = model.createQuery(service, ctx);
-        Transaction transaction = null;
-        try {
+        try (Query query = model.createQuery(service, ctx)) {
             query.initQuery();
-            query.setFetchSize(arcAE.getArchiveDeviceExtension().getQueryFetchSize());
             int maxResults = arcAE.qidoMaxNumberOfResults();
             int offsetInt = parseInt(offset);
             int limitInt = parseInt(limit);
             int remaining = 0;
-            if (maxResults > 0 && (limitInt == 0 || limitInt >  maxResults) && !ctx.isConsiderPurgedInstances()) {
-                int numResults = (int) (query.count() - offsetInt);
+            if (maxResults > 0 && (limitInt == 0 || limitInt > maxResults) && !ctx.isConsiderPurgedInstances()) {
+                int numResults = (int) (query.fetchCount() - offsetInt);
                 if (numResults <= 0)
                     return Response.noContent().build();
 
@@ -326,37 +440,34 @@ public class QidoRS {
             else if (limitInt > 0)
                 query.limit(limitInt);
 
-            ArrayList<QueryAttributes.OrderByTag> orderByTags = queryAttrs.getOrderByTags();
-            if (!orderByTags.isEmpty()) {
-                ArrayList<OrderSpecifier<?>> list = new ArrayList<>(orderByTags.size() + 1);
-                for (QueryAttributes.OrderByTag orderByTag : orderByTags) {
-                    model.addOrderSpecifier(orderByTag.tag, orderByTag.order, list);
-                }
-                if (limitInt > 0)
-                    list.add(model.getPk().asc());
-                query.orderBy(list.toArray(new OrderSpecifier<?>[list.size()]));
-            }
-            transaction = query.beginTransaction();
-            query.executeQuery();
-            if (!query.hasMoreMatches())
-                return Response.noContent().build();
+            Transaction transaction = query.beginTransaction();
+            try {
+                query.setFetchSize(arcAE.getArchiveDeviceExtension().getQueryFetchSize());
+                query.executeQuery();
+                if (!query.hasMoreMatches())
+                    return Response.noContent().build();
 
-            Response.ResponseBuilder builder = Response.ok();
-            if (remaining > 0)
-                builder.header("Warning", warning(remaining));
+                Response.ResponseBuilder builder = Response.ok();
+                if (remaining > 0)
+                    builder.header("Warning", warning(remaining));
 
-            return builder.entity(
-                    output.entity(this, method, query, model, model.getAttributesCoercion(service, ctx)))
-                    .build();
-        } finally {
-            if (transaction != null)
+                return builder.entity(
+                        output.entity(this, method, query, model, model.getAttributesCoercion(service, ctx)))
+                        .build();
+            } finally {
                 try {
                     transaction.commit();
                 } catch (Exception e) {
                     LOG.warn("Failed to commit transaction:\n{}", e);
                 }
-            query.close();
+            }
+        } catch (Exception e) {
+            throw new WebApplicationException(errResponseAsTextPlain(e));
         }
+    }
+
+    private void logRequest() {
+        LOG.info("Process GET {} from {}@{}", request.getRequestURI(), request.getRemoteUser(), request.getRemoteHost());
     }
 
     private String warning(int remaining) {
@@ -365,7 +476,7 @@ public class QidoRS {
     }
 
     private QueryContext newQueryContext(String method, QueryAttributes queryAttrs, String studyInstanceUID,
-                                         String seriesInstanceUID, int[] includetags, Model model) {
+                                         String seriesInstanceUID, Model model) {
         ApplicationEntity ae = getApplicationEntity();
 
         org.dcm4chee.arc.query.util.QueryParam queryParam = new org.dcm4chee.arc.query.util.QueryParam(ae);
@@ -376,10 +487,12 @@ public class QidoRS {
         queryParam.setWithoutStudies(withoutstudies == null || Boolean.parseBoolean(withoutstudies));
         queryParam.setIncomplete(Boolean.parseBoolean(incomplete));
         queryParam.setRetrieveFailed(Boolean.parseBoolean(retrievefailed));
-        queryParam.setSendingApplicationEntityTitleOfSeries(sendingApplicationEntityTitleOfSeries);
-        queryParam.setStudyReceiveDateTime(studyReceiveDateTime);
+        queryParam.setStorageVerificationFailed(Boolean.parseBoolean(storageVerificationFailed));
+        queryParam.setCompressionFailed(Boolean.parseBoolean(compressionfailed));
         queryParam.setExternalRetrieveAET(externalRetrieveAET);
         queryParam.setExternalRetrieveAETNot(externalRetrieveAETNot);
+        if (patientVerificationStatus != null)
+            queryParam.setPatientVerificationStatus(Patient.VerificationStatus.valueOf(patientVerificationStatus));
         QueryContext ctx = service.newQueryContextQIDO(request, method, ae, queryParam);
         ctx.setQueryRetrieveLevel(model.getQueryRetrieveLevel());
         ctx.setSOPClassUID(model.getSOPClassUID());
@@ -392,8 +505,7 @@ public class QidoRS {
         if (seriesInstanceUID != null)
             keys.setString(Tag.SeriesInstanceUID, VR.UI, seriesInstanceUID);
         ctx.setQueryKeys(keys);
-        ctx.setReturnKeys(queryAttrs.getReturnKeys(includetags));
-        ctx.setOrderByPatientName(queryAttrs.isOrderByPatientName());
+        ctx.setOrderByTags(queryAttrs.getOrderByTags());
         return ctx;
     }
 
@@ -407,7 +519,7 @@ public class QidoRS {
         if (ae == null || !ae.isInstalled())
             throw new WebApplicationException(
                     "No such Application Entity: " + aet,
-                    Response.Status.SERVICE_UNAVAILABLE);
+                    Response.Status.NOT_FOUND);
         return ae;
     }
 
@@ -450,11 +562,6 @@ public class QidoRS {
             }
 
             @Override
-            boolean addOrderSpecifier(int tag, Order order, List<OrderSpecifier<?>> result) {
-                return QueryBuilder.addMWLOrderSpecifier(tag, order, result);
-            }
-
-            @Override
             public AttributesCoercion getAttributesCoercion(QueryService service, QueryContext ctx) {
                 return null;
             }
@@ -484,10 +591,6 @@ public class QidoRS {
 
         Query createQuery(QueryService service, QueryContext ctx) {
             return service.createQuery(ctx);
-        }
-
-        boolean addOrderSpecifier(int tag, Order order, List<OrderSpecifier<?>> result) {
-            return QueryBuilder.addOrderSpecifier(qrLevel, tag, order, result);
         }
 
         AttributesCoercion getAttributesCoercion(QueryService service, QueryContext ctx) {
@@ -541,17 +644,12 @@ public class QidoRS {
 
             final Attributes match = adjust(tmp, model, query, coercion);
             LOG.debug("{}: Match #{}:\n{}", method, ++count, match);
-            output.addPart(
-                    new StreamingOutput() {
-                        @Override
-                        public void write(OutputStream out) throws IOException,
-                                WebApplicationException {
+            output.addPart((StreamingOutput) out -> {
                             try {
                                 SAXTransformer.getSAXWriter(new StreamResult(out)).write(match);
                             } catch (Exception e) {
                                 throw new WebApplicationException(e);
                             }
-                        }
                     },
                     MediaTypes.APPLICATION_DICOM_XML_TYPE);
         }
@@ -572,18 +670,14 @@ public class QidoRS {
             matches.add(match);
         }
         LOG.info("{}: {} Matches", method, count);
-        return new StreamingOutput() {
-            @Override
-            public void write(OutputStream out) throws IOException {
+        return (StreamingOutput) out -> {
                 JsonGenerator gen = Json.createGenerator(out);
                 JSONWriter writer = new JSONWriter(gen);
                 gen.writeStartArray();
-                for (Attributes match : matches) {
+                for (Attributes match : matches)
                     writer.write(match);
-                }
                 gen.writeEnd();
                 gen.flush();
-            }
         };
     }
 
@@ -596,5 +690,12 @@ public class QidoRS {
         if (sb != null)
             match.setString(Tag.RetrieveURL, VR.UR, sb.toString());
         return match;
+    }
+
+    private Response errResponseAsTextPlain(Exception e) {
+        StringWriter sw = new StringWriter();
+        e.printStackTrace(new PrintWriter(sw));
+        String exceptionAsString = sw.toString();
+        return Response.status(Response.Status.INTERNAL_SERVER_ERROR).entity(exceptionAsString).type("text/plain").build();
     }
 }

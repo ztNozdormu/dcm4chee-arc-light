@@ -44,13 +44,20 @@ import org.dcm4che3.data.Attributes;
 import org.dcm4che3.data.Sequence;
 import org.dcm4che3.data.Tag;
 import org.dcm4che3.data.VR;
+import org.dcm4che3.hl7.ERRSegment;
+import org.dcm4che3.hl7.HL7Exception;
+import org.dcm4che3.hl7.HL7Message;
 import org.dcm4che3.hl7.HL7Segment;
+import org.dcm4che3.net.Connection;
 import org.dcm4che3.net.Device;
 import org.dcm4che3.net.hl7.HL7Application;
 import org.dcm4che3.net.hl7.UnparsedHL7Message;
+import org.dcm4che3.net.hl7.service.DefaultHL7Service;
 import org.dcm4che3.net.hl7.service.HL7Service;
+import org.dcm4che3.util.ReverseDNS;
 import org.dcm4che3.util.UIDUtils;
 import org.dcm4chee.arc.conf.ArchiveHL7ApplicationExtension;
+import org.dcm4chee.arc.conf.HL7Fields;
 import org.dcm4chee.arc.conf.HL7OrderSPSStatus;
 import org.dcm4chee.arc.entity.Patient;
 import org.dcm4chee.arc.patient.PatientService;
@@ -58,16 +65,15 @@ import org.dcm4chee.arc.procedure.ProcedureContext;
 import org.dcm4chee.arc.procedure.ProcedureService;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
-import org.xml.sax.SAXException;
 
 import javax.enterprise.context.ApplicationScoped;
 import javax.enterprise.inject.Typed;
 import javax.inject.Inject;
-import javax.xml.transform.Transformer;
-import javax.xml.transform.TransformerConfigurationException;
-import java.io.IOException;
 import java.net.Socket;
-import java.util.*;
+import java.util.ArrayList;
+import java.util.Collection;
+import java.util.List;
+import java.util.stream.Stream;
 
 /**
  * @author Gunter Zeilinger <gunterze@gmail.com>
@@ -76,7 +82,7 @@ import java.util.*;
  */
 @ApplicationScoped
 @Typed(HL7Service.class)
-public class ProcedureUpdateService extends AbstractHL7Service {
+public class ProcedureUpdateService extends DefaultHL7Service {
     private final Logger LOG = LoggerFactory.getLogger(ProcedureUpdateService.class);
     @Inject
     private PatientService patientService;
@@ -89,76 +95,79 @@ public class ProcedureUpdateService extends AbstractHL7Service {
     }
 
     @Override
-    protected void process(HL7Application hl7App, Socket s, UnparsedHL7Message msg) throws Exception {
-        Patient pat = PatientUpdateService.updatePatient(hl7App, s, msg, patientService);
-        if (pat != null)
-            updateProcedure(hl7App, s, msg, pat);
+    public UnparsedHL7Message onMessage(HL7Application hl7App, Connection conn, Socket s, UnparsedHL7Message msg)
+            throws HL7Exception {
+        ArchiveHL7Message archiveHL7Message = new ArchiveHL7Message(
+                HL7Message.makeACK(msg.msh(), HL7Exception.AA, null).getBytes(null));
+        Patient pat = PatientUpdateService.updatePatient(hl7App, s, msg, patientService, archiveHL7Message);
+        if (pat != null) {
+            try {
+                updateProcedure(hl7App, s, msg, pat, archiveHL7Message);
+            } catch (Exception e) {
+                throw new HL7Exception(new ERRSegment(msg.msh()).setUserMessage(e.getMessage()), e);
+            }
+        }
+
+        return archiveHL7Message;
     }
 
-    private void updateProcedure(HL7Application hl7App, Socket s, UnparsedHL7Message msg, Patient pat)
-            throws IOException, SAXException, TransformerConfigurationException {
+    private void updateProcedure(HL7Application hl7App, Socket s, UnparsedHL7Message msg, Patient pat,
+                                 ArchiveHL7Message archiveHL7Message)
+            throws Exception {
         ArchiveHL7ApplicationExtension arcHL7App =
                 hl7App.getHL7ApplicationExtension(ArchiveHL7ApplicationExtension.class);
         HL7Segment msh = msg.msh();
         String hl7cs = msh.getField(17, hl7App.getHL7DefaultCharacterSet());
         Attributes attrs = SAXTransformer.transform(
-                msg.data(), hl7cs, arcHL7App.scheduleProcedureTemplateURI(), new org.dcm4che3.io.SAXTransformer.SetupTransformer() {
-                    @Override
-                    public void setup(Transformer tr) {
-                        tr.setParameter("hl7ScheduledProtocolCodeInOrder", arcHL7App.hl7ScheduledProtocolCodeInOrder().toString());
-                        if (arcHL7App.hl7ScheduledStationAETInOrder() != null)
-                            tr.setParameter("hl7ScheduledStationAETInOrder", arcHL7App.hl7ScheduledStationAETInOrder().toString());
-                    }
+                msg.data(), hl7cs, arcHL7App.scheduleProcedureTemplateURI(), tr -> {
+                    tr.setParameter("hl7ScheduledProtocolCodeInOrder", arcHL7App.hl7ScheduledProtocolCodeInOrder().toString());
+                    if (arcHL7App.hl7ScheduledStationAETInOrder() != null)
+                        tr.setParameter("hl7ScheduledStationAETInOrder", arcHL7App.hl7ScheduledStationAETInOrder().toString());
                 });
-        boolean result = adjust(attrs, arcHL7App, msh, s);
+        boolean result = adjust(attrs, arcHL7App, new HL7Fields(msg, hl7App.getHL7DefaultCharacterSet()), s);
         if (!result) {
-            LOG.info("MWL item not created/updated for HL7 message : " + msh.getMessageType()
+            LOG.warn("MWL item not created/updated for HL7 message : " + msh.getMessageType()
                     + " as no mapping to a Scheduled Procedure Step Status is configured with ORC-1_ORC-5 : "
                     + attrs.getNestedDataset(Tag.ScheduledProcedureStepSequence).getString(Tag.ScheduledProcedureStepStatus));
             return;
         }
-        ProcedureContext ctx = procedureService.createProcedureContextHL7(s, msh);
+        ProcedureContext ctx = procedureService.createProcedureContextHL7(s, msg);
         ctx.setPatient(pat);
         ctx.setAttributes(attrs);
         procedureService.updateProcedure(ctx);
+        archiveHL7Message.setProcRecEventActionCode(ctx.getEventActionCode());
+        archiveHL7Message.setStudyAttrs(ctx.getAttributes());
     }
 
-    private boolean adjust(Attributes attrs, ArchiveHL7ApplicationExtension arcHL7App, HL7Segment msh, Socket socket) {
+    private boolean adjust(Attributes attrs, ArchiveHL7ApplicationExtension arcHL7App, HL7Fields hl7Fields,
+                           Socket socket) {
         if (!attrs.containsValue(Tag.StudyInstanceUID))
             attrs.setString(Tag.StudyInstanceUID, VR.UI, UIDUtils.createUID());
         Sequence spsItems = attrs.getSequence(Tag.ScheduledProcedureStepSequence);
-        boolean result = false;
         for (Attributes sps : spsItems) {
-            String orderControlStatus = sps.getString(Tag.ScheduledProcedureStepStatus);
-            List<String> ordercontrolStatusCodes = new ArrayList<>();
-            for (HL7OrderSPSStatus hl7OrderSPSStatus : arcHL7App.hl7OrderSPSStatuses()) {
-                result = false;
-                ordercontrolStatusCodes.addAll(Arrays.asList(hl7OrderSPSStatus.getOrderControlStatusCodes()));
-                if (ordercontrolStatusCodes.contains(orderControlStatus)) {
-                    sps.setString(Tag.ScheduledProcedureStepStatus, VR.CS, hl7OrderSPSStatus.getSPSStatus().toString());
-                    result = true;
-                }
-                if (result)
-                    break;
-            }
-            if ("SCHEDULED".equals(sps.getString(Tag.ScheduledProcedureStepStatus))
-                    && !sps.containsValue(Tag.ScheduledProcedureStepStartDate))
-                sps.setDate(Tag.ScheduledProcedureStepStartDateAndTime, new Date());
             if (sps.getString(Tag.ScheduledStationAETitle) == null) {
                 List<String> ssAETs = new ArrayList<>();
-                List<String> ssNames = new ArrayList<>();
-                Collection<Device> devices = arcHL7App.hl7OrderScheduledStation(socket.getLocalAddress().getHostName(), msh, attrs);
-                for (Device device : devices) {
-                    if (device.getStationName() != null)
-                        ssNames.add(device.getStationName());
+                Collection<Device> devices = arcHL7App.hl7OrderScheduledStation(
+                        ReverseDNS.hostNameOf(socket.getLocalAddress()), hl7Fields);
+                for (Device device : devices)
                     ssAETs.addAll(device.getApplicationAETitles());
-                }
+
                 if (!ssAETs.isEmpty())
                     sps.setString(Tag.ScheduledStationAETitle, VR.AE, ssAETs.toArray(new String[ssAETs.size()]));
-                if (!ssNames.isEmpty())
-                    sps.setString(Tag.ScheduledStationName, VR.SH, ssNames.toArray(new String[ssNames.size()]));
+
+                String[] ssNames = devices.stream().filter(x -> x.getStationName() != null).map(Device::getStationName).toArray(String[]::new);
+                if (ssNames.length > 0)
+                    sps.setString(Tag.ScheduledStationName, VR.SH, ssNames);
+            }
+
+            for (HL7OrderSPSStatus hl7OrderSPSStatus : arcHL7App.hl7OrderSPSStatuses()) {
+                if (Stream.of(hl7OrderSPSStatus.getOrderControlStatusCodes())
+                        .anyMatch(x -> x.equals(sps.getString(Tag.ScheduledProcedureStepStatus)))) {
+                    sps.setString(Tag.ScheduledProcedureStepStatus, VR.CS, hl7OrderSPSStatus.getSPSStatus().name());
+                    return true;
+                }
             }
         }
-        return result;
+        return false;
     }
 }

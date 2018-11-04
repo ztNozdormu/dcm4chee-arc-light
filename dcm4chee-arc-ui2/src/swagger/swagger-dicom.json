@@ -53,8 +53,7 @@
         "operationId": "SearchForPatients",
         "produces": [
           "multipart/related;type=application/dicom+xml",
-          "application/dicom+json",
-          "application/json"
+          "application/dicom+json"
         ],
         "parameters": [
           {
@@ -102,6 +101,18 @@
             "default": true
           },
           {
+            "name": "patientVerificationStatus",
+            "in": "query",
+            "description": "return only Patients with given Verification Status",
+            "type": "string",
+            "enum": [
+              "UNVERIFIED",
+              "VERIFIED",
+              "NOT_FOUND",
+              "VERIFICATION_FAILED"
+            ]
+          },
+          {
             "name": "fuzzymatching",
             "in": "query",
             "description": "fuzzy semantic matching of person names",
@@ -147,8 +158,7 @@
         "operationId": "SearchForStudies",
         "produces": [
           "multipart/related;type=application/dicom+xml",
-          "application/dicom+json",
-          "application/json"
+          "application/dicom+json"
         ],
         "parameters": [
           {
@@ -215,6 +225,32 @@
             "description": "return only Studies which failed to be retrieved from fallback C-MOVE SCP",
             "type": "boolean",
             "default": false
+          },
+          {
+            "name": "storageVerificationFailed",
+            "in": "query",
+            "description": "return only Studies which includes at least one Series with Failures of Last Storage Commitment",
+            "type": "boolean",
+            "default": false
+          },
+          {
+            "name": "compressionfailed",
+            "in": "query",
+            "description": "return only Studies which includes at least one Series with Failures of Last Compression",
+            "type": "boolean",
+            "default": false
+          },
+          {
+            "name": "patientVerificationStatus",
+            "in": "query",
+            "description": "return only Studies of Patients with given Verification Status",
+            "type": "string",
+            "enum": [
+              "UNVERIFIED",
+              "VERIFIED",
+              "NOT_FOUND",
+              "VERIFICATION_FAILED"
+            ]
           },
           {
             "name": "fuzzymatching",
@@ -289,7 +325,7 @@
         ],
         "produces": [
           "multipart/related;type=application/dicom+xml",
-          "multipart/related;type=application/json"
+          "multipart/related;type=application/dicom+json"
         ],
         "parameters": [
           {
@@ -325,8 +361,7 @@
         "operationId": "SearchForStudySeries",
         "produces": [
           "multipart/related;type=application/dicom+xml",
-          "application/dicom+json",
-          "application/json"
+          "application/dicom+json"
         ],
         "parameters": [
           {
@@ -402,6 +437,32 @@
             "default": false
           },
           {
+            "name": "storageVerificationFailed",
+            "in": "query",
+            "description": "return only Series with Failures of Last Storage Commitment",
+            "type": "boolean",
+            "default": false
+          },
+          {
+            "name": "compressionfailed",
+            "in": "query",
+            "description": "return only Series with Failures of Last Compression",
+            "type": "boolean",
+            "default": false
+          },
+          {
+            "name": "patientVerificationStatus",
+            "in": "query",
+            "description": "return only Series of Patients with given Verification Status",
+            "type": "string",
+            "enum": [
+              "UNVERIFIED",
+              "VERIFIED",
+              "NOT_FOUND",
+              "VERIFICATION_FAILED"
+            ]
+          },
+          {
             "name": "fuzzymatching",
             "in": "query",
             "description": "fuzzy semantic matching of person names",
@@ -453,8 +514,7 @@
         "operationId": "SearchForSeries",
         "produces": [
           "multipart/related;type=application/dicom+xml",
-          "application/dicom+json",
-          "application/json"
+          "application/dicom+json"
         ],
         "parameters": [
           {
@@ -523,6 +583,32 @@
             "default": false
           },
           {
+            "name": "storageVerificationFailed",
+            "in": "query",
+            "description": "return only Series with Failures of Last Storage Commitment",
+            "type": "boolean",
+            "default": false
+          },
+          {
+            "name": "compressionfailed",
+            "in": "query",
+            "description": "return only Series with Failures of Last Compression",
+            "type": "boolean",
+            "default": false
+          },
+          {
+            "name": "patientVerificationStatus",
+            "in": "query",
+            "description": "return only Series of Patients with given Verification Status",
+            "type": "string",
+            "enum": [
+              "UNVERIFIED",
+              "VERIFIED",
+              "NOT_FOUND",
+              "VERIFICATION_FAILED"
+            ]
+          },
+          {
             "name": "fuzzymatching",
             "in": "query",
             "description": "fuzzy semantic matching of person names",
@@ -574,8 +660,7 @@
         "operationId": "SearchForStudySeriesInstances",
         "produces": [
           "multipart/related;type=application/dicom+xml",
-          "application/dicom+json",
-          "application/json"
+          "application/dicom+json"
         ],
         "parameters": [
           {
@@ -675,8 +760,7 @@
         "operationId": "SearchForStudyInstances",
         "produces": [
           "multipart/related;type=application/dicom+xml",
-          "application/dicom+json",
-          "application/json"
+          "application/dicom+json"
         ],
         "parameters": [
           {
@@ -776,8 +860,7 @@
         "operationId": "SearchForInstances",
         "produces": [
           "multipart/related;type=application/dicom+xml",
-          "application/dicom+json",
-          "application/json"
+          "application/dicom+json"
         ],
         "parameters": [
           {
@@ -886,7 +969,8 @@
           "multipart/related;type=image/x-jls",
           "multipart/related;type=text/xml",
           "multipart/related;type=video/mpeg",
-          "multipart/related;type=video/mp4"
+          "multipart/related;type=video/mp4",
+          "application/zip"
         ],
         "parameters": [
           {
@@ -901,6 +985,12 @@
             "in": "path",
             "description": "Study Instance UID for a single Study",
             "required": true,
+            "type": "string"
+          },
+          {
+            "name": "accept",
+            "in": "query",
+            "description": "Alternative to Accept header",
             "type": "string"
           }
         ],
@@ -928,11 +1018,11 @@
         "consumes": [
           "multipart/related;type=application/dicom;boundary={messageBoundary}",
           "multipart/related;type=application/dicom+xml;boundary={messageBoundary}",
-          "multipart/related;type=application/json;boundary={messageBoundary}"
+          "multipart/related;type=application/dicom+json;boundary={messageBoundary}"
         ],
         "produces": [
           "multipart/related;type=application/dicom+xml",
-          "multipart/related;type=application/json"
+          "multipart/related;type=application/dicom+json"
         ],
         "parameters": [
           {
@@ -984,7 +1074,8 @@
           "multipart/related;type=image/x-jls",
           "multipart/related;type=text/xml",
           "multipart/related;type=video/mpeg",
-          "multipart/related;type=video/mp4"
+          "multipart/related;type=video/mp4",
+          "application/zip"
         ],
         "parameters": [
           {
@@ -1006,6 +1097,12 @@
             "in": "path",
             "description": "Series Instance UID for a single Series",
             "required": true,
+            "type": "string"
+          },
+          {
+            "name": "accept",
+            "in": "query",
+            "description": "Alternative to Accept header",
             "type": "string"
           }
         ],
@@ -1043,7 +1140,8 @@
           "multipart/related;type=image/x-jls",
           "multipart/related;type=text/xml",
           "multipart/related;type=video/mpeg",
-          "multipart/related;type=video/mp4"
+          "multipart/related;type=video/mp4",
+          "application/zip"
         ],
         "parameters": [
           {
@@ -1072,6 +1170,12 @@
             "in": "path",
             "description": "SOP Instance UID for a single SOP Instance",
             "required": true,
+            "type": "string"
+          },
+          {
+            "name": "accept",
+            "in": "query",
+            "description": "Alternative to Accept header",
             "type": "string"
           }
         ],
@@ -1141,479 +1245,11 @@
             "description": "comma or %2C separated list of one or more non duplicate frame numbers",
             "required": true,
             "type": "string"
-          }
-        ],
-        "responses": {
-          "200": {
-            "description": "successful operation",
-            "schema": {
-              "type": "file"
-            }
-          },
-          "404": {
-            "description": "no object with specified UIDs found"
-          },
-          "default": {
-            "description": "unexpected error"
-          }
-        }
-      }
-    },
-    "/aets/{aet}/rs/studies/{StudyInstanceUID}/rendered": {
-      "get": {
-        "tags": [
-          "WADO-RS"
-        ],
-        "summary": "Retrieve Rendered Study",
-        "operationId": "RetrieveRenderedStudy",
-        "produces": [
-          "multipart/related;type=application/pdf",
-          "multipart/related;type=image/jpeg",
-          "multipart/related;type=image/png",
-          "multipart/related;type=image/gif",
-          "multipart/related;type=text/html",
-          "multipart/related;type=text/plain",
-          "multipart/related;type=text/xml",
-          "multipart/related;type=video/mpeg",
-          "multipart/related;type=video/mp4"
-        ],
-        "parameters": [
-          {
-            "name": "aet",
-            "in": "path",
-            "description": "Archive AE Title",
-            "required": true,
-            "type": "string"
           },
           {
-            "name": "StudyInstanceUID",
-            "in": "path",
-            "description": "Study Instance UID for a single Study",
-            "required": true,
-            "type": "string"
-          },
-          {
-            "name": "annotation",
+            "name": "accept",
             "in": "query",
-            "description": "Annotation On The Object",
-            "type": "string"
-          },
-          {
-            "name": "rows",
-            "in": "query",
-            "description": "Number of Pixel Rows",
-            "type": "integer",
-            "minimum": 1
-          },
-          {
-            "name": "columns",
-            "in": "query",
-            "description": "Number of Pixel Columns",
-            "type": "integer",
-            "minimum": 1
-          },
-          {
-            "name": "region",
-            "in": "query",
-            "description": "Region of the Image (not implemented)",
-            "type": "string"
-          },
-          {
-            "name": "windowCenter",
-            "in": "query",
-            "description": "Window Center of the Image",
-            "type": "number"
-          },
-          {
-            "name": "windowWidth",
-            "in": "query",
-            "description": "Window Width of the Image",
-            "type": "number",
-            "minimum": 1
-          },
-          {
-            "name": "imageQuality",
-            "in": "query",
-            "description": "Image Quality",
-            "type": "integer",
-            "minimum": 1,
-            "maximum": 100
-          },
-          {
-            "name": "presentationUID",
-            "in": "query",
-            "description": "Unique Identifier of the Presentation Object",
-            "type": "string"
-          },
-          {
-            "name": "presentationSeriesUID",
-            "in": "query",
-            "description": "Unique Identifier of the Series Containing The Presentation Object",
-            "type": "string"
-          }
-        ],
-        "responses": {
-          "200": {
-            "description": "successful operation",
-            "schema": {
-              "type": "file"
-            }
-          },
-          "404": {
-            "description": "no series with specified UIDs found"
-          },
-          "default": {
-            "description": "unexpected error"
-          }
-        }
-      }
-    },
-    "/aets/{aet}/rs/studies/{StudyInstanceUID}/series/{SeriesInstanceUID}/rendered": {
-      "get": {
-        "tags": [
-          "WADO-RS"
-        ],
-        "summary": "Retrieve Rendered Series",
-        "operationId": "RetrieveRenderedSeries",
-        "produces": [
-          "multipart/related;type=application/pdf",
-          "multipart/related;type=image/jpeg",
-          "multipart/related;type=image/png",
-          "multipart/related;type=image/gif",
-          "multipart/related;type=text/html",
-          "multipart/related;type=text/plain",
-          "multipart/related;type=text/xml",
-          "multipart/related;type=video/mpeg",
-          "multipart/related;type=video/mp4"
-        ],
-        "parameters": [
-          {
-            "name": "aet",
-            "in": "path",
-            "description": "Archive AE Title",
-            "required": true,
-            "type": "string"
-          },
-          {
-            "name": "StudyInstanceUID",
-            "in": "path",
-            "description": "Study Instance UID for a single Study",
-            "required": true,
-            "type": "string"
-          },
-          {
-            "name": "SeriesInstanceUID",
-            "in": "path",
-            "description": "Series Instance UID for a single Series",
-            "required": true,
-            "type": "string"
-          },
-          {
-            "name": "annotation",
-            "in": "query",
-            "description": "Annotation On The Object",
-            "type": "string"
-          },
-          {
-            "name": "rows",
-            "in": "query",
-            "description": "Number of Pixel Rows",
-            "type": "integer",
-            "minimum": 1
-          },
-          {
-            "name": "columns",
-            "in": "query",
-            "description": "Number of Pixel Columns",
-            "type": "integer",
-            "minimum": 1
-          },
-          {
-            "name": "region",
-            "in": "query",
-            "description": "Region of the Image (not implemented)",
-            "type": "string"
-          },
-          {
-            "name": "windowCenter",
-            "in": "query",
-            "description": "Window Center of the Image",
-            "type": "number"
-          },
-          {
-            "name": "windowWidth",
-            "in": "query",
-            "description": "Window Width of the Image",
-            "type": "number",
-            "minimum": 1
-          },
-          {
-            "name": "imageQuality",
-            "in": "query",
-            "description": "Image Quality",
-            "type": "integer",
-            "minimum": 1,
-            "maximum": 100
-          },
-          {
-            "name": "presentationUID",
-            "in": "query",
-            "description": "Unique Identifier of the Presentation Object",
-            "type": "string"
-          },
-          {
-            "name": "presentationSeriesUID",
-            "in": "query",
-            "description": "Unique Identifier of the Series Containing The Presentation Object",
-            "type": "string"
-          }
-        ],
-        "responses": {
-          "200": {
-            "description": "successful operation",
-            "schema": {
-              "type": "file"
-            }
-          },
-          "404": {
-            "description": "no series with specified UIDs found"
-          },
-          "default": {
-            "description": "unexpected error"
-          }
-        }
-      }
-    },
-    "/aets/{aet}/rs/studies/{StudyInstanceUID}/series/{SeriesInstanceUID}/instances/{SOPInstanceUID}/rendered": {
-      "get": {
-        "tags": [
-          "WADO-RS"
-        ],
-        "summary": "Retrieve Rendered Instance",
-        "operationId": "RetrieveRenderedInstance",
-        "produces": [
-          "multipart/related;type=application/pdf",
-          "multipart/related;type=image/jpeg",
-          "multipart/related;type=image/png",
-          "multipart/related;type=image/gif",
-          "multipart/related;type=text/html",
-          "multipart/related;type=text/plain",
-          "multipart/related;type=text/xml",
-          "multipart/related;type=video/mpeg",
-          "multipart/related;type=video/mp4"
-        ],
-        "parameters": [
-          {
-            "name": "aet",
-            "in": "path",
-            "description": "Archive AE Title",
-            "required": true,
-            "type": "string"
-          },
-          {
-            "name": "StudyInstanceUID",
-            "in": "path",
-            "description": "Study Instance UID for a single Study",
-            "required": true,
-            "type": "string"
-          },
-          {
-            "name": "SeriesInstanceUID",
-            "in": "path",
-            "description": "Series Instance UID for a single Series",
-            "required": true,
-            "type": "string"
-          },
-          {
-            "name": "SOPInstanceUID",
-            "in": "path",
-            "description": "SOP Instance UID for a single SOP Instance",
-            "required": true,
-            "type": "string"
-          },
-          {
-            "name": "annotation",
-            "in": "query",
-            "description": "Annotation On The Object",
-            "type": "string"
-          },
-          {
-            "name": "rows",
-            "in": "query",
-            "description": "Number of Pixel Rows",
-            "type": "integer",
-            "minimum": 1
-          },
-          {
-            "name": "columns",
-            "in": "query",
-            "description": "Number of Pixel Columns",
-            "type": "integer",
-            "minimum": 1
-          },
-          {
-            "name": "region",
-            "in": "query",
-            "description": "Region of the Image (not implemented)",
-            "type": "string"
-          },
-          {
-            "name": "windowCenter",
-            "in": "query",
-            "description": "Window Center of the Image",
-            "type": "number"
-          },
-          {
-            "name": "windowWidth",
-            "in": "query",
-            "description": "Window Width of the Image",
-            "type": "number",
-            "minimum": 1
-          },
-          {
-            "name": "imageQuality",
-            "in": "query",
-            "description": "Image Quality",
-            "type": "integer",
-            "minimum": 1,
-            "maximum": 100
-          },
-          {
-            "name": "presentationUID",
-            "in": "query",
-            "description": "Unique Identifier of the Presentation Object",
-            "type": "string"
-          },
-          {
-            "name": "presentationSeriesUID",
-            "in": "query",
-            "description": "Unique Identifier of the Series Containing The Presentation Object",
-            "type": "string"
-          }
-        ],
-        "responses": {
-          "200": {
-            "description": "successful operation",
-            "schema": {
-              "type": "file"
-            }
-          },
-          "404": {
-            "description": "no object with specified UIDs found"
-          },
-          "default": {
-            "description": "unexpected error"
-          }
-        }
-      }
-    },
-    "/aets/{aet}/rs/studies/{StudyInstanceUID}/series/{SeriesInstanceUID}/instances/{SOPInstanceUID}/frames/{FrameList}/rendered": {
-      "get": {
-        "tags": [
-          "WADO-RS"
-        ],
-        "summary": "Retrieve Rendered Frames",
-        "operationId": "RetrieveRenderedFrames",
-        "produces": [
-          "multipart/related;type=image/jpeg",
-          "multipart/related;type=image/png",
-          "multipart/related;type=image/gif",
-          "multipart/related;type=video/mpeg",
-          "multipart/related;type=video/mp4"
-        ],
-        "parameters": [
-          {
-            "name": "aet",
-            "in": "path",
-            "description": "Archive AE Title",
-            "required": true,
-            "type": "string"
-          },
-          {
-            "name": "StudyInstanceUID",
-            "in": "path",
-            "description": "Study Instance UID for a single Study",
-            "required": true,
-            "type": "string"
-          },
-          {
-            "name": "SeriesInstanceUID",
-            "in": "path",
-            "description": "Series Instance UID for a single Series",
-            "required": true,
-            "type": "string"
-          },
-          {
-            "name": "SOPInstanceUID",
-            "in": "path",
-            "description": "SOP Instance UID for a single SOP Instance",
-            "required": true,
-            "type": "string"
-          },
-          {
-            "name": "FrameList",
-            "in": "path",
-            "description": "comma or %2C separated list of one or more non duplicate frame numbers",
-            "required": true,
-            "type": "string"
-          },
-          {
-            "name": "annotation",
-            "in": "query",
-            "description": "Annotation On The Object",
-            "type": "string"
-          },
-          {
-            "name": "rows",
-            "in": "query",
-            "description": "Number of Pixel Rows",
-            "type": "integer",
-            "minimum": 1
-          },
-          {
-            "name": "columns",
-            "in": "query",
-            "description": "Number of Pixel Columns",
-            "type": "integer",
-            "minimum": 1
-          },
-          {
-            "name": "region",
-            "in": "query",
-            "description": "Region of the Image (not implemented)",
-            "type": "string"
-          },
-          {
-            "name": "windowCenter",
-            "in": "query",
-            "description": "Window Center of the Image",
-            "type": "number"
-          },
-          {
-            "name": "windowWidth",
-            "in": "query",
-            "description": "Window Width of the Image",
-            "type": "number",
-            "minimum": 1
-          },
-          {
-            "name": "imageQuality",
-            "in": "query",
-            "description": "Image Quality",
-            "type": "integer",
-            "minimum": 1,
-            "maximum": 100
-          },
-          {
-            "name": "presentationUID",
-            "in": "query",
-            "description": "Unique Identifier of the Presentation Object",
-            "type": "string"
-          },
-          {
-            "name": "presentationSeriesUID",
-            "in": "query",
-            "description": "Unique Identifier of the Series Containing The Presentation Object",
+            "description": "Alternative to Accept header",
             "type": "string"
           }
         ],
@@ -1680,6 +1316,12 @@
             "description": "{dicomTag} or {dicomTag}/{itemIndex}/{AttributePath}'",
             "required": true,
             "type": "string"
+          },
+          {
+            "name": "accept",
+            "in": "query",
+            "description": "Alternative to Accept header",
+            "type": "string"
           }
         ],
         "responses": {
@@ -1707,8 +1349,7 @@
         "operationId": "RetrieveStudyMetadata",
         "produces": [
           "multipart/related;type=application/dicom+xml",
-          "application/dicom+json",
-          "application/json"
+          "application/dicom+json"
         ],
         "parameters": [
           {
@@ -1729,6 +1370,12 @@
             "name": "includefields",
             "in": "query",
             "description": "only include attributes configured by named Metadata Filter",
+            "type": "string"
+          },
+          {
+            "name": "accept",
+            "in": "query",
+            "description": "Alternative to Accept header",
             "type": "string"
           }
         ],
@@ -1757,8 +1404,7 @@
         "operationId": "RetrieveSeriesMetadata",
         "produces": [
           "multipart/related;type=application/dicom+xml",
-          "application/dicom+json",
-          "application/json"
+          "application/dicom+json"
         ],
         "parameters": [
           {
@@ -1787,6 +1433,12 @@
             "in": "query",
             "description": "only include attributes configured by named Metadata Filter",
             "type": "string"
+          },
+          {
+            "name": "accept",
+            "in": "query",
+            "description": "Alternative to Accept header",
+            "type": "string"
           }
         ],
         "responses": {
@@ -1814,8 +1466,7 @@
         "operationId": "RetrieveInstanceMetadata",
         "produces": [
           "multipart/related;type=application/dicom+xml",
-          "application/dicom+json",
-          "application/json"
+          "application/dicom+json"
         ],
         "parameters": [
           {
@@ -1850,6 +1501,12 @@
             "name": "includefields",
             "in": "query",
             "description": "only include attributes configured by named Metadata Filter",
+            "type": "string"
+          },
+          {
+            "name": "accept",
+            "in": "query",
+            "description": "Alternative to Accept header",
             "type": "string"
           }
         ],

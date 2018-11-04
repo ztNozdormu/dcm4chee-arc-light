@@ -8,7 +8,7 @@ import java.util.Objects;
  */
 public class QueueDescriptor {
 
-    public static final Duration DEFAULT_RETRY_DELAY = Duration.parse("PT1M");
+    public static final Duration DEFAULT_RETRY_DELAY = Duration.valueOf("PT1M");
 
     private String queueName;
     private String jndiName;
@@ -19,6 +19,7 @@ public class QueueDescriptor {
     private int retryDelayMultiplier = 100;
     private boolean retryOnWarning;
     private Duration purgeQueueMessageCompletedDelay;
+    private int maxQueueSize = 0;
 
     public QueueDescriptor(String queueName) {
         setQueueName(queueName);
@@ -108,5 +109,13 @@ public class QueueDescriptor {
 
     public void setPurgeQueueMessageCompletedDelay(Duration purgeQueueMessageCompletedDelay) {
         this.purgeQueueMessageCompletedDelay = purgeQueueMessageCompletedDelay;
+    }
+
+    public int getMaxQueueSize() {
+        return maxQueueSize;
+    }
+
+    public void setMaxQueueSize(int maxQueueSize) {
+        this.maxQueueSize = maxQueueSize;
     }
 }

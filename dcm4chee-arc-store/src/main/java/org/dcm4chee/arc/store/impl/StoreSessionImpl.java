@@ -41,19 +41,18 @@
 package org.dcm4chee.arc.store.impl;
 
 import org.dcm4che3.data.Attributes;
-import org.dcm4che3.hl7.HL7Segment;
 import org.dcm4che3.net.ApplicationEntity;
 import org.dcm4che3.net.Association;
 import org.dcm4che3.net.hl7.HL7Application;
+import org.dcm4che3.net.hl7.UnparsedHL7Message;
+import org.dcm4che3.util.ReverseDNS;
 import org.dcm4che3.util.SafeClose;
-import org.dcm4chee.arc.conf.AcceptConflictingPatientID;
-import org.dcm4chee.arc.conf.AcceptMissingPatientID;
-import org.dcm4chee.arc.conf.ArchiveAEExtension;
-import org.dcm4chee.arc.conf.Entity;
+import org.dcm4chee.arc.conf.*;
 import org.dcm4chee.arc.entity.Series;
 import org.dcm4chee.arc.entity.Study;
 import org.dcm4chee.arc.entity.UIDMap;
 import org.dcm4chee.arc.storage.Storage;
+import org.dcm4chee.arc.storage.StorageFactory;
 import org.dcm4chee.arc.store.StoreService;
 import org.dcm4chee.arc.store.StoreSession;
 
@@ -61,7 +60,9 @@ import javax.servlet.http.HttpServletRequest;
 import java.io.IOException;
 import java.net.Socket;
 import java.util.HashMap;
+import java.util.HashSet;
 import java.util.Map;
+import java.util.Set;
 import java.util.concurrent.atomic.AtomicInteger;
 
 /**
@@ -78,19 +79,23 @@ class StoreSessionImpl implements StoreSession {
     private HttpServletRequest httpRequest;
     private HL7Application hl7App;
     private String calledAET;
+    private String callingAET;
     private Socket socket;
-    private HL7Segment msh;
+    private UnparsedHL7Message msg;
     private final StoreService storeService;
     private final Map<String, Storage> storageMap = new HashMap<>();
     private Study cachedStudy;
     private final Map<String,Series> seriesCache = new HashMap<>();
+    private final Set<String> processedPrefetchRules = new HashSet<>();
     private final Map<Long,UIDMap> uidMapCache = new HashMap<>();
     private Map<String, String> uidMap;
     private String objectStorageID;
     private String metadataStorageID;
     private AcceptMissingPatientID acceptMissingPatientID;
     private AcceptConflictingPatientID acceptConflictingPatientID;
+    private Attributes.UpdatePolicy patientUpdatePolicy;
     private Attributes.UpdatePolicy studyUpdatePolicy;
+    private String impaxReportEndpoint;
 
     StoreSessionImpl(StoreService storeService) {
         this.serialNo = prevSerialNo.incrementAndGet();
@@ -102,7 +107,7 @@ class StoreSessionImpl implements StoreSession {
         return httpRequest != null
                 ? httpRequest.getRemoteUser() + '@' + httpRequest.getRemoteHost() + "->" + ae.getAETitle()
                 : as != null ? as.toString()
-                : msh != null ? msh.toString()
+                : msg != null ? msg.msh().toString()
                 : ae.getAETitle();
     }
 
@@ -112,8 +117,9 @@ class StoreSessionImpl implements StoreSession {
         ArchiveAEExtension arcAE = ae.getAEExtensionNotNull(ArchiveAEExtension.class);
         this.acceptMissingPatientID = arcAE.acceptMissingPatientID();
         this.acceptConflictingPatientID = arcAE.acceptConflictingPatientID();
-        this.studyUpdatePolicy = arcAE.getArchiveDeviceExtension()
-                .getAttributeFilter(Entity.Study).getAttributeUpdatePolicy();
+        ArchiveDeviceExtension arcDev = arcAE.getArchiveDeviceExtension();
+        this.patientUpdatePolicy = arcDev.getAttributeFilter(Entity.Patient).getAttributeUpdatePolicy();
+        this.studyUpdatePolicy = arcDev.getAttributeFilter(Entity.Study).getAttributeUpdatePolicy();
     }
 
     void setHttpRequest(HttpServletRequest httpRequest) {
@@ -128,19 +134,25 @@ class StoreSessionImpl implements StoreSession {
         this.calledAET = calledAET;
     }
 
+    void setCallingAET(String callingAET) {
+        this.callingAET = callingAET;
+    }
+
     void setSocket(Socket socket) {
         this.socket = socket;
     }
 
-    public void setMSH(HL7Segment msh) {
-        this.msh = msh;
+    public void setMsg(UnparsedHL7Message msg) {
+        this.msg = msg;
+        this.callingAET = msg.msh().getSendingApplicationWithFacility();
     }
 
     void setAssociation(Association as) {
+        setApplicationEntity(as.getApplicationEntity());
         this.as = as;
         this.socket = as.getSocket();
         this.calledAET = as.getCalledAET();
-        setApplicationEntity(as.getApplicationEntity());
+        this.callingAET = as.getCallingAET();
     }
 
     @Override
@@ -164,8 +176,8 @@ class StoreSessionImpl implements StoreSession {
     }
 
     @Override
-    public HL7Segment getHL7MessageHeader() {
-        return msh;
+    public UnparsedHL7Message getUnparsedHL7Message() {
+        return msg;
     }
 
     @Override
@@ -189,8 +201,10 @@ class StoreSessionImpl implements StoreSession {
     }
 
     @Override
-    public Storage getStorage(String storageID) {
-        return storageMap.get(storageID);
+    public Storage getStorage(String storageID, StorageFactory storageFactory) {
+        return storageMap.computeIfAbsent(storageID,
+                x -> storageFactory.getStorage(
+                        getArchiveAEExtension().getArchiveDeviceExtension().getStorageDescriptor(x)));
     }
 
     @Override
@@ -205,13 +219,13 @@ class StoreSessionImpl implements StoreSession {
 
     @Override
     public String getCallingAET() {
-        return as != null ? as.getCallingAET() : msh != null ? msh.getSendingApplicationWithFacility() : null;
+        return callingAET;
     }
 
     @Override
     public String getRemoteHostName() {
         return httpRequest != null ? httpRequest.getRemoteHost()
-                : socket != null ? socket.getInetAddress().getHostName()
+                : socket != null ? ReverseDNS.hostNameOf(socket.getInetAddress())
                 : null;
     }
 
@@ -231,8 +245,19 @@ class StoreSessionImpl implements StoreSession {
         if (!isStudyCached(study.getStudyInstanceUID())) {
             cachedStudy = study;
             seriesCache.clear();
+            processedPrefetchRules.clear();
         }
         seriesCache.put(series.getSeriesInstanceUID(), series);
+    }
+
+    @Override
+    public boolean isNotProcessed(PrefetchRule rule) {
+        return !processedPrefetchRules.contains(rule.getCommonName());
+    }
+
+    @Override
+    public boolean markAsProcessed(PrefetchRule rule) {
+        return processedPrefetchRules.add(rule.getCommonName());
     }
 
     private boolean isStudyCached(String studyInstanceUID) {
@@ -264,8 +289,9 @@ class StoreSessionImpl implements StoreSession {
     }
 
     @Override
-    public void setObjectStorageID(String objectStorageID) {
+    public StoreSession withObjectStorageID(String objectStorageID) {
         this.objectStorageID = objectStorageID;
+        return this;
     }
 
     @Override
@@ -294,6 +320,16 @@ class StoreSessionImpl implements StoreSession {
     }
 
     @Override
+    public Attributes.UpdatePolicy getPatientUpdatePolicy() {
+        return patientUpdatePolicy;
+    }
+
+    @Override
+    public void setPatientUpdatePolicy(Attributes.UpdatePolicy patientUpdatePolicy) {
+        this.patientUpdatePolicy = patientUpdatePolicy;
+    }
+
+    @Override
     public Attributes.UpdatePolicy getStudyUpdatePolicy() {
         return studyUpdatePolicy;
     }
@@ -301,5 +337,15 @@ class StoreSessionImpl implements StoreSession {
     @Override
     public void setStudyUpdatePolicy(Attributes.UpdatePolicy studyUpdatePolicy) {
         this.studyUpdatePolicy = studyUpdatePolicy;
+    }
+
+    @Override
+    public String getImpaxReportEndpoint() {
+        return impaxReportEndpoint;
+    }
+
+    @Override
+    public void setImpaxReportEndpoint(String impaxReportEndpoint) {
+        this.impaxReportEndpoint = impaxReportEndpoint;
     }
 }

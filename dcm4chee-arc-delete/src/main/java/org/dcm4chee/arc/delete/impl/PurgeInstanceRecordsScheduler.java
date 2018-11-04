@@ -40,16 +40,37 @@
 
 package org.dcm4chee.arc.delete.impl;
 
+import org.dcm4che3.data.Attributes;
+import org.dcm4che3.data.Sequence;
+import org.dcm4che3.data.Tag;
+import org.dcm4che3.dict.archive.ArchiveTag;
+import org.dcm4che3.json.JSONReader;
 import org.dcm4che3.net.Device;
+import org.dcm4che3.util.SafeClose;
+import org.dcm4che3.util.StringUtils;
 import org.dcm4chee.arc.Scheduler;
 import org.dcm4chee.arc.conf.ArchiveDeviceExtension;
 import org.dcm4chee.arc.conf.Duration;
+import org.dcm4chee.arc.entity.Location;
+import org.dcm4chee.arc.entity.Series;
+import org.dcm4chee.arc.storage.ReadContext;
+import org.dcm4chee.arc.storage.Storage;
+import org.dcm4chee.arc.storage.StorageFactory;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import javax.enterprise.context.ApplicationScoped;
 import javax.inject.Inject;
+import javax.json.Json;
+import java.io.IOException;
+import java.io.InputStream;
+import java.io.InputStreamReader;
+import java.util.ArrayList;
+import java.util.HashMap;
 import java.util.List;
+import java.util.Map;
+import java.util.zip.ZipEntry;
+import java.util.zip.ZipInputStream;
 
 /**
  * @author Gunter Zeilinger <gunterze@gmail.com>
@@ -66,6 +87,9 @@ public class PurgeInstanceRecordsScheduler extends Scheduler {
     @Inject
     private DeletionServiceEJB ejb;
 
+    @Inject
+    private StorageFactory storageFactory;
+
     protected PurgeInstanceRecordsScheduler() {
         super(Mode.scheduleWithFixedDelay);
     }
@@ -78,20 +102,127 @@ public class PurgeInstanceRecordsScheduler extends Scheduler {
     @Override
     protected Duration getPollingInterval() {
         ArchiveDeviceExtension arcDev = device.getDeviceExtension(ArchiveDeviceExtension.class);
-        return arcDev.getPurgeInstanceRecordsPollingInterval();
+        return arcDev.isPurgeInstanceRecords() ? arcDev.getPurgeInstanceRecordsPollingInterval() : null;
     }
 
     @Override
     protected void execute() {
         ArchiveDeviceExtension arcDev = device.getDeviceExtension(ArchiveDeviceExtension.class);
         int fetchSize = arcDev.getPurgeInstanceRecordsFetchSize();
-        List<Long> seriesPks;
-        do {
-            seriesPks = ejb.findSeriesToPurgeInstances(fetchSize);
-            for (Long seriesPk : seriesPks) {
-                ejb.purgeInstanceRecordsOfSeries(seriesPk);
+        List<Series.MetadataUpdate> series;
+        Map<String, Storage> storageMap = new HashMap<>();
+        try {
+            do {
+                if (getPollingInterval() == null)
+                    return;
+
+                series = ejb.findSeriesToPurgeInstances(fetchSize);
+                for (Series.MetadataUpdate metadataUpdate : series) {
+                    if (getPollingInterval() == null)
+                        return;
+
+                    Long seriesPk = metadataUpdate.seriesPk;
+                    if (!claim(seriesPk))
+                        continue;
+
+                    LOG.info("Purging Instance records of Series[pk={}]", seriesPk);
+                    Map<String, List<Location>> locationsFromMetadata = null;
+                    try {
+                        locationsFromMetadata = locationsFromMetadata(
+                                getStorage(metadataUpdate.storageID, storageMap),
+                                metadataUpdate.storagePath);
+                    } catch (IOException e) {
+                        LOG.warn("Reading of Metadata of Series[pk={}] failed - schedule recreation", seriesPk, e);
+                        try {
+                            ejb.scheduleMetadataUpdate(seriesPk);
+                        } catch (Exception e1) {
+                            LOG.warn("Failed to schedule recreation of Metadata of Series[pk={}]", seriesPk, e1);
+                        }
+                        continue;
+                    }
+                    try {
+                        if (ejb.purgeInstanceRecordsOfSeries(seriesPk, locationsFromMetadata)) {
+                            LOG.info("Purged Instance records of Series[pk={}]", seriesPk);
+                        } else {
+                            LOG.warn("Verification of Metadata of Series[pk={}] failed - recreation scheduled", seriesPk);
+                        }
+                    } catch (Exception e) {
+                        LOG.warn("Failed to purge Instance records of Series[pk={}]\n", seriesPk, e);
+                        try {
+                            ejb.updateInstancePurgeState(seriesPk,
+                                    Series.InstancePurgeState.NO, Series.InstancePurgeState.FAILED_TO_PURGE);
+                        } catch (Exception e1) {
+                            LOG.warn("Failed to set Instance Purge State of Series[pk={}] to FAILED", seriesPk, e1);
+                        }
+                    }
+                }
+            }
+            while (series.size() == fetchSize);
+        } finally {
+            for (Storage storage : storageMap.values())
+                SafeClose.close(storage);
+        }
+    }
+
+    private boolean claim(Long seriesPk) {
+        try {
+            return ejb.claimPurgeInstanceRecordsOfSeries(seriesPk);
+        } catch (Exception e) {
+            LOG.info("Failed to claim purge of Instance records of Series[pk={}]:\n", seriesPk, e);
+            return false;
+        }
+    }
+
+    private Map<String,List<Location>> locationsFromMetadata(Storage storage, String storagePath)
+            throws IOException {
+        Map<String, List<Location>> map = new HashMap<>();
+        try (InputStream in = storage.openInputStream(createReadContext(storage, storagePath))) {
+            ZipInputStream zip = new ZipInputStream(in);
+            ZipEntry entry;
+            while ((entry = zip.getNextEntry()) != null) {
+                Attributes attrs = parseJSON(zip);
+                List<Location> list = new ArrayList<>(2);
+                list.add(createLocation(attrs));
+                Sequence seq = attrs.getSequence(ArchiveTag.PrivateCreator, ArchiveTag.OtherStorageSequence);
+                if (seq != null) for (Attributes item : seq) list.add(createLocation(item));
+                map.put(attrs.getString(Tag.SOPInstanceUID), list);
+                zip.closeEntry();
             }
         }
-        while (seriesPks.size() == fetchSize);
+        return map;
+    }
+
+    private Location createLocation(Attributes attrs) {
+            return new Location.Builder()
+                .storageID(attrs.getString(ArchiveTag.PrivateCreator, ArchiveTag.StorageID))
+                .storagePath(StringUtils.concat(attrs.getStrings(ArchiveTag.PrivateCreator, ArchiveTag.StoragePath), '/'))
+                .transferSyntaxUID(attrs.getString(ArchiveTag.PrivateCreator, ArchiveTag.StorageTransferSyntaxUID))
+                .digest(attrs.getString(ArchiveTag.PrivateCreator, ArchiveTag.StorageObjectDigest))
+                .size(attrs.getInt(ArchiveTag.PrivateCreator, ArchiveTag.StorageObjectSize, -1))
+                .status(attrs.getString(ArchiveTag.PrivateCreator, ArchiveTag.StorageObjectStatus))
+                .build();
+
+    }
+
+    private static Attributes parseJSON(InputStream in) throws IOException {
+        JSONReader jsonReader = new JSONReader(Json.createParser(new InputStreamReader(in, "UTF-8")));
+        jsonReader.setSkipBulkDataURI(true);
+        return jsonReader.readDataset(null);
+    }
+
+    private static ReadContext createReadContext(Storage storage, String storagePath) {
+        ReadContext readContext = storage.createReadContext();
+        readContext.setStoragePath(storagePath);
+        return readContext;
+    }
+
+    private Storage getStorage(String storageID, Map<String,Storage> storageMap) {
+        Storage storage = storageMap.get(storageID);
+        if (storage == null) {
+            ArchiveDeviceExtension arcDev = device.getDeviceExtension(ArchiveDeviceExtension.class);
+            storage = storageFactory.getStorage(arcDev.getStorageDescriptorNotNull(storageID));
+            storageMap.put(storageID, storage);
+        }
+        return storage;
     }
 }

@@ -38,6 +38,7 @@
 
 package org.dcm4chee.arc.dimse.rs;
 
+import org.dcm4che3.conf.api.IApplicationEntityCache;
 import org.dcm4che3.data.Attributes;
 import org.dcm4che3.data.Tag;
 import org.dcm4che3.data.UID;
@@ -46,11 +47,13 @@ import org.dcm4che3.json.JSONWriter;
 import org.dcm4che3.net.*;
 import org.dcm4che3.util.TagUtils;
 import org.dcm4chee.arc.conf.ArchiveDeviceExtension;
+import org.dcm4chee.arc.conf.Duration;
 import org.dcm4chee.arc.conf.Entity;
 import org.dcm4chee.arc.query.scu.CFindSCU;
 import org.dcm4chee.arc.query.util.QIDO;
 import org.dcm4chee.arc.query.util.QueryAttributes;
 import org.dcm4chee.arc.validation.constraints.ValidUriInfo;
+import org.dcm4chee.arc.validation.constraints.ValidValueOf;
 import org.jboss.resteasy.annotations.cache.NoCache;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -70,7 +73,7 @@ import javax.ws.rs.core.Response;
 import javax.ws.rs.core.StreamingOutput;
 import javax.ws.rs.core.UriInfo;
 import java.io.IOException;
-import java.io.OutputStream;
+import java.net.ConnectException;
 import java.util.EnumSet;
 
 /**
@@ -92,6 +95,9 @@ public class QueryRS {
 
     @Inject
     private Device device;
+
+    @Inject
+    private IApplicationEntityCache aeCache;
 
     @PathParam("AETitle")
     private String aet;
@@ -115,6 +121,10 @@ public class QueryRS {
     @Pattern(regexp = "0|1|2")
     private String priority;
 
+    @QueryParam("SplitStudyDateRange")
+    @ValidValueOf(type = Duration.class)
+    private String splitStudyDateRange;
+
     @Inject
     private CFindSCU findSCU;
 
@@ -130,7 +140,7 @@ public class QueryRS {
     @Path("/patients")
     @Produces("application/dicom+json,application/json")
     public void searchForPatientsJSON(@Suspended AsyncResponse ar) throws Exception {
-        search(ar, Level.PATIENT, null, null, QIDO.PATIENT);
+        search(ar, Level.PATIENT, null, null, QIDO.PATIENT, false);
     }
 
     @GET
@@ -138,7 +148,7 @@ public class QueryRS {
     @Path("/studies")
     @Produces("application/dicom+json,application/json")
     public void searchForStudiesJSON(@Suspended AsyncResponse ar) throws Exception {
-        search(ar, Level.STUDY, null, null, QIDO.STUDY);
+        search(ar, Level.STUDY, null, null, QIDO.STUDY, false);
     }
 
     @GET
@@ -149,7 +159,7 @@ public class QueryRS {
             @Suspended AsyncResponse ar,
             @PathParam("StudyInstanceUID") String studyInstanceUID)
             throws Exception {
-        search(ar, Level.SERIES, studyInstanceUID, null, QIDO.STUDY_SERIES);
+        search(ar, Level.SERIES, studyInstanceUID, null, QIDO.STUDY_SERIES, false);
     }
 
     @GET
@@ -161,16 +171,46 @@ public class QueryRS {
             @PathParam("StudyInstanceUID") String studyInstanceUID,
             @PathParam("SeriesInstanceUID") String seriesInstanceUID)
             throws Exception {
-        search(ar, Level.IMAGE, studyInstanceUID, seriesInstanceUID, QIDO.STUDY_SERIES_INSTANCE);
+        search(ar, Level.IMAGE, studyInstanceUID, seriesInstanceUID, QIDO.STUDY_SERIES_INSTANCE, false);
     }
 
-    private ApplicationEntity getApplicationEntity() {
-        ApplicationEntity ae = device.getApplicationEntity(aet, true);
-        if (ae == null || !ae.isInstalled())
-            throw new WebApplicationException(
-                    "No such Application Entity: " + aet,
-                    Response.Status.SERVICE_UNAVAILABLE);
-        return ae;
+    @GET
+    @NoCache
+    @Path("/patients/count")
+    @Produces("application/json")
+    public void countPatients(@Suspended AsyncResponse ar) throws Exception {
+        search(ar, Level.PATIENT, null, null, QIDO.PATIENT, true);
+    }
+
+    @GET
+    @NoCache
+    @Path("/studies/count")
+    @Produces("application/json")
+    public void countStudies(@Suspended AsyncResponse ar) throws Exception {
+        search(ar, Level.STUDY, null, null, QIDO.STUDY, true);
+    }
+
+    @GET
+    @NoCache
+    @Path("/studies/{StudyInstanceUID}/series/count")
+    @Produces("application/json")
+    public void countSeriesOfStudy(
+            @Suspended AsyncResponse ar,
+            @PathParam("StudyInstanceUID") String studyInstanceUID)
+            throws Exception {
+        search(ar, Level.SERIES, studyInstanceUID, null, QIDO.STUDY_SERIES, true);
+    }
+
+    @GET
+    @NoCache
+    @Path("/studies/{StudyInstanceUID}/series/{SeriesInstanceUID}/instances/count")
+    @Produces("application/json")
+    public void countInstancesOfSeries(
+            @Suspended AsyncResponse ar,
+            @PathParam("StudyInstanceUID") String studyInstanceUID,
+            @PathParam("SeriesInstanceUID") String seriesInstanceUID)
+            throws Exception {
+        search(ar, Level.IMAGE, studyInstanceUID, seriesInstanceUID, QIDO.STUDY_SERIES_INSTANCE, true);
     }
 
     private int offset() {
@@ -189,49 +229,71 @@ public class QueryRS {
         return s != null ? Integer.parseInt(s) : defval;
     }
 
-    private void search(AsyncResponse ar, Level level, String studyInstanceUID, String seriesInstanceUID, QIDO qido)
+    private Duration splitStudyDateRange() {
+        return splitStudyDateRange != null ? Duration.valueOf(splitStudyDateRange) : null;
+    }
+
+    private void search(AsyncResponse ar, Level level, String studyInstanceUID, String seriesInstanceUID, QIDO qido,
+                        boolean count)
             throws Exception {
-        LOG.info("Process GET {} from {}@{}", this, request.getRemoteUser(), request.getRemoteHost());
-        QueryAttributes queryAttributes = new QueryAttributes(uriInfo);
-        queryAttributes.addReturnTags(qido.includetags);
-        if (queryAttributes.isIncludeAll()) {
-            ArchiveDeviceExtension arcdev = device.getDeviceExtensionNotNull(ArchiveDeviceExtension.class);
-            switch (level) {
-                case IMAGE:
-                    queryAttributes.addReturnTags(arcdev.getAttributeFilter(Entity.Instance).getSelection());
-                case SERIES:
-                    queryAttributes.addReturnTags(arcdev.getAttributeFilter(Entity.Series).getSelection());
-                case STUDY:
-                    queryAttributes.addReturnTags(arcdev.getAttributeFilter(Entity.Study).getSelection());
-                case PATIENT:
-                    queryAttributes.addReturnTags(arcdev.getAttributeFilter(Entity.Patient).getSelection());
-            }
-        }
-        Attributes keys = queryAttributes.getQueryKeys();
-        keys.setString(Tag.QueryRetrieveLevel, VR.CS, level.name());
-        if (studyInstanceUID != null)
-            keys.setString(Tag.StudyInstanceUID, VR.UI, studyInstanceUID);
-        if (seriesInstanceUID != null)
-            keys.setString(Tag.SeriesInstanceUID, VR.UI, seriesInstanceUID);
-        ApplicationEntity localAE = getApplicationEntity();
-        EnumSet<QueryOption> queryOptions = EnumSet.of(QueryOption.DATETIME);
-        if (Boolean.parseBoolean(fuzzymatching))
-            queryOptions.add(QueryOption.FUZZY);
-        ar.register(new CompletionCallback() {
-            @Override
-            public void onComplete(Throwable throwable) {
-                if (as != null)
-                    try {
-                        as.release();
-                    } catch (IOException e) {
-                        LOG.info("{}: Failed to release association:\\n", as, e);
+        LOG.info("Process GET {} from {}@{}", request.getRequestURI(), request.getRemoteUser(), request.getRemoteHost());
+        ApplicationEntity localAE = checkAE(aet, device.getApplicationEntity(aet, true));
+        checkAE(externalAET, aeCache.get(externalAET));
+        try {
+            QueryAttributes queryAttributes = new QueryAttributes(uriInfo);
+            if (!count) {
+                queryAttributes.addReturnTags(qido.includetags);
+                if (queryAttributes.isIncludeAll()) {
+                    ArchiveDeviceExtension arcdev = device.getDeviceExtensionNotNull(ArchiveDeviceExtension.class);
+                    switch (level) {
+                        case IMAGE:
+                            queryAttributes.addReturnTags(arcdev.getAttributeFilter(Entity.Instance).getSelection());
+                        case SERIES:
+                            queryAttributes.addReturnTags(arcdev.getAttributeFilter(Entity.Series).getSelection());
+                        case STUDY:
+                            queryAttributes.addReturnTags(arcdev.getAttributeFilter(Entity.Study).getSelection());
+                        case PATIENT:
+                            queryAttributes.addReturnTags(arcdev.getAttributeFilter(Entity.Patient).getSelection());
                     }
+                }
             }
-        });
-        as = findSCU.openAssociation(localAE, externalAET, level.cuid, queryOptions);
-        DimseRSP dimseRSP = findSCU.query(as, priority(), keys, limit != null ? offset() + limit() : 0);
-        dimseRSP.next();
-        ar.resume(responseBuilder(dimseRSP).build());
+            Attributes keys = queryAttributes.getQueryKeys();
+            keys.setString(Tag.QueryRetrieveLevel, VR.CS, level.name());
+            if (studyInstanceUID != null)
+                keys.setString(Tag.StudyInstanceUID, VR.UI, studyInstanceUID);
+            if (seriesInstanceUID != null)
+                keys.setString(Tag.SeriesInstanceUID, VR.UI, seriesInstanceUID);
+            EnumSet<QueryOption> queryOptions = EnumSet.of(QueryOption.DATETIME);
+            if (Boolean.parseBoolean(fuzzymatching))
+                queryOptions.add(QueryOption.FUZZY);
+            ar.register((CompletionCallback) throwable -> {
+                    if (as != null)
+                        try {
+                            as.release();
+                        } catch (IOException e) {
+                            LOG.info("{}: Failed to release association:\\n", as, e);
+                        }
+            });
+            as = findSCU.openAssociation(localAE, externalAET, level.cuid, queryOptions);
+            DimseRSP dimseRSP = findSCU.query(as, priority(), keys, !count && limit != null ? offset() + limit() : 0,
+                    1, splitStudyDateRange());
+            dimseRSP.next();
+            ar.resume((count ? countResponse(dimseRSP) : responseBuilder(dimseRSP)).build());
+        } catch (ConnectException e) {
+            throw new WebApplicationException(errResponse(e.getMessage(), Response.Status.BAD_GATEWAY));
+        }
+    }
+
+    private ApplicationEntity checkAE(String aet, ApplicationEntity ae) {
+        if (ae == null || !ae.isInstalled())
+            throw new WebApplicationException(errResponse(
+                    "No such Application Entity: " + aet,
+                    Response.Status.NOT_FOUND));
+        return ae;
+    }
+
+    private Response errResponse(String errorMessage, Response.Status status) {
+        return Response.status(status).entity("{\"errorMessage\":\"" + errorMessage + "\"}").build();
     }
 
     private Response.ResponseBuilder responseBuilder(DimseRSP dimseRSP) {
@@ -246,6 +308,21 @@ public class QueryRS {
         return Response.status(Response.Status.BAD_GATEWAY).header("Warning", warning(status));
     }
 
+    private Response.ResponseBuilder countResponse(DimseRSP dimseRSP) {
+        int count = 0;
+        try {
+            while (dimseRSP.next()) {
+                count++;
+            }
+        } catch (Exception e) {
+            return Response.status(Response.Status.BAD_GATEWAY).header("Warning", e.getMessage());
+        }
+        int status = dimseRSP.getCommand().getInt(Tag.Status, -1);
+        return status == 0
+                ? Response.ok("{\"count\":" + count + '}')
+                : Response.status(Response.Status.BAD_GATEWAY).header("Warning", warning(status));
+    }
+
     private String warning(int status) {
         switch (status) {
             case Status.OutOfResources:
@@ -254,7 +331,7 @@ public class QueryRS {
                 return "A900: Identifier does not match SOP Class";
         }
         return TagUtils.shortToHexString(status)
-                + ((status & Status.UnableToProcess) == Status.UnableToProcess
+                + ((status & 0xF000) == Status.UnableToProcess
                 ? ": Unable to Process"
                 : ": Unexpected status code");
     }
@@ -272,9 +349,7 @@ public class QueryRS {
     }
 
     private Object writeJSON(final DimseRSP dimseRSP) {
-        return new StreamingOutput() {
-            @Override
-            public void write(OutputStream out) throws IOException {
+        return (StreamingOutput) out -> {
                 JsonGenerator gen = Json.createGenerator(out);
                 JSONWriter writer = new JSONWriter(gen);
                 gen.writeStartArray();
@@ -298,7 +373,6 @@ public class QueryRS {
                 }
                 gen.writeEnd();
                 gen.flush();
-            }
         };
     }
 

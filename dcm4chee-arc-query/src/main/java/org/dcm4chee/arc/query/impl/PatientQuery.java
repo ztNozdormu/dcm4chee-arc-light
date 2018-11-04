@@ -49,10 +49,13 @@ import org.dcm4che3.data.Tag;
 import org.dcm4che3.data.VR;
 import org.dcm4che3.dict.archive.ArchiveTag;
 import org.dcm4chee.arc.entity.AttributesBlob;
+import org.dcm4chee.arc.entity.Patient;
 import org.dcm4chee.arc.entity.QPatient;
 import org.dcm4chee.arc.query.QueryContext;
 import org.dcm4chee.arc.query.util.QueryBuilder;
 import org.hibernate.StatelessSession;
+
+import java.util.Date;
 
 /**
  * @author Gunter Zeilinger <gunterze@gmail.com>
@@ -65,6 +68,9 @@ class PatientQuery extends AbstractQuery {
             QPatient.patient.numberOfStudies,
             QPatient.patient.createdTime,
             QPatient.patient.updatedTime,
+            QPatient.patient.verificationTime,
+            QPatient.patient.verificationStatus,
+            QPatient.patient.failedVerifications,
             QueryBuilder.patientAttributesBlob.encodedAttributes
     };
 
@@ -73,14 +79,27 @@ class PatientQuery extends AbstractQuery {
     }
 
     @Override
-    protected HibernateQuery<Tuple> newHibernateQuery() {
+    protected HibernateQuery<Tuple> newHibernateQuery(boolean forCount) {
         HibernateQuery<Tuple> q = new HibernateQuery<Void>(session).select(SELECT).from(QPatient.patient);
+        return newHibernateQuery(q, forCount);
+    }
+
+    @Override
+    public long fetchCount() {
+        HibernateQuery<Void> q = new HibernateQuery<Void>(session).from(QPatient.patient);
+        return newHibernateQuery(q, true).fetchCount();
+    }
+
+    private <T> HibernateQuery<T> newHibernateQuery(HibernateQuery<T> q, boolean forCount) {
         q = QueryBuilder.applyPatientLevelJoins(q,
                 context.getPatientIDs(),
                 context.getQueryKeys(),
                 context.getQueryParam(),
-                context.isOrderByPatientName());
-        BooleanBuilder predicates = new BooleanBuilder();
+                context.isOrderByPatientName(),
+                forCount);
+        BooleanBuilder predicates = new BooleanBuilder(QPatient.patient.mergedWith.isNull());
+        if (!context.getQueryParam().isWithoutStudies())
+            predicates.and(QPatient.patient.numberOfStudies.gt(0));
         QueryBuilder.addPatientLevelPredicates(predicates,
                 context.getPatientIDs(),
                 context.getQueryKeys(),
@@ -93,12 +112,34 @@ class PatientQuery extends AbstractQuery {
     protected Attributes toAttributes(Tuple results) {
         Attributes patAttrs = AttributesBlob.decodeAttributes(
                 results.get(QueryBuilder.patientAttributesBlob.encodedAttributes), null);
-        patAttrs.setInt(Tag.NumberOfPatientRelatedStudies, VR.IS, results.get(QPatient.patient.numberOfStudies));
-        patAttrs.setDate(ArchiveTag.PrivateCreator, ArchiveTag.PatientCreateDateTime, VR.DT,
-                results.get(QPatient.patient.createdTime));
-        patAttrs.setDate(ArchiveTag.PrivateCreator, ArchiveTag.PatientUpdateDateTime, VR.DT,
-                results.get(QPatient.patient.updatedTime));
+        addPatientQRAttrs(context, results, patAttrs);
         return patAttrs;
+    }
+
+    static void addPatientQRAttrs(QueryContext context, Tuple results, Attributes attrs) {
+        attrs.setInt(Tag.NumberOfPatientRelatedStudies, VR.IS,
+                results.get(QPatient.patient.numberOfStudies));
+        if (context.getReturnKeys() != null)
+            return;
+
+        attrs.setDate(ArchiveTag.PrivateCreator, ArchiveTag.PatientCreateDateTime, VR.DT,
+                results.get(QPatient.patient.createdTime));
+        attrs.setDate(ArchiveTag.PrivateCreator, ArchiveTag.PatientUpdateDateTime, VR.DT,
+                results.get(QPatient.patient.updatedTime));
+        Date verificationTime = results.get(QPatient.patient.verificationTime);
+        if (verificationTime != null) {
+            attrs.setDate(ArchiveTag.PrivateCreator, ArchiveTag.PatientVerificationDateTime, VR.DT,
+                    verificationTime);
+        }
+        Patient.VerificationStatus verificationStatus = results.get(QPatient.patient.verificationStatus);
+        if (verificationStatus != Patient.VerificationStatus.UNVERIFIED || verificationTime != null) {
+            attrs.setString(ArchiveTag.PrivateCreator, ArchiveTag.PatientVerificationStatus, VR.CS,
+                    verificationStatus.name());
+        }
+        int failures = results.get(QPatient.patient.failedVerifications);
+        if (failures > 0) {
+            attrs.setInt(ArchiveTag.PrivateCreator, ArchiveTag.FailedVerificationsOfPatient, VR.US, failures);
+        }
     }
 
     @Override

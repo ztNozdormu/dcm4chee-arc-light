@@ -17,7 +17,7 @@
  *
  * The Initial Developer of the Original Code is
  * J4Care.
- * Portions created by the Initial Developer are Copyright (C) 2013
+ * Portions created by the Initial Developer are Copyright (C) 2017
  * the Initial Developer. All Rights Reserved.
  *
  * Contributor(s):
@@ -50,14 +50,16 @@ import org.dcm4chee.arc.export.mgt.ExportManager;
 import org.dcm4chee.arc.exporter.ExportContext;
 import org.dcm4chee.arc.exporter.Exporter;
 import org.dcm4chee.arc.exporter.ExporterFactory;
-import org.dcm4chee.arc.retrieve.HttpServletRequestInfo;
+import org.dcm4chee.arc.ian.scu.IANScheduler;
+import org.dcm4chee.arc.qmgt.QueueSizeLimitExceededException;
 import org.dcm4chee.arc.retrieve.RetrieveContext;
 import org.dcm4chee.arc.retrieve.RetrieveService;
+import org.dcm4chee.arc.stgcmt.StgCmtSCU;
+import org.dcm4chee.arc.qmgt.HttpServletRequestInfo;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import javax.enterprise.context.RequestScoped;
-import javax.enterprise.event.Event;
 import javax.inject.Inject;
 import javax.json.Json;
 import javax.json.stream.JsonGenerator;
@@ -67,8 +69,6 @@ import javax.ws.rs.*;
 import javax.ws.rs.core.Context;
 import javax.ws.rs.core.Response;
 import javax.ws.rs.core.StreamingOutput;
-import java.io.IOException;
-import java.io.OutputStream;
 import java.net.URI;
 import java.net.URISyntaxException;
 
@@ -96,7 +96,10 @@ public class ExporterRS {
     private ExporterFactory exporterFactory;
 
     @Inject
-    private Event<ExportContext> exportEvent;
+    private IANScheduler ianScheduler;
+
+    @Inject
+    private StgCmtSCU stgCmtSCU;
 
     @PathParam("AETitle")
     private String aet;
@@ -109,6 +112,9 @@ public class ExporterRS {
     @Pattern(regexp = "true|false")
     private String onlyIAN;
 
+    @QueryParam("batchID")
+    private String batchID;
+
     @Context
     private HttpServletRequest request;
 
@@ -118,7 +124,7 @@ public class ExporterRS {
     public Response exportStudy(
             @PathParam("StudyUID") String studyUID,
             @PathParam("ExporterID") String exporterID) {
-        return export(studyUID, "*", "*", exporterID);
+        return export(studyUID, null, null, exporterID);
     }
 
     @POST
@@ -128,7 +134,7 @@ public class ExporterRS {
             @PathParam("StudyUID") String studyUID,
             @PathParam("SeriesUID") String seriesUID,
             @PathParam("ExporterID") String exporterID) {
-        return export(studyUID, seriesUID, "*", exporterID);
+        return export(studyUID, seriesUID, null, exporterID);
     }
 
     @POST
@@ -146,7 +152,7 @@ public class ExporterRS {
         LOG.info("Process POST {} from {}@{}", request.getRequestURI(), request.getRemoteUser(), request.getRemoteHost());
         ApplicationEntity ae = device.getApplicationEntity(aet, true);
         if (ae == null || !ae.isInstalled())
-            return errResponse(Response.Status.SERVICE_UNAVAILABLE, "No such Application Entity: " + aet);
+            return errResponse(Response.Status.NOT_FOUND, "No such Application Entity: " + aet);
 
         boolean bOnlyIAN = Boolean.parseBoolean(onlyIAN);
         boolean bOnlyStgCmt = Boolean.parseBoolean(onlyStgCmt);
@@ -159,10 +165,19 @@ public class ExporterRS {
             if (bOnlyStgCmt && exporter.getStgCmtSCPAETitle() == null)
                 return errResponse(Response.Status.NOT_FOUND, "No Storage Commitment SCP configured");
 
-            if (bOnlyIAN || bOnlyStgCmt)
-                exportEvent.fire(createExportContext(studyUID, seriesUID, objectUID, exporter, aet, bOnlyIAN, bOnlyStgCmt));
-            else
-                exportManager.scheduleExportTask(studyUID, seriesUID, objectUID, exporter, HttpServletRequestInfo.valueOf(request));
+            try {
+                if (bOnlyIAN || bOnlyStgCmt) {
+                    ExportContext ctx = createExportContext(studyUID, seriesUID, objectUID, exporter, aet);
+                    if (bOnlyIAN)
+                        ianScheduler.scheduleIAN(ctx, exporter);
+                    if (bOnlyStgCmt)
+                        stgCmtSCU.scheduleStorageCommit(ctx, exporter);
+                } else
+                    exportManager.scheduleExportTask(studyUID, seriesUID, objectUID, exporter,
+                            HttpServletRequestInfo.valueOf(request), batchID);
+            } catch (QueueSizeLimitExceededException e) {
+                return errResponse(Response.Status.SERVICE_UNAVAILABLE, e.getMessage());
+            }
 
             return Response.accepted().build();
         }
@@ -203,9 +218,7 @@ public class ExporterRS {
     }
 
     private static Object entity(final RetrieveContext ctx) {
-        return new StreamingOutput() {
-            @Override
-            public void write(OutputStream out) throws IOException {
+        return (StreamingOutput) out -> {
                 JsonGenerator gen = Json.createGenerator(out);
                 JsonWriter writer = new JsonWriter(gen);
                 gen.writeStartObject();
@@ -216,7 +229,6 @@ public class ExporterRS {
                 writer.writeNotNullOrDef("error", ctx.getException(), null);
                 gen.writeEnd();
                 gen.flush();
-            }
         };
     }
 
@@ -224,7 +236,9 @@ public class ExporterRS {
         if (exporterID.startsWith("dicom:"))
             try {
                 return new URI(exporterID);
-            } catch (URISyntaxException e) {}
+            } catch (URISyntaxException e) {
+                LOG.warn("Malformed URI");
+            }
         return null;
     }
 
@@ -235,16 +249,13 @@ public class ExporterRS {
     }
 
     private ExportContext createExportContext(
-            String studyUID, String seriesUID, String objectUID, ExporterDescriptor exporter, String aeTitle,
-            boolean bOnlyIAN, boolean bOnlyStgCmt) {
+            String studyUID, String seriesUID, String objectUID, ExporterDescriptor exporter, String aeTitle) {
         Exporter e = exporterFactory.getExporter(exporter);
         ExportContext ctx = e.createExportContext();
         ctx.setStudyInstanceUID(studyUID);
         ctx.setSeriesInstanceUID(seriesUID);
         ctx.setSopInstanceUID(objectUID);
         ctx.setAETitle(aeTitle);
-        ctx.setOnlyStgCmt(bOnlyStgCmt);
-        ctx.setOnlyIAN(bOnlyIAN);
         return ctx;
     }
 }

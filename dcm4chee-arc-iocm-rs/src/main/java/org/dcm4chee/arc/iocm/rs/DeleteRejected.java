@@ -17,7 +17,7 @@
  *
  * The Initial Developer of the Original Code is
  * J4Care.
- * Portions created by the Initial Developer are Copyright (C) 2013
+ * Portions created by the Initial Developer are Copyright (C) 2015-2017
  * the Initial Developer. All Rights Reserved.
  *
  * Contributor(s):
@@ -109,17 +109,15 @@ public class DeleteRejected {
     @Produces("application/json")
     public String delete(
             @PathParam("CodeValue") String codeValue,
-            @PathParam("CodingSchemeDesignator") String designator)
-            throws Exception {
-        LOG.info("Process DELETE {} from {}@{}", this, request.getRemoteUser(), request.getRemoteHost());
+            @PathParam("CodingSchemeDesignator") String designator) {
+        LOG.info("Process DELETE {} from {}@{}", request.getRequestURI(), request.getRemoteUser(), request.getRemoteHost());
         ArchiveDeviceExtension arcDev = device.getDeviceExtension(ArchiveDeviceExtension.class);
         Code code = new Code(codeValue, designator, null, "?");
         RejectionNote rjNote = arcDev.getRejectionNote(code);
         if (rjNote == null)
             throw new WebApplicationException(
-                    getResponse("Unknown Rejection Note Code: " + code, Response.Status.NOT_FOUND));
+                    errResponse("Unknown Rejection Note Code: " + code, Response.Status.NOT_FOUND));
 
-        boolean keep = Boolean.parseBoolean(keepRejectionNote);
         Date before = parseDate(rejectedBefore);
         int fetchSize = arcDev.getDeleteRejectedFetchSize();
         int deleted = service.deleteRejectedInstancesBefore(rjNote.getRejectionNoteCode(), before, fetchSize);
@@ -130,8 +128,7 @@ public class DeleteRejected {
         return "{\"deleted\":" + deleted + '}';
     }
 
-    private Response getResponse(String errorMessage, Response.Status status) {
-        Object entity = "{\"errorMessage\":\"" + errorMessage + "\"}";
-        return Response.status(status).entity(entity).build();
+    private Response errResponse(String errorMessage, Response.Status status) {
+        return Response.status(status).entity("{\"errorMessage\":\"" + errorMessage + "\"}").build();
     }
 }

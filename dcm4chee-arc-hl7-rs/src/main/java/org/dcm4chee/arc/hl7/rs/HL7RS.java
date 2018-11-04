@@ -48,9 +48,14 @@ import org.dcm4che3.hl7.HL7Exception;
 import org.dcm4che3.hl7.HL7Message;
 import org.dcm4che3.hl7.HL7Segment;
 import org.dcm4che3.json.JSONReader;
+import org.dcm4che3.net.Device;
+import org.dcm4che3.net.hl7.HL7Application;
+import org.dcm4che3.net.hl7.HL7DeviceExtension;
+import org.dcm4che3.net.hl7.UnparsedHL7Message;
 import org.dcm4chee.arc.hl7.RESTfulHL7Sender;
 import org.dcm4chee.arc.patient.PatientMgtContext;
 import org.dcm4chee.arc.patient.PatientService;
+import org.dcm4chee.arc.qmgt.HttpServletRequestInfo;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -78,6 +83,9 @@ public class HL7RS {
     private static final Logger LOG = LoggerFactory.getLogger(HL7RS.class);
 
     @Inject
+    private Device device;
+
+    @Inject
     private PatientService patientService;
 
     @Inject
@@ -99,20 +107,16 @@ public class HL7RS {
     @Consumes({"application/dicom+json,application/json"})
     @Produces("application/json")
     public Response createPatient(InputStream in) {
-        return createOrUpdatePatient(in, "ADT^A28^ADT_A05");
+        logRequest();
+        return scheduleOrSendHL7("ADT^A28^ADT_A05", toPatientMgtContext(toAttributes(in)));
     }
 
     @PUT
     @Consumes({"application/dicom+json,application/json"})
     @Produces("application/json")
     public Response updatePatient(InputStream in) {
-        return createOrUpdatePatient(in, "ADT^A31^ADT_A05");
-    }
-
-    private Response createOrUpdatePatient(InputStream in, String msgType) {
         logRequest();
-        PatientMgtContext ctx = toPatientMgtContext(toAttributes(in));
-        return scheduleOrSendHL7(msgType, ctx);
+        return scheduleOrSendHL7("ADT^A31^ADT_A05", toPatientMgtContext(toAttributes(in)));
     }
 
     private PatientMgtContext toPatientMgtContext(Attributes attrs) {
@@ -131,7 +135,7 @@ public class HL7RS {
         try {
             return reader.readDataset(null);
         } catch (JsonParsingException e) {
-            throw new WebApplicationException(buildErrorResponse(e.getMessage() + " at location : "
+            throw new WebApplicationException(errResponse(e.getMessage() + " at location : "
                     + e.getLocation(), Response.Status.BAD_REQUEST));
         }
     }
@@ -160,24 +164,35 @@ public class HL7RS {
     }
 
     private Response scheduleOrSendHL7(String msgType, PatientMgtContext ctx) {
+        HttpServletRequestInfo httpServletRequestInfo = HttpServletRequestInfo.valueOf(request);
+        ctx.setHttpServletRequestInfo(httpServletRequestInfo);
         try {
             if (queue) {
                 rsHL7Sender.scheduleHL7Message(msgType, ctx, appName, externalAppName);
                 return Response.accepted().build();
             }
             else {
-                HL7Message ack = rsHL7Sender.sendHL7Message(msgType, ctx, appName, externalAppName);
-                return buildResponse(ack);
+                HL7Application sender = getSendingHl7Application();
+                UnparsedHL7Message rsp = rsHL7Sender.sendHL7Message(httpServletRequestInfo, msgType, ctx, sender, externalAppName);
+                return response(HL7Message.parse(rsp.data(), sender.getHL7DefaultCharacterSet()));
             }
         } catch (ConnectException e) {
-            return buildErrorResponse(e.getMessage(), Response.Status.GATEWAY_TIMEOUT);
+            return errResponse(e.getMessage(), Response.Status.GATEWAY_TIMEOUT);
         } catch (IOException e) {
-            return buildErrorResponse(e.getMessage(), Response.Status.BAD_GATEWAY);
+            return errResponse(e.getMessage(), Response.Status.BAD_GATEWAY);
         } catch (ConfigurationNotFoundException e) {
-            return buildErrorResponse(e.getMessage(), Response.Status.NOT_FOUND);
+            return errResponse(e.getMessage(), Response.Status.NOT_FOUND);
         } catch (Exception e) {
-            return buildErrorResponse(e.getMessage(), Response.Status.INTERNAL_SERVER_ERROR);
+            return errResponseAsTextPlain(e);
         }
+    }
+
+    private HL7Application getSendingHl7Application() throws ConfigurationNotFoundException {
+        HL7DeviceExtension hl7Dev = device.getDeviceExtension(HL7DeviceExtension.class);
+        HL7Application sender = hl7Dev.getHL7Application(appName, true);
+        if (sender == null)
+            throw new ConfigurationNotFoundException("Sending HL7 Application not configured : " + appName);
+        return sender;
     }
 
     private void logRequest() {
@@ -185,14 +200,13 @@ public class HL7RS {
                 request.getRemoteUser(), request.getRemoteHost());
     }
 
-    private Response buildErrorResponse(String errorMessage, Response.Status status) {
-        Object entity = "{\"errorMessage\":\"" + errorMessage + "\"}";
-        return Response.status(status).entity(entity).build();
+    private Response errResponse(String errorMessage, Response.Status status) {
+        return Response.status(status).entity("{\"errorMessage\":\"" + errorMessage + "\"}").build();
     }
 
-    private Response buildResponse(HL7Message ack) {
+    private Response response(HL7Message ack) {
         if (ack.getSegment("MSA") == null)
-            return buildErrorResponse( "Missing MSA segment in response message", Response.Status.BAD_GATEWAY);
+            return errResponse( "Missing MSA segment in response message", Response.Status.BAD_GATEWAY);
 
         String status = ack.getSegment("MSA").getField(1, null);
         return HL7Exception.AA.equals(status)
@@ -204,9 +218,7 @@ public class HL7RS {
         HL7Segment msa = ack.getSegment("MSA");
         HL7Segment err = ack.getSegment("ERR");
 
-        return new StreamingOutput() {
-            @Override
-            public void write(OutputStream out) throws IOException {
+        return out -> {
                 JsonGenerator gen = Json.createGenerator(out);
                 JsonWriter writer = new JsonWriter(gen);
                 gen.writeStartObject();
@@ -220,7 +232,13 @@ public class HL7RS {
                 writer.writeNotNullOrDef("message", ack.toString(), null);
                 gen.writeEnd();
                 gen.flush();
-            }
         };
+    }
+
+    private Response errResponseAsTextPlain(Exception e) {
+        StringWriter sw = new StringWriter();
+        e.printStackTrace(new PrintWriter(sw));
+        String exceptionAsString = sw.toString();
+        return Response.status(Response.Status.INTERNAL_SERVER_ERROR).entity(exceptionAsString).type("text/plain").build();
     }
 }

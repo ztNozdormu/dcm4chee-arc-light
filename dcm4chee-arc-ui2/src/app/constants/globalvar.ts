@@ -234,6 +234,91 @@ export class Globalvar {
             }
         };
     }
+
+    public static get HL7_SPECIFIC_CHAR(): any{
+        return [
+            {
+                groupName:"Single-Byte Character Sets",
+                groupValues:[
+                    {
+                        title: "ASCII",
+                        value: "ASCII"
+                    },
+                    {
+                        title:"GB 18030-2000",
+                        value:"GB 18030-2000"
+                    },
+                    {
+                        title:"Latin alphabet No. 1",
+                        value:"8859/1"
+                    },
+
+                    {
+                        title:"Latin alphabet No. 2",
+                        value:"8859/2"
+                    },
+                    {
+                        title:"Thai",
+                        value:"CNS 11643-1992"
+                    },
+                    {
+                        title:"Latin alphabet No. 3",
+                        value:"8859/3"
+                    },
+                    {
+                        title:"Latin alphabet No. 4",
+                        value:"8859/4"
+                    },
+                    {
+                        title:"Japanese",
+                        value:"ISO IR14"
+                    },
+                    {
+                        title:"Cyrillic",
+                        value:"8859/5"
+                    },
+                    {
+                        title:"Arabic",
+                        value:"8859/6"
+                    },
+                    {
+                        title:"Greek",
+                        value:"8859/7"
+                    },
+
+                    {
+                        title:"Hebrew",
+                        value:"8859/8"
+                    },
+                    {
+                        title:"Latin alphabet No. 5",
+                        value:"8859/9"
+                    }
+                ]
+            },{
+                groupName:"Multi-Byte Character Sets",
+                groupValues:[
+                    {
+                        title:"Japanese (Kanji)",
+                        value:"ISO IR87"
+                    },{
+                        title:"Japanese (Supplementary Kanji set)",
+                        value:"ISO IR159"
+                    },{
+                        title:"Korean",
+                        value:"KS X 1001"
+                    },{
+                        title:"Unicode",
+                        value:"UNICODE"
+                    },
+                    {
+                        title:"Unicode in UTF-8",
+                        value:"UNICODE UTF-8"
+                    }
+                ]
+            }
+        ]
+    }
     public static get DICOM_SPECIFIC_CHAR(): any{
         return [
             {
@@ -371,13 +456,26 @@ export class Globalvar {
         ]
 
     }
+    public static get SUPER_ROOT(): string{
+        return "root";
+    }
+    public static get TASK_NAMES(): any{
+        return [
+            "completed",
+            "warning",
+            "failed",
+            "in-process",
+            "scheduled",
+            "canceled"
+        ];;
+    }
     public static get DYNAMIC_FORMATER(): any{
         return {
-            dcmAETitle:{
+/*            dcmAETitle:{
                 key:'dicomAETitle',
                 labelKey:'{dicomAETitle}',
                 msg:'Create first an AE Title!'
-            },
+            },*/
             dcmArchiveAETitle:{
                 key:'dicomAETitle',
                 labelKey:'{dicomAETitle}',
@@ -386,13 +484,13 @@ export class Globalvar {
             },
             dcmQueueName:{
                 key:'dcmQueueName',
-                labelKey:'{dcmQueueName}',
+                labelKey:'{dicomDescription} ({dcmQueueName})',
                 msg:'Configure first an Queue',
                 pathInDevice:'dcmDevice.dcmArchiveDevice.dcmQueue'
             },
             dcmExporterID:{
                 key:'dcmExporterID',
-                labelKey:'{dcmQueueName}',
+                labelKey:'{dcmExporterID}',
                 msg:'Create first an Exporter!',
                 pathInDevice:'dcmDevice.dcmArchiveDevice.dcmExporter'
             },
@@ -414,19 +512,140 @@ export class Globalvar {
                 msg:'Create first an Rejection Note!',
                 pathInDevice:'dcmDevice.dcmArchiveDevice.dcmRejectionNote'
             },
-            dicomDeviceName:{
+            dcmuiDeviceURLObject:{
+                key:'dcmuiDeviceURLName',
+                labelKey:'{dcmuiDeviceURLName}',
+                msg:'Create first an UI Device URL!',
+                pathInDevice:'dcmDevice.dcmuiConfig[0].dcmuiDeviceURLObject'
+            },
+            dcmuiDeviceClusterObject:{
+                key:'dcmuiDeviceClusterName',
+                labelKey:'{dcmuiDeviceClusterName}',
+                msg:'Create first an UI Device Cluster!',
+                pathInDevice:'dcmDevice.dcmuiConfig["0"].dcmuiDeviceClusterObject'
+            },
+            dcmuiElasticsearchConfig:{
+                key:'dcmuiElasticsearchURLName',
+                labelKey:'{dcmuiElasticsearchURLName}',
+                msg:'Create first an UI Elasticsearch URL!',
+                pathInDevice:'dcmDevice.dcmuiConfig[0].dcmuiElasticsearchConfig[0].dcmuiElasticsearchURLObjects'
+            },
+            dcmKeycloakServer:{
+                key:'dcmKeycloakServerID',
+                labelKey:'{dcmKeycloakServerID}',
+                msg:'Create first an Keycloak Server!',
+                pathInDevice:'dcmDevice.dcmArchiveDevice.dcmKeycloakServer'
+            }
+/*            dicomDeviceName:{
                 key:'dicomDeviceName',
                 labelKey:'{dicomDeviceName}',
                 msg:'Create first any device first!'
-            },
-            hl7ApplicationName:{
+            },*/
+/*            hl7ApplicationName:{
                 key:'hl7ApplicationName',
                 labelKey:'{hl7ApplicationName}',
                 msg:'Create first an hl7 Application!'
-            }
+            }*/
         };
     }
     public static get HL7_LIST_LINK(): string{
         return "../hl7apps";
+    }
+    public static get QUEU_CONFIG_PATH(): string{
+        return "dcmDevice.dcmArchiveDevice.dcmQueue";
+    }
+    public static get EXPORTER_CONFIG_PATH(): string{
+        return "dcmDevice.dcmArchiveDevice.dcmExporter";
+    }
+    public static LINK_PERMISSION(url):any{
+        const regex = /^(\/[\S\/]*)\*$/m;
+        let m;
+        let urlPermissions = {
+            "/studies":{
+                permissionsAction:"menu-studies"
+            },
+            "/device/edit/*":{
+                permissionsAction:"action-devicelist-device_configuration"
+            },
+            "/monitoring/dashboard/*":{
+                permissionsAction:"menu-dashboard",
+                nextCheck:"/studies"
+            },
+            "/lifecycle-management":{
+                permissionsAction:"menu-lifecycle_management",
+                nextCheck:"/studies"
+            },
+            "/migration/retrieve":{
+                permissionsAction:"tab-move_data->retrieve",
+                nextCheck:"/migration/export"
+            },
+            "/migration/export":{
+                permissionsAction:"tab-move_data->export"
+            },
+            "/audit-record-repository/*":{
+                permissionsAction:"menu-audit_record_repository"
+            },
+            "/device/devicelist":{
+                permissionsAction:"tab-configuration->devices",
+                nextCheck:"/device/aelist"
+            },
+            "/device/aelist":{
+                permissionsAction:"tab-configuration->ae_list",
+                nextCheck:"/device/hl7applications"
+            },
+            "/device/hl7applications":{
+                permissionsAction:"tab-configuration->hl7_applications"
+            },
+            "/monitoring/queues":{
+                permissionsAction:"tab-monitoring->queues",
+                nextCheck:"/monitoring/export"
+            },
+            "/monitoring/export":{
+                permissionsAction:"tab-monitoring->export",
+                nextCheck:"/monitoring/external"
+            },
+            "/monitoring/external":{
+                permissionsAction:"tab-monitoring->external_retrieve",
+                nextCheck:"/monitoring/control"
+            },
+            "/monitoring/control":{
+                permissionsAction:"tab-monitoring->control",
+                nextCheck:"/monitoring/associations"
+            },
+            "/monitoring/associations":{
+                permissionsAction:"tab-monitoring->associations",
+                nextCheck:"/monitoring/storage-commitment"
+            },
+            "/monitoring/storage-commitment":{
+                permissionsAction:"tab-monitoring->storage_commitments",
+                nextCheck:"/monitoring/storage-systems"
+            },
+            "/monitoring/storage-systems":{
+                permissionsAction:"tab-monitoring->storage_systems"
+            },
+            "/statistics/all":{
+                permissionsAction:"tab-statistics->statistics",
+                nextCheck:"/statistics/studies-stored"
+            },
+            "/statistics/studies-stored":{
+                permissionsAction:"tab-statistics->studies-stored"
+            },
+            "/correct-data/diff":{
+                permissionsAction:"tab-correct_data->diff"
+            },
+            "/correct-data/patient-data":{
+                permissionsAction:"tab-correct_data->patient_data"
+            },
+        };
+        if(urlPermissions[url])
+            return urlPermissions[url];
+        else{
+            let actionObject;
+            Object.keys(urlPermissions).forEach(keys=>{
+                if ((m = regex.exec(keys)) !== null && url.indexOf(m[1]) > -1)
+                    actionObject = urlPermissions[keys];
+            });
+            return actionObject;
+        }
     }
 }

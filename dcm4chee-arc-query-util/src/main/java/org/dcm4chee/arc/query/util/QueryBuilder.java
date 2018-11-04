@@ -41,13 +41,13 @@
 package org.dcm4chee.arc.query.util;
 
 import com.querydsl.core.BooleanBuilder;
-import com.querydsl.core.Tuple;
 import com.querydsl.core.types.*;
 import com.querydsl.core.types.dsl.*;
 import com.querydsl.jpa.JPAExpressions;
 import com.querydsl.jpa.JPQLQuery;
 import com.querydsl.jpa.hibernate.HibernateQuery;
 import org.dcm4che3.data.*;
+import org.dcm4che3.dict.archive.ArchiveTag;
 import org.dcm4che3.net.service.QueryRetrieveLevel2;
 import org.dcm4che3.util.StringUtils;
 import org.dcm4chee.arc.conf.AttributeFilter;
@@ -57,7 +57,6 @@ import org.dcm4chee.arc.entity.*;
 
 import java.time.LocalDate;
 import java.time.format.DateTimeFormatter;
-import java.util.Date;
 import java.util.List;
 
 /**
@@ -200,23 +199,24 @@ public class QueryBuilder {
         return order == Order.ASC ? path.asc() : path.desc();
     }
 
-    public static HibernateQuery<Tuple> applyPatientLevelJoins(
-            HibernateQuery<Tuple> query, IDWithIssuer[] pids, Attributes keys, QueryParam queryParam,
-            boolean orderByPatientName) {
+    public static <T> HibernateQuery<T> applyPatientLevelJoins(
+            HibernateQuery<T> query, IDWithIssuer[] pids, Attributes keys, QueryParam queryParam,
+            boolean orderByPatientName, boolean forCount) {
         query = applyPatientIDJoins(query, pids);
         if (!isUniversalMatching(keys.getString(Tag.PatientName)))
             query = query.join(QPatient.patient.patientName, QueryBuilder.patientName);
-        else if (orderByPatientName)
+        else if (!forCount && orderByPatientName)
             query = query.leftJoin(QPatient.patient.patientName, QueryBuilder.patientName);
         if (!isUniversalMatching(keys.getString(Tag.ResponsiblePerson)))
             query = query.join(QPatient.patient.responsiblePerson, QueryBuilder.responsiblePerson);
-        query = query.join(QPatient.patient.attributesBlob, QueryBuilder.patientAttributesBlob);
+        if (!forCount)
+            query = query.join(QPatient.patient.attributesBlob, QueryBuilder.patientAttributesBlob);
         return query;
 
     }
 
-    public static HibernateQuery<Tuple> applyPatientIDJoins(
-            HibernateQuery<Tuple> query, IDWithIssuer[] pids) {
+    public static <T> HibernateQuery<T> applyPatientIDJoins(
+            HibernateQuery<T> query, IDWithIssuer[] pids) {
         if (pids.length > 0) {
             query = query.join(QPatient.patient.patientID, QPatientID.patientID);
             if (containsIssuer(pids))
@@ -241,13 +241,14 @@ public class QueryBuilder {
 
     public static void addPatientLevelPredicates(
             BooleanBuilder builder, IDWithIssuer[] pids, Attributes keys, QueryParam queryParam) {
-        builder.and(QPatient.patient.mergedWith.isNull());
         builder.and(patientIDPredicate(pids));
         builder.and(MatchPersonName.match(QueryBuilder.patientName, keys.getString(Tag.PatientName, "*"), queryParam));
         builder.and(wildCard(QPatient.patient.patientSex, keys.getString(Tag.PatientSex, "*").toUpperCase(),
                 false));
         builder.and(MatchDateTimeRange.rangeMatch(QPatient.patient.patientBirthDate, keys, Tag.PatientBirthDate,
                 MatchDateTimeRange.FormatDate.DA));
+        builder.and(MatchPersonName.match(
+                QueryBuilder.responsiblePerson, keys.getString(Tag.ResponsiblePerson, "*"), queryParam));
         AttributeFilter attrFilter = queryParam.getAttributeFilter(Entity.Patient);
         builder.and(wildCard(QPatient.patient.patientCustomAttribute1,
                 AttributeFilter.selectStringValue(keys, attrFilter.getCustomAttribute1(), "*"), true));
@@ -255,16 +256,36 @@ public class QueryBuilder {
                 AttributeFilter.selectStringValue(keys, attrFilter.getCustomAttribute2(), "*"), true));
         builder.and(wildCard(QPatient.patient.patientCustomAttribute3,
                 AttributeFilter.selectStringValue(keys, attrFilter.getCustomAttribute3(), "*"), true));
-        if (!queryParam.isWithoutStudies())
-            builder.and(QPatient.patient.numberOfStudies.gt(0));
-        builder.and(MatchPersonName.match(QueryBuilder.responsiblePerson, keys.getString(Tag.ResponsiblePerson, "*"), queryParam));
+        if (queryParam.getPatientVerificationStatus() != null)
+            builder.and(QPatient.patient.verificationStatus.eq(queryParam.getPatientVerificationStatus()));
     }
 
-    public static HibernateQuery<Tuple> applyStudyLevelJoins(
-            HibernateQuery<Tuple> query, Attributes keys, QueryParam queryParam) {
-        query = query.innerJoin(QStudy.study.patient, QPatient.patient);
-        query = query.leftJoin(QStudy.study.queryAttributes, QStudyQueryAttributes.studyQueryAttributes)
-                .on(QStudyQueryAttributes.studyQueryAttributes.viewID.eq(queryParam.getViewID()));
+    public static boolean hasPatientLevelPredicates(
+            IDWithIssuer[] pids, Attributes keys, QueryParam queryParam) {
+        for (IDWithIssuer pid : pids) {
+            if (!isUniversalMatching(pid.getID()))
+                return true;
+        }
+        AttributeFilter attrFilter = queryParam.getAttributeFilter(Entity.Patient);
+        return queryParam.getPatientVerificationStatus() != null
+                || !isUniversalMatching(keys.getString(Tag.PatientName))
+                || !isUniversalMatching(keys.getString(Tag.PatientSex))
+                || !isUniversalMatching(keys.getString(Tag.PatientSex))
+                || !isUniversalMatching(keys.getString(Tag.PatientBirthDate))
+                || !isUniversalMatching(keys.getString(Tag.ResponsiblePerson))
+                || !isUniversalMatching(AttributeFilter.selectStringValue(keys, attrFilter.getCustomAttribute1(), null))
+                || !isUniversalMatching(AttributeFilter.selectStringValue(keys, attrFilter.getCustomAttribute2(), null))
+                || !isUniversalMatching(AttributeFilter.selectStringValue(keys, attrFilter.getCustomAttribute3(), null));
+    }
+
+    public static <T> HibernateQuery<T> applyStudyLevelJoins(
+            HibernateQuery<T> query, Attributes keys, QueryParam queryParam,
+            boolean forCount, boolean hasPatientLevelPredicates) {
+        if (!forCount || hasPatientLevelPredicates)
+            query = query.innerJoin(QStudy.study.patient, QPatient.patient);
+        if (!forCount)
+            query = query.leftJoin(QStudy.study.queryAttributes, QStudyQueryAttributes.studyQueryAttributes)
+                    .on(QStudyQueryAttributes.studyQueryAttributes.viewID.eq(queryParam.getViewID()));
 
         if (!isUniversalMatching(keys.getString(Tag.AccessionNumber))
                 && !isUniversalMatching(keys.getNestedDataset(Tag.IssuerOfAccessionNumberSequence))) {
@@ -274,12 +295,13 @@ public class QueryBuilder {
         if (!isUniversalMatching(keys.getString(Tag.ReferringPhysicianName))) {
             query = query.join(QStudy.study.referringPhysicianName, QueryBuilder.referringPhysicianName);
         }
-        query = query.join(QStudy.study.attributesBlob, QueryBuilder.studyAttributesBlob);
+        if (!forCount)
+            query = query.join(QStudy.study.attributesBlob, QueryBuilder.studyAttributesBlob);
         return query;
     }
 
     public static Predicate uidsPredicate(StringPath path, String[] values) {
-        if (values == null || values.length == 0 || values[0].equals("*"))
+        if (isUniversalMatching(values))
             return null;
 
         return path.in(values);
@@ -307,7 +329,6 @@ public class QueryBuilder {
             builder.and(idWithIssuer(QStudy.study.accessionNumber, QStudy.study.issuerOfAccessionNumber, accNo, issuer));
         }
         builder.and(seriesAttributesInStudy(keys, queryParam));
-        builder.and(sopClassInStudy(keys.getString(Tag.SOPClassesInStudy, "*")));
         builder.and(code(QStudy.study.procedureCodes, keys.getNestedDataset(Tag.ProcedureCodeSequence)));
         if (queryParam.isHideNotRejectedInstances())
             builder.and(QStudy.study.rejectionState.ne(RejectionState.NONE));
@@ -318,10 +339,11 @@ public class QueryBuilder {
                 AttributeFilter.selectStringValue(keys, attrFilter.getCustomAttribute2(), "*"), true));
         builder.and(wildCard(QStudy.study.studyCustomAttribute3,
                 AttributeFilter.selectStringValue(keys, attrFilter.getCustomAttribute3(), "*"), true));
-        if (queryParam.getStudyReceiveDateTime() != null)
-            builder.and(ExpressionUtils.and(MatchDateTimeRange.range(
-                    QStudy.study.createdTime, getDateRange(queryParam.getStudyReceiveDateTime()), MatchDateTimeRange.FormatDate.DT),
-                    QStudy.study.createdTime.isNotNull()));
+        DateRange studyReceiveDateTime =
+                keys.getDateRange(ArchiveTag.PrivateCreator, ArchiveTag.StudyReceiveDateTime, VR.DT);
+        if (studyReceiveDateTime != null)
+            builder.and(MatchDateTimeRange.range(
+                    QStudy.study.createdTime, studyReceiveDateTime, MatchDateTimeRange.FormatDate.DT));
         if (queryParam.getExternalRetrieveAET() != null)
             builder.and(QStudy.study.externalRetrieveAET.eq(queryParam.getExternalRetrieveAET()));
         if (queryParam.getExternalRetrieveAETNot() != null)
@@ -343,19 +365,21 @@ public class QueryBuilder {
         String[] a = new String[accessControlIDs.length + 1];
         a[0] = "*";
         System.arraycopy(accessControlIDs, 0, a, 1, accessControlIDs.length);
-        return QStudy.study.accessControlID.in(accessControlIDs);
+        return QStudy.study.accessControlID.in(a);
     }
 
-    public static HibernateQuery<Tuple> applySeriesLevelJoins(
-            HibernateQuery<Tuple> query, Attributes keys, QueryParam queryParam) {
+    public static <T> HibernateQuery<T> applySeriesLevelJoins(
+            HibernateQuery<T> query, Attributes keys, QueryParam queryParam, boolean forCount) {
         query = query.innerJoin(QSeries.series.study, QStudy.study);
-        query = query.leftJoin(QSeries.series.queryAttributes, QSeriesQueryAttributes.seriesQueryAttributes)
-                .on(QSeriesQueryAttributes.seriesQueryAttributes.viewID.eq(
-                        queryParam.getViewID()));
+        if (!forCount)
+            query = query.leftJoin(QSeries.series.queryAttributes, QSeriesQueryAttributes.seriesQueryAttributes)
+                    .on(QSeriesQueryAttributes.seriesQueryAttributes.viewID.eq(
+                            queryParam.getViewID()));
         if (!isUniversalMatching(keys.getString(Tag.PerformingPhysicianName))) {
             query = query.join(QSeries.series.performingPhysicianName, QueryBuilder.performingPhysicianName);
         }
-        query = query.join(QSeries.series.attributesBlob, QueryBuilder.seriesAttributesBlob);
+        if (!forCount)
+            query = query.join(QSeries.series.attributesBlob, QueryBuilder.seriesAttributesBlob);
         return query;
     }
 
@@ -401,20 +425,28 @@ public class QueryBuilder {
                 builder.and(QSeries.series.completeness.ne(Completeness.COMPLETE));
             if (queryParam.isRetrieveFailed())
                 builder.and(QSeries.series.failedRetrieves.gt(0));
-            if (queryParam.getSendingApplicationEntityTitleOfSeries() != null)
-                builder.and(QSeries.series.sourceAET.eq(queryParam.getSendingApplicationEntityTitleOfSeries()));
+            if (queryParam.isStorageVerificationFailed())
+                builder.and(QSeries.series.failuresOfLastStorageVerification.gt(0));
+            if (queryParam.isCompressionFailed())
+                builder.and(QSeries.series.compressionFailures.gt(0));
+            builder.and(wildCard(QSeries.series.sourceAET,
+                    keys.getString(ArchiveTag.PrivateCreator, ArchiveTag.SendingApplicationEntityTitleOfSeries, VR.AE, "*"),
+                    false));
         }
     }
 
-    public static HibernateQuery<Tuple> applyInstanceLevelJoins(
-            HibernateQuery<Tuple> query, Attributes keys, QueryParam queryParam) {
+    public static <T> HibernateQuery<T> applyInstanceLevelJoins(
+            HibernateQuery<T> query, Attributes keys, QueryParam queryParam, boolean forCount) {
         query = query.innerJoin(QInstance.instance.series, QSeries.series);
-        query = query.join(QInstance.instance.attributesBlob, QueryBuilder.instanceAttributesBlob);
+        if (!forCount)
+            query = query.join(QInstance.instance.attributesBlob, QueryBuilder.instanceAttributesBlob);
         query = query.leftJoin(QInstance.instance.rejectionNoteCode, QCodeEntity.codeEntity);
         return query;
     }
 
-    public static void addInstanceLevelPredicates(BooleanBuilder builder, Attributes keys, QueryParam queryParam) {
+    public static void addInstanceLevelPredicates(BooleanBuilder builder, Attributes keys, QueryParam queryParam,
+                                                  CodeEntity[] showInstancesRejectedByCodes,
+                                                  CodeEntity[] hideRejectionNoteWithCodes) {
         boolean combinedDatetimeMatching = queryParam.isCombinedDatetimeMatching();
         builder.and(uidsPredicate(QInstance.instance.sopInstanceUID, keys.getStrings(Tag.SOPInstanceUID)));
         builder.and(uidsPredicate(QInstance.instance.sopClassUID, keys.getStrings(Tag.SOPClassUID)));
@@ -451,12 +483,12 @@ public class QueryBuilder {
                 AttributeFilter.selectStringValue(keys,
                         attrFilter.getCustomAttribute3(), "*"),
                 true));
-        builder.and(hideRejectedInstance(queryParam));
-        builder.and(hideRejectionNote(queryParam));
+        builder.and(hideRejectedInstance(showInstancesRejectedByCodes, queryParam.isHideNotRejectedInstances()));
+        builder.and(hideRejectionNote(hideRejectionNoteWithCodes));
     }
 
-    public static HibernateQuery<Tuple> applyMWLJoins(
-            HibernateQuery<Tuple> query, Attributes keys, QueryParam queryParam) {
+    public static <T> HibernateQuery<T> applyMWLJoins(
+            HibernateQuery<T> query, Attributes keys, QueryParam queryParam, boolean forCount) {
         query = query.innerJoin(QMWLItem.mWLItem.patient, QPatient.patient);
 
         if (!isUniversalMatching(keys.getString(Tag.AccessionNumber))
@@ -468,7 +500,8 @@ public class QueryBuilder {
         if (sps != null && !isUniversalMatching(sps.getString(Tag.ScheduledPerformingPhysicianName))) {
             query = query.join(QMWLItem.mWLItem.scheduledPerformingPhysicianName, QueryBuilder.performingPhysicianName);
         }
-        query = query.join(QMWLItem.mWLItem.attributesBlob, QueryBuilder.mwlAttributesBlob);
+        if (!forCount)
+            query = query.join(QMWLItem.mWLItem.attributesBlob, QueryBuilder.mwlAttributesBlob);
         return query;
     }
 
@@ -525,12 +558,6 @@ public class QueryBuilder {
         }
     }
 
-    public static Predicate hideRejectedInstance(QueryParam queryParam) {
-        return hideRejectedInstance(
-                queryParam.getShowInstancesRejectedByCode(),
-                queryParam.isHideNotRejectedInstances());
-    }
-
     public static Predicate hideRejectedInstance(CodeEntity[] codes, boolean hideNotRejectedInstances) {
         if (codes.length == 0)
             return hideNotRejectedInstances
@@ -541,10 +568,6 @@ public class QueryBuilder {
         return hideNotRejectedInstances
                 ? showRejected
                 : QInstance.instance.rejectionNoteCode.isNull().or(showRejected);
-    }
-
-    public static Predicate hideRejectionNote(QueryParam queryParam) {
-        return hideRejectionNote(queryParam.getHideRejectionNotesWithCode());
     }
 
     public static Predicate hideRejectionNote(CodeEntity[] codes) {
@@ -578,7 +601,7 @@ public class QueryBuilder {
             if (!isUniversalMatching(entityUID))
                 predicate = ExpressionUtils.and(predicate,
                         ExpressionUtils.or(issuerPath.issuer.universalEntityID.isNull(),
-                            ExpressionUtils.and(QIssuerEntity.issuerEntity.issuer.universalEntityID.eq(entityUID),
+                            ExpressionUtils.and(issuerPath.issuer.universalEntityID.eq(entityUID),
                                     issuerPath.issuer.universalEntityIDType.eq(entityUIDType))));
         }
         return predicate;
@@ -590,6 +613,10 @@ public class QueryBuilder {
 
     static boolean isUniversalMatching(String value) {
         return value == null || value.equals("*");
+    }
+
+    public static boolean isUniversalMatching(String[] values) {
+        return values == null || values.length == 0 || values[0].equals("*");
     }
 
     private static boolean isUniversalMatching(Integer value) {
@@ -666,24 +693,19 @@ public class QueryBuilder {
             .and(wildCard(QSeries.series.stationName, keys.getString(Tag.StationName), true))
             .and(wildCard(QSeries.series.seriesDescription, keys.getString(Tag.SeriesDescription), true))
             .and(wildCard(QSeries.series.modality, keys.getString(Tag.ModalitiesInStudy, "*").toUpperCase(), false))
-            .and(wildCard(QSeries.series.bodyPartExamined, keys.getString(Tag.BodyPartExamined, "*").toUpperCase(), false));
-        if (queryParam.getSendingApplicationEntityTitleOfSeries() != null)
-            result.and(wildCard(QSeries.series.sourceAET, queryParam.getSendingApplicationEntityTitleOfSeries().toUpperCase(), false));
+            .and(wildCard(QSeries.series.sopClassUID, keys.getString(Tag.SOPClassesInStudy, "*"), false))
+            .and(wildCard(QSeries.series.bodyPartExamined, keys.getString(Tag.BodyPartExamined, "*").toUpperCase(), false))
+            .and(wildCard(QSeries.series.sourceAET,
+                keys.getString(ArchiveTag.PrivateCreator, ArchiveTag.SendingApplicationEntityTitleOfSeries, VR.AE, "*"),
+                    false));
+        if (queryParam.isStorageVerificationFailed())
+            result.and(QSeries.series.failuresOfLastStorageVerification.gt(0));
+        if (queryParam.isCompressionFailed())
+            result.and(QSeries.series.compressionFailures.gt(0));
         if (!result.hasValue())
             return null;
         return JPAExpressions.selectFrom(QSeries.series)
                 .where(QSeries.series.study.eq(QStudy.study), result).exists();
-    }
-
-    static Predicate sopClassInStudy(String sopClass) {
-        if (sopClass.equals("*"))
-            return null;
-
-        return JPAExpressions.selectFrom(QInstance.instance)
-                .join(QInstance.instance.series, QSeries.series)
-                .where(QSeries.series.study.eq(QStudy.study),
-                        wildCard(QInstance.instance.sopClassUID, sopClass,
-                                false)).exists();
     }
 
     static Predicate code(Attributes item) {
@@ -820,27 +842,4 @@ public class QueryBuilder {
                         predicate).exists();
     }
 
-    private static DateRange getDateRange(String s) {
-        String[] range = splitRange(s);
-        DatePrecision precision = new DatePrecision();
-        Date start = range[0] == null ? null
-                : VR.DT.toDate(range[0], null, 0, false, null, precision);
-        Date end = range[1] == null ? null
-                : VR.DT.toDate(range[1], null, 0, true, null, precision);
-        return new DateRange(start, end);
-    }
-
-    private static String[] splitRange(String s) {
-        String[] range = new String[2];
-        int delim = s.indexOf('-');
-        if (delim == -1)
-            range[0] = range[1] = s;
-        else {
-            if (delim > 0)
-                range[0] =  s.substring(0, delim);
-            if (delim < s.length() - 1)
-                range[1] =  s.substring(delim+1);
-        }
-        return range;
-    }
 }

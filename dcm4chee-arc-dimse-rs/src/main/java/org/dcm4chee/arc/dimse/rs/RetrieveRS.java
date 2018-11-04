@@ -38,14 +38,19 @@
 
 package org.dcm4chee.arc.dimse.rs;
 
+import org.dcm4che3.conf.api.IApplicationEntityCache;
 import org.dcm4che3.conf.json.JsonWriter;
 import org.dcm4che3.data.Attributes;
 import org.dcm4che3.data.Tag;
 import org.dcm4che3.data.VR;
 import org.dcm4che3.net.*;
 import org.dcm4che3.net.service.QueryRetrieveLevel2;
+import org.dcm4che3.util.ReverseDNS;
 import org.dcm4che3.util.TagUtils;
+import org.dcm4chee.arc.qmgt.HttpServletRequestInfo;
+import org.dcm4chee.arc.qmgt.QueueSizeLimitExceededException;
 import org.dcm4chee.arc.retrieve.ExternalRetrieveContext;
+import org.dcm4chee.arc.retrieve.mgt.RetrieveManager;
 import org.dcm4chee.arc.retrieve.scu.CMoveSCU;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -62,7 +67,8 @@ import javax.ws.rs.core.Context;
 import javax.ws.rs.core.Response;
 import javax.ws.rs.core.StreamingOutput;
 import java.io.IOException;
-import java.io.OutputStream;
+import java.io.PrintWriter;
+import java.io.StringWriter;
 
 /**
  * @author Gunter Zeilinger <gunterze@gmail.com>
@@ -81,6 +87,9 @@ public class RetrieveRS {
     private Device device;
 
     @Inject
+    private IApplicationEntityCache aeCache;
+
+    @Inject
     private Event<ExternalRetrieveContext> instancesRetrievedEvent;
 
     @PathParam("AETitle")
@@ -96,8 +105,14 @@ public class RetrieveRS {
     @QueryParam("queue")
     private boolean queue;
 
+    @QueryParam("batchID")
+    private String batchID;
+
     @Inject
     private CMoveSCU moveSCU;
+
+    @Inject
+    private RetrieveManager retrieveManager;
 
     @Override
     public String toString() {
@@ -143,28 +158,35 @@ public class RetrieveRS {
     }
 
     private Response export(String destAET, String... uids) throws Exception {
-        LOG.info("Process POST {} from {}@{}", this, request.getRemoteUser(), request.getRemoteHost());
+        LOG.info("Process POST {} from {}@{}", request.getRequestURI(), request.getRemoteUser(), request.getRemoteHost());
         Attributes keys = toKeys(uids);
+        checkAE(externalAET, aeCache.get(externalAET));
         return queue ? queueExport(destAET, keys) : export(destAET, keys);
     }
 
     private Response queueExport(String destAET, Attributes keys) {
-        moveSCU.scheduleCMove(priority(), toInstancesRetrieved(destAET, keys));
+        try {
+            retrieveManager.scheduleRetrieveTask(priority(), createExtRetrieveCtx(destAET, keys), batchID);
+        } catch (QueueSizeLimitExceededException e) {
+            return Response.status(Response.Status.SERVICE_UNAVAILABLE).build();
+        }
         return Response.accepted().build();
     }
 
     private Response export(String destAET, Attributes keys) throws Exception {
-        ApplicationEntity localAE = getApplicationEntity();
+        ApplicationEntity localAE = checkAE(aet, device.getApplicationEntity(aet, true));
         Association as = moveSCU.openAssociation(localAE, externalAET);
         try {
             final DimseRSP rsp = moveSCU.cmove(as, priority(), destAET, keys);
             while (rsp.next());
             Attributes cmd = rsp.getCommand();
             instancesRetrievedEvent.fire(
-                    toInstancesRetrieved(destAET, keys)
-                    .setRemoteHostName(as.getSocket().getInetAddress().getHostName())
+                    createExtRetrieveCtx(destAET, keys)
+                    .setRemoteHostName(ReverseDNS.hostNameOf(as.getSocket().getInetAddress()))
                     .setResponse(cmd));
             return status(cmd).entity(entity(cmd)).build();
+        } catch (Exception e) {
+            return errResponseAsTextPlain(e);
         } finally {
             try {
                 as.release();
@@ -174,12 +196,31 @@ public class RetrieveRS {
         }
     }
 
-    private ExternalRetrieveContext toInstancesRetrieved(String destAET, Attributes keys) {
+    private ApplicationEntity checkAE(String aet, ApplicationEntity ae) {
+        if (ae == null || !ae.isInstalled())
+            throw new WebApplicationException(errResponse(
+                    "No such Application Entity: " + aet,
+                    Response.Status.NOT_FOUND));
+        return ae;
+    }
+
+    private Response errResponse(String errorMessage, Response.Status status) {
+        return Response.status(status).entity("{\"errorMessage\":\"" + errorMessage + "\"}").build();
+    }
+
+    private Response errResponseAsTextPlain(Exception e) {
+        StringWriter sw = new StringWriter();
+        e.printStackTrace(new PrintWriter(sw));
+        String exceptionAsString = sw.toString();
+        return Response.status(Response.Status.INTERNAL_SERVER_ERROR).entity(exceptionAsString).type("text/plain").build();
+    }
+
+    private ExternalRetrieveContext createExtRetrieveCtx(String destAET, Attributes keys) {
         return new ExternalRetrieveContext()
                 .setLocalAET(aet)
                 .setRemoteAET(externalAET)
                 .setDestinationAET(destAET)
-                .setRequestInfo(request)
+                .setHttpServletRequestInfo(HttpServletRequestInfo.valueOf(request))
                 .setKeys(keys);
     }
 
@@ -228,9 +269,7 @@ public class RetrieveRS {
     }
 
     private Object entity(Attributes cmd) {
-        return new StreamingOutput() {
-            @Override
-            public void write(OutputStream out) throws IOException {
+        return (StreamingOutput) out -> {
                 JsonGenerator gen = Json.createGenerator(out);
                 JsonWriter writer = new JsonWriter(gen);
                 gen.writeStartObject();
@@ -241,17 +280,7 @@ public class RetrieveRS {
                 writer.writeNotDef("failed", cmd.getInt(Tag.NumberOfFailedSuboperations, -1), -1);
                 gen.writeEnd();
                 gen.flush();
-            }
         };
-    }
-
-    private ApplicationEntity getApplicationEntity() {
-        ApplicationEntity ae = device.getApplicationEntity(aet, true);
-        if (ae == null || !ae.isInstalled())
-            throw new WebApplicationException(
-                    "No such Application Entity: " + aet,
-                    Response.Status.SERVICE_UNAVAILABLE);
-        return ae;
     }
 
 }

@@ -41,23 +41,27 @@ package org.dcm4chee.arc.dimse.rs;
 import org.dcm4che3.conf.api.ConfigurationException;
 import org.dcm4che3.conf.api.ConfigurationNotFoundException;
 import org.dcm4che3.conf.api.DicomConfiguration;
+import org.dcm4che3.conf.json.JsonWriter;
 import org.dcm4che3.data.UID;
 import org.dcm4che3.net.*;
 import org.dcm4che3.net.pdu.AAbort;
 import org.dcm4che3.net.pdu.AAssociateRJ;
 import org.dcm4che3.net.pdu.AAssociateRQ;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 import javax.enterprise.context.RequestScoped;
 import javax.inject.Inject;
+import javax.json.Json;
+import javax.json.stream.JsonGenerator;
 import javax.servlet.http.HttpServletRequest;
+import javax.validation.constraints.Pattern;
 import javax.ws.rs.*;
 import javax.ws.rs.core.Context;
 import javax.ws.rs.core.Response;
 import javax.ws.rs.core.StreamingOutput;
 import java.io.IOException;
 import java.io.OutputStream;
-import java.io.OutputStreamWriter;
-import java.io.Writer;
 
 /**
  * @author Gunter Zeilinger <gunterze@gmail.com>
@@ -67,6 +71,7 @@ import java.io.Writer;
 @RequestScoped
 @Path("aets/{AETitle}/dimse/{RemoteAET}")
 public class EchoRS {
+    private static final Logger LOG = LoggerFactory.getLogger(EchoRS.class);
 
     @Inject
     private DicomConfiguration conf;
@@ -83,28 +88,34 @@ public class EchoRS {
     @Context
     private HttpServletRequest request;
 
+    @QueryParam("host")
+    private String host;
+
+    @QueryParam("port")
+    @Pattern(regexp = "^[1-9]\\d{0,4}+$")
+    private String port;
+
     private ApplicationEntity getApplicationEntity() {
-        ApplicationEntity ae = device.getApplicationEntity(aet);
+        ApplicationEntity ae = device.getApplicationEntity(aet, true);
         if (ae == null || !ae.isInstalled())
-            throw new WebApplicationException(
+            throw new WebApplicationException(errResponse(
                     "No such Application Entity: " + aet,
-                    Response.Status.SERVICE_UNAVAILABLE);
+                    Response.Status.NOT_FOUND));
         return ae;
     }
 
     private ApplicationEntity getRemoteApplicationEntity() throws ConfigurationException {
-        ApplicationEntity ae = device.getApplicationEntity(aet, true);
-        if (ae == null || !ae.isInstalled())
-            throw new WebApplicationException(
-                    "No such Application Entity: " + aet,
-                    Response.Status.SERVICE_UNAVAILABLE);
         try {
             return conf.findApplicationEntity(remoteAET);
         } catch (ConfigurationNotFoundException e) {
-            throw new WebApplicationException(
+            throw new WebApplicationException(errResponse(
                     "No such Application Entity configured: " + remoteAET,
-                    Response.Status.NOT_FOUND);
+                    Response.Status.NOT_FOUND));
         }
+    }
+
+    private Response errResponse(String errorMessage, Response.Status status) {
+        return Response.status(status).entity("{\"errorMessage\":\"" + errorMessage + "\"}").build();
     }
 
     private AAssociateRQ createAARQ() {
@@ -116,8 +127,10 @@ public class EchoRS {
     @POST
     @Produces("application/json")
     public StreamingOutput echo() throws Exception {
+        LOG.info("Process POST {} from {}@{}", request.getRequestURI(), request.getRemoteUser(), request.getRemoteHost());
+        int remotePort = parseInt(port);
         ApplicationEntity ae = getApplicationEntity();
-        ApplicationEntity remote = getRemoteApplicationEntity();
+        ApplicationEntity remote = host != null && remotePort > 0 ? createRemoteAE(remotePort) : getRemoteApplicationEntity();
         Association as = null;
         long t1, t2;
         Result result = new Result();
@@ -157,6 +170,21 @@ public class EchoRS {
             }
         }
         return result;
+    }
+
+    private ApplicationEntity createRemoteAE(int remotePort) {
+        Device device = new Device();
+        device.setDeviceName(remoteAET.toLowerCase());
+        device.setInstalled(true);
+        Connection conn = new Connection();
+        conn.setHostname(host);
+        conn.setPort(remotePort);
+        device.addConnection(conn);
+        ApplicationEntity remoteAE = new ApplicationEntity();
+        remoteAE.setAETitle(remoteAET);
+        remoteAE.addConnection(conn);
+        device.addApplicationEntity(remoteAE);
+        return remoteAE;
     }
 
     private static class Result implements StreamingOutput {
@@ -201,29 +229,22 @@ public class EchoRS {
         }
 
         @Override
-        public void write(OutputStream out) throws IOException {
-            Writer w = new OutputStreamWriter(out, "UTF-8");
-            w.write("{\"result\":");
-            w.write(Integer.toString(code.ordinal()));
-            if (exception != null) {
-                w.write(",\"errorMessage\":\"");
-                w.write(code.errorMessage(exception));
-                w.write('"');
-            }
-            if (connectionTime != null) {
-                w.write(",\"connectionTime\":");
-                w.write(connectionTime);
-            }
-            if (echoTime != null) {
-                w.write(",\"echoTime\":");
-                w.write(echoTime);
-            }
-            if (releaseTime != null) {
-                w.write(",\"releaseTime\":");
-                w.write(releaseTime);
-            }
-            w.write('}');
-            w.flush();
+        public void write(OutputStream out) {
+            JsonGenerator gen = Json.createGenerator(out);
+            JsonWriter writer = new JsonWriter(gen);
+            gen.writeStartObject();
+            writer.writeNotNullOrDef("result", Integer.toString(code.ordinal()), null);
+            if (exception != null)
+                writer.writeNotNullOrDef("errorMessage", code.errorMessage(exception), null);
+            writer.writeNotNullOrDef("connectionTime", connectionTime, null);
+            writer.writeNotNullOrDef("echoTime", echoTime, null);
+            writer.writeNotNullOrDef("releaseTime", releaseTime, null);
+            gen.writeEnd();
+            gen.flush();
         }
+    }
+
+    private static int parseInt(String s) {
+        return s != null ? Integer.parseInt(s) : 0;
     }
 }

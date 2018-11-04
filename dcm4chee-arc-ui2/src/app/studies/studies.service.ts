@@ -5,6 +5,12 @@ import * as _ from 'lodash';
 import {Observable} from 'rxjs';
 import {WindowRefService} from "../helpers/window-ref.service";
 import {AppService} from "../app.service";
+import {J4careHttpService} from "../helpers/j4care-http.service";
+import {j4care} from "../helpers/j4care.service";
+import {ScalarObservable} from "rxjs/observable/ScalarObservable";
+import 'rxjs/add/operator/switchMap';
+import {Globalvar} from "../constants/globalvar";
+import {HttpErrorResponse, HttpHeaders} from "@angular/common/http";
 declare var DCM4CHE: any;
 declare var window: any;
 
@@ -16,9 +22,9 @@ export class StudiesService {
     integerVr = ['DS', 'FL', 'FD', 'IS', 'SL', 'SS', 'UL', 'US'];
 
     constructor(
-        public $http: Http,
+        public $http: J4careHttpService,
         public datePipe: DatePipe,
-        public mainservice:AppService
+        public mainservice:AppService,
     ) { }
 
     get studyIod() {
@@ -52,7 +58,6 @@ export class StudiesService {
         return window;
     }
     getAes(user, aes){
-        console.log('in get aes service');
         if (!user || !user.user || user.roles.length === 0){
             return aes;
         }else{
@@ -78,7 +83,7 @@ export class StudiesService {
                     this.mainservice.setMessage({
                         'title': "Error",
                         'text': "Accepted User Roles in the AETs are missing, add at least one role per AET (ArchiveDevice -> AET -> Archive Network AE -> Accepted User Role)",
-                        'status': "Error"
+                        'status': "error"
                     });
                 }
                 return endAes;
@@ -86,7 +91,7 @@ export class StudiesService {
                 this.mainservice.setMessage({
                     'title': "Error",
                     'text': "No AETs found, please use the device-configurator or the LDAP-Browser to configure one!",
-                    'status': "Error"
+                    'status': "error"
                 });
             }
         }
@@ -108,6 +113,12 @@ export class StudiesService {
             if(_.hasIn(msg,"errorMessage")){
                 endMsg = endMsg + `${msg.errorMessage}<br>`;
             }
+            if(_.hasIn(msg,"error")){
+                endMsg = endMsg + `${msg.error}<br>`;
+            }
+            if(endMsg === ""){
+                endMsg = defaultMsg;
+            }
         }catch (e){
             if(defaultMsg){
                 endMsg = defaultMsg;
@@ -118,7 +129,8 @@ export class StudiesService {
         return endMsg;
     }
     _config = function(params) {
-        return '?' + jQuery.param(params);
+        // return '?' + decodeURIComponent(jQuery.param(params,true));
+        return '?' + this.mainservice.param(params);
     };
 
     replaceKeyInJson(object, key, key2){
@@ -166,89 +178,80 @@ export class StudiesService {
 
     setExpiredDate(aet,studyUID, expiredDate){
         let url = `../aets/${aet}/rs/studies/${studyUID}/expire/${expiredDate}`
-        return this.$http.put(url,{}).map(res => {
-            let resjson;
-            try{
-                let pattern = new RegExp("[^:]*:\/\/[^\/]*\/auth\/");
-                if(pattern.exec(res.url)){
-                    WindowRefService.nativeWindow.location = "/dcm4chee-arc/ui2/";
-                }
-                resjson = res.json();
-            }catch (e){
-                resjson = {};
-            }
-            return resjson;
-        });
+        return this.$http.put(url,{}).map(res => j4care.redirectOnAuthResponse(res));
     }
 
     queryPatients = function(url, params) {
-        console.log('this._config(aparms', this._config(params));
-
-        // this.headers = new Headers();
-        // this.headers.append('Content-Type', 'application/json');
-        // this.headers.append('Parameter',  + params);
-        //
-        //
-        // let options = new RequestOptions({
-        //     method: RequestMethod.Get,
-        //     url: url,
-        //     headers: this.headers
-        // });
-        // this.http.request(new Request(this.options))
-
         return this.$http.get(
             url + '/patients' + this._config(params),
             {
                 headers:  new Headers({'Accept': 'application/dicom+json'})
-            }).map(res => {let resjson; try{
-            let pattern = new RegExp("[^:]*:\/\/[^\/]*\/auth\/");
-            if(pattern.exec(res.url)){
-                WindowRefService.nativeWindow.location = "/dcm4chee-arc/ui2/";
-            }
-            resjson = res.json(); }catch (e){resjson = {}; } return resjson; });
+            }).map(res => j4care.redirectOnAuthResponse(res));
     };
     queryDiffs = function(url, params) {
-        params["missing"] = params["missing"] || true;
+        // params["missing"] = params["missing"] || true;
         return this.$http.get(
             url + this._config(params),
             {
                 headers:  new Headers({'Accept': 'application/dicom+json'})
             }
-        ).map(res => {
-            let resjson;
-            try{
-                let pattern = new RegExp("[^:]*:\/\/[^\/]*\/auth\/");
-                if(pattern.exec(res.url)){
-                    WindowRefService.nativeWindow.location = "/dcm4chee-arc/ui2/";
-                }
-                resjson = res.json();
-            }catch (e){
-                resjson = {};
-            }
-            return resjson;
-        });
+        ).map(res => j4care.redirectOnAuthResponse(res));
     };
+
+    getCount(url,mode,params) {
+        return this.$http.get(
+            `${url}/${mode}/count${this._config(params)}`,
+            {
+                headers:  new Headers({'Accept': 'application/json'})
+            }
+        ).map(res => j4care.redirectOnAuthResponse(res));
+    };
+    getSize(url,params) {
+        return this.$http.get(
+            `${url}/studies/size${this._config(params)}`,
+            {
+                headers:  new Headers({'Accept': 'application/json'})
+            }
+        ).map(res => j4care.redirectOnAuthResponse(res));
+    };
+
     queryStudies = function(url, params) {
-        console.log('in querystudies');
         return this.$http.get(
             url + '/studies' + this._config(params),
             {
                 headers:  new Headers({'Accept': 'application/dicom+json'})
             }
-        ).map(res => {
-            let resjson;
-            try{
-                let pattern = new RegExp("[^:]*:\/\/[^\/]*\/auth\/");
-                if(pattern.exec(res.url)){
-                    WindowRefService.nativeWindow.location = "/dcm4chee-arc/ui2/";
-                }
-                resjson = res.json();
-            }catch (e){
-                resjson = {};
-            }
-            return resjson;
-        });
+        ).map(res => j4care.redirectOnAuthResponse(res));
     };
+    otherAttributesButIDWasChanged(originalAttr,changedAttr){
+        let firstObject = _.cloneDeep(originalAttr);
+        let secondObject = _.cloneDeep(changedAttr);
+        if (_.hasIn(firstObject, '["00100020"].Value[0]')){
+            delete firstObject["00100020"];
+        }
+        if (_.hasIn(firstObject, '["00100021"].Value[0]')){
+            delete firstObject["00100021"];
+        }
+        if (_.hasIn(firstObject, '["00100024"].Value[0]["00400032"].Value[0]')){
+            delete firstObject['00100024'].Value[0]['00400032'];
+        }
+        if (_.hasIn(firstObject, '["00100024"].Value[0]["00400033"].Value[0]')){
+            delete firstObject['00100024'].Value[0]['00400033'];
+        }
+        if (_.hasIn(secondObject, '["00100020"].Value[0]')){
+            delete secondObject["00100020"];
+        }
+        if (_.hasIn(secondObject, '["00100021"].Value[0]')){
+            delete secondObject["00100021"];
+        }
+        if (_.hasIn(secondObject, '["00100024"].Value[0]["00400032"].Value[0]')){
+            delete secondObject['00100024'].Value[0]['00400032'];
+        }
+        if (_.hasIn(secondObject, '["00100024"].Value[0]["00400033"].Value[0]')){
+            delete secondObject['00100024'].Value[0]['00400033'];
+        }
+        return !_.isEqual(firstObject, secondObject);
+    }
     appendPatientIdTo(patient, obj){
         if (_.hasIn(patient, '00100020')){
             obj['00100020'] = obj['00100020'] || {};
@@ -283,12 +286,7 @@ export class StudiesService {
             {
                 headers:  new Headers({'Accept': 'application/dicom+json'})
             }
-        ).map(res => {let resjson; try{
-            let pattern = new RegExp("[^:]*:\/\/[^\/]*\/auth\/");
-            if(pattern.exec(res.url)){
-                WindowRefService.nativeWindow.location = "/dcm4chee-arc/ui2/";
-            }
-            resjson = res.json(); }catch (e){resjson = {}; } return resjson; });
+        ).map(res => j4care.redirectOnAuthResponse(res));
     };
 
     queryInstances = function(url, studyIUID, seriesIUID, params) {
@@ -300,25 +298,14 @@ export class StudiesService {
             {
                 headers:  new Headers({'Accept': 'application/dicom+json'})
             }
-        ).map(res => {let resjson; try{
-            let pattern = new RegExp("[^:]*:\/\/[^\/]*\/auth\/");
-            if(pattern.exec(res.url)){
-                WindowRefService.nativeWindow.location = "/dcm4chee-arc/ui2/";
-            }
-            resjson = res.json(); }catch (e){resjson = {}; } return resjson; });
+        ).map(res => j4care.redirectOnAuthResponse(res));
     };
 
     getPatientIod(){
-        console.log('_patientIod', this._patientIod);
         if (this._patientIod) {
             return Observable.of(this._patientIod);
         } else {
-            return this.$http.get('assets/iod/patient.iod.json').map(res => {let resjson; try{
-                let pattern = new RegExp("[^:]*:\/\/[^\/]*\/auth\/");
-                if(pattern.exec(res.url)){
-                    WindowRefService.nativeWindow.location = "/dcm4chee-arc/ui2/";
-                }
-                resjson = res.json(); }catch (e){resjson = {}; } return resjson; });
+            return this.$http.get('assets/iod/patient.iod.json').map(res => j4care.redirectOnAuthResponse(res));
         }
     };
     getStudyIod(){
@@ -326,12 +313,7 @@ export class StudiesService {
         if (this._studyIod) {
             return Observable.of(this._studyIod);
         } else {
-            return this.$http.get('assets/iod/study.iod.json').map(res => {let resjson; try{
-                let pattern = new RegExp("[^:]*:\/\/[^\/]*\/auth\/");
-                if(pattern.exec(res.url)){
-                    WindowRefService.nativeWindow.location = "/dcm4chee-arc/ui2/";
-                }
-                resjson = res.json(); }catch (e){resjson = {}; } return resjson; });
+            return this.$http.get('assets/iod/study.iod.json').map(res => j4care.redirectOnAuthResponse(res));
         }
     };
     getMwlIod(){
@@ -341,12 +323,7 @@ export class StudiesService {
         } else {
             return this.$http.get(
                 'assets/iod/mwl.iod.json'
-            ).map(res => {let resjson; try{
-                let pattern = new RegExp("[^:]*:\/\/[^\/]*\/auth\/");
-                if(pattern.exec(res.url)){
-                    WindowRefService.nativeWindow.location = "/dcm4chee-arc/ui2/";
-                }
-                resjson = res.json(); }catch (e){resjson = {}; } return resjson; });
+            ).map(res => j4care.redirectOnAuthResponse(res));
         }
     };
 
@@ -354,7 +331,7 @@ export class StudiesService {
         let dropdown = [];
         _.forEach(res, function(m, i){
             if (i === '00400100'){
-                _.forEach(m.items, function(l, j){
+                _.forEach(m.items || m.Value[0], function(l, j){
                     dropdown.push({
                         'code': '00400100:' + j,
                         'codeComma': '>' + j.slice(0, 4) + ',' + j.slice(4),
@@ -525,8 +502,11 @@ clipboard.hasPatient = haspatient || (_.size(clipboard.patient) > 0);
             if (_.hasIn(obj, '["00100020"].Value[0]')){
                 patientId += obj["00100020"].Value[0];
             }
-            if (_.hasIn(obj, '["00100021"].Value[0]')){
+            if (_.hasIn(obj, '["00100021"].Value[0]'))
                 patientId += '^^^' + obj["00100021"].Value[0];
+            else{
+                if(_.hasIn(obj, '["00100024"].Value[0]["00400032"].Value[0]') || _.hasIn(obj, '["00100024"].Value[0]["00400033"].Value[0]'))
+                    patientId += '^^^';
             }
             if (_.hasIn(obj, '["00100024"].Value[0]["00400032"].Value[0]')){
                 patientId += '&' + obj['00100024'].Value[0]['00400032'].Value[0];
@@ -569,43 +549,105 @@ clipboard.hasPatient = haspatient || (_.size(clipboard.patient) > 0);
                 url,
                 object,
                 {headers: headers}
-            ).map(res => {let resjson; try{ let pattern = new RegExp("[^:]*:\/\/[^\/]*\/auth\/"); if(pattern.exec(res.url)){ WindowRefService.nativeWindow.location = "/dcm4chee-arc/ui2/";} resjson = res.json(); }catch (e){ resjson = [];} return resjson;})
+            ).map(res => j4care.redirectOnAuthResponse(res))
             ,
             successMsg:'Patient ID changed successfully!'
         };
     }
-    modifyPatient(patient, iod, oldPatientID, aet,internalAppName, externalAppName,  modifyMode, externalInternalAetMode){
+    getHl7ApplicationNameFormAETtitle(aet, aes){
+        for(let i = 0; i < aes.length; i++){
+            if(aet === aes[i].dicomAETitle){
+                return aes[i].hl7ApplicationName;
+            }
+        };
+    }
+    changePatientID(oldPatientID, newPatientID, patientData, aet, sendingHl7App, receivingHl7App, accesMode){
+        if(oldPatientID === newPatientID){
+            return Observable.of(null);
+        }else{
+            if(accesMode === 'internal'){
+                return this.$http.post(
+                    `../aets/${aet}/rs/patients/${oldPatientID}/changeid/${newPatientID}`,
+                    patientData,
+                    {headers: new Headers({ 'Content-Type': 'application/dicom+json' })}
+                );
+            }else{
+                return this.$http.post(
+                    `../hl7apps/${sendingHl7App}/hl7/${receivingHl7App}/patients/${oldPatientID}/changeid`,
+                    patientData,
+                    {headers: new Headers({ 'Content-Type': 'application/dicom+json' })}
+                );
+            }
+        }
+    }
+
+    createPatient(patientData, aet, sendingHl7App, receivingHl7App,accesMode){
+        let url;
+        if(accesMode === 'external'){
+            if(!sendingHl7App || !receivingHl7App){
+                return Observable.throw(new Error('Hl7Applications not found!'));
+            }else{
+                url = `../hl7apps/${sendingHl7App}/hl7/${receivingHl7App}/patients`;
+            }
+        }else{
+            url = `../aets/${aet}/rs/patients/`;
+        }
+        return this.$http.post(
+            url,
+            patientData,
+            {headers: new Headers({ 'Content-Type': 'application/dicom+json' })}
+        );
+    }
+    modifyPatient(patient, iod, oldPatientID, aet,internalAppName, externalAppName,  modifyMode, externalInternalAetMode, queue?){
         let url;
         if(externalInternalAetMode === 'external'){
-            url = `../hl7apps/${internalAppName}/hl7/${externalAppName}/patients`;
+            if(!internalAppName || !externalAppName){
+                this.mainservice.setMessage({
+                    'title': 'Error',
+                    'text': 'Hl7Applications not found!',
+                    'status': 'error'
+                });
+                return null;
+            }else{
+                url = `../hl7apps/${internalAppName}/hl7/${externalAppName}/patients`;
+            }
         }else{
             url = `../aets/${aet}/rs/patients/`;
         }
         let headers = new Headers({ 'Content-Type': 'application/dicom+json' });
         this.clearPatientObject(patient.attrs);
         this.convertStringToNumber(patient.attrs);
-        //Check if the patient.attrs object have PatientID
-        if (_.hasIn(patient,'attrs[00100020].Value[0]') && patient.attrs['00100020'].Value[0] != ''){
+        let toSavePatientObject;
+        if(_.hasIn(patient,"attrs")){
+            toSavePatientObject = _.cloneDeep(patient.attrs);
+        }else{
+            toSavePatientObject = _.cloneDeep(patient);
+        }
+        //Check if the toSavePatientObject object have PatientID
+        if (_.hasIn(toSavePatientObject,'[00100020].Value[0]') && toSavePatientObject['00100020'].Value[0] != ''){
             //Delete attrs that don't have values
-            _.forEach(patient.attrs, function(m, i){
+            _.forEach(toSavePatientObject, function(m, i){
                 if (iod && iod[i] && iod[i].vr != 'SQ' && m.Value && m.Value.length === 1 && m.Value[0] === ''){
-                    delete patient.attrs[i];
+                    delete toSavePatientObject[i];
                 }
             });
-            if (modifyMode === 'create' && _.hasIn(patient, 'attrs.00100021') && patient.attrs['00100021'] != undefined) {
-                oldPatientID = this.getPatientId(patient.attrs);
+            if (modifyMode === 'create' && _.hasIn(toSavePatientObject, '00100021') && toSavePatientObject['00100021'] != undefined) {
+                oldPatientID = this.getPatientId(toSavePatientObject);
             }
             if(externalInternalAetMode === 'internal'){
-                url = url + oldPatientID;
+                url = url + (oldPatientID || patient.attrs['00100020'].Value[0]);
+            }
+            if(queue){
+                url += `?queue=true`
             }
             if((externalInternalAetMode === 'external' && modifyMode === 'edit') || externalInternalAetMode === 'internal'){
                     return {
                         save:this.$http.put(
                                 url,
-                                patient.attrs,
+                                toSavePatientObject,
                                 {headers: headers}
-                            ).map(res => {let resjson; try{ let pattern = new RegExp("[^:]*:\/\/[^\/]*\/auth\/"); if(pattern.exec(res.url)){ WindowRefService.nativeWindow.location = "/dcm4chee-arc/ui2/";} resjson = res.json(); }catch (e){ resjson = [];} return resjson;})
-                        ,
+                            )
+                            .map(res => {let resjson; try{ let pattern = new RegExp("[^:]*:\/\/[^\/]*\/auth\/"); if(pattern.exec(res.url)){ WindowRefService.nativeWindow.location = "/dcm4chee-arc/ui2/";} resjson = res.json(); }catch (e){ resjson = [];} return resjson;}),
                         successMsg:'Patient saved successfully!'
                     };
             }else{
@@ -613,7 +655,7 @@ clipboard.hasPatient = haspatient || (_.size(clipboard.patient) > 0);
                    return {
                        save:this.$http.post(
                            url,
-                           patient.attrs,
+                           toSavePatientObject,
                            {headers: headers}
                        ).map(res => {let resjson; try{ let pattern = new RegExp("[^:]*:\/\/[^\/]*\/auth\/"); if(pattern.exec(res.url)){ WindowRefService.nativeWindow.location = "/dcm4chee-arc/ui2/";} resjson = res.json(); }catch (e){ resjson = [];} return resjson;})
                        ,
@@ -633,7 +675,7 @@ clipboard.hasPatient = haspatient || (_.size(clipboard.patient) > 0);
                 return {
                     save:this.$http.post(
                         url,
-                        patient.attrs,
+                        toSavePatientObject,
                         {headers: headers}
                     ).map(res => {let resjson; try{ let pattern = new RegExp("[^:]*:\/\/[^\/]*\/auth\/"); if(pattern.exec(res.url)){ WindowRefService.nativeWindow.location = "/dcm4chee-arc/ui2/";} resjson = res.json(); }catch (e){ resjson = [];} return resjson;})
                     ,
@@ -649,6 +691,10 @@ clipboard.hasPatient = haspatient || (_.size(clipboard.patient) > 0);
             }
         }
     }
+    getWebApps(){
+        return this.$http.get('../webapps?dcmWebServiceClass=STOW_RS')
+            .map(res => j4care.redirectOnAuthResponse(res));
+    }
     isTargetInClipboard(target, clipboard){
         let contains = false;
         _.forEach(clipboard.otherObjects, (m, i) => {
@@ -662,5 +708,42 @@ clipboard.hasPatient = haspatient || (_.size(clipboard.patient) > 0);
             }
         });
         return contains;
+    }
+
+    rsURL(externalInternalAetMode,aet, aetTitle, externalInternalAetModelAETitle) {
+        let url;
+        if(externalInternalAetMode === "external"){
+            url = `../aets/${aetTitle}/dimse/${externalInternalAetModelAETitle}`;
+        }
+        if(externalInternalAetMode === "internal"){
+            url = `../aets/${aet}/rs`;
+        }
+        return url;
+    }
+    getDiffAttributeSet(){
+        return this.$http.get('../attribute-set/DIFF_RS')
+            .map(res => j4care.redirectOnAuthResponse(res));
+    }
+    queryNationalPationtRegister(patientID){
+        // return Observable.of([{"00081190":{"vr":"UR","Value":["http://shefki-lifebook:8080/dcm4chee-arc/aets/DCM4CHEE/rs"]},"00100010":{"vr":"PN","Value":[{"Alphabetic":"test12SELAM"}]},"00100020":{"vr":"LO","Value":["pid1"]},"00100040":{"vr":"CS","Value":["F"]},"00201200":{"vr":"IS","Value":[0]},"77770010":{"vr":"LO","Value":["DCM4CHEE Archive 5"]},"77771010":{"vr":"DT","Value":["20180315123826.668"]},"77771011":{"vr":"DT","Value":["20180315125113.826"]}}]);
+        // return Observable.of([{"00080052":{"vr":"CS","Value":["PATIENT"]},"00100010":{"vr":"PN","Value":[{"Alphabetic":"PROBST^KATHY"}]},"00100020":{"vr":"LO","Value":["ALGO00001"]},"00100030":{"vr":"DA","Value":["19000101"]},"00100040":{"vr":"CS","Value":["F"]}}])
+        // return Observable.of([])
+       return this.$http.get(`../xroad/RR441/${patientID}`).map(res => j4care.redirectOnAuthResponse(res));
+    }
+
+    gitDiffTaskResults(params, mode){
+        if(mode === 'pk'){
+            let taskPK = params['pk'];
+            delete params['pk'];
+            return this.$http.get(`../monitor/diff/${taskPK}/studies${this._config(params)}`).map(res => j4care.redirectOnAuthResponse(res));
+        }else{
+            let batchID = params['batchID'];
+            delete params['batchID'];
+            return this.$http.get(`../monitor/diff/batch/${batchID}/studies${this._config(params)}`).map(res => j4care.redirectOnAuthResponse(res));
+        }
+    }
+
+    scheduleStorageVerification(param, aet){
+        return this.$http.post(`../aets/${aet}/stgver/studies?${this.mainservice.param(param)}`,{})
     }
 }

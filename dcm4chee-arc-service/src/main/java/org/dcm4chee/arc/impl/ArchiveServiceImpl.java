@@ -41,6 +41,7 @@
 package org.dcm4chee.arc.impl;
 
 import org.dcm4che3.conf.api.IApplicationEntityCache;
+import org.dcm4che3.conf.api.IDeviceCache;
 import org.dcm4che3.conf.api.hl7.IHL7ApplicationCache;
 import org.dcm4che3.net.AssociationHandler;
 import org.dcm4che3.net.Device;
@@ -53,6 +54,7 @@ import org.dcm4che3.net.service.DicomServiceRegistry;
 import org.dcm4chee.arc.*;
 import org.dcm4chee.arc.conf.ArchiveDeviceExtension;
 import org.dcm4chee.arc.entity.Patient;
+import org.dcm4chee.arc.event.ArchiveServiceEvent;
 
 import javax.annotation.PostConstruct;
 import javax.annotation.PreDestroy;
@@ -87,6 +89,9 @@ public class ArchiveServiceImpl implements ArchiveService {
     private Instance<Scheduler> schedulers;
 
     @Inject
+    private IDeviceCache deviceCache;
+
+    @Inject
     private IApplicationEntityCache aeCache;
 
     @Inject
@@ -119,6 +124,12 @@ public class ArchiveServiceImpl implements ArchiveService {
     @Inject
     private ConnectionEventSource connectionEventSource;
 
+    @Inject
+    private AssociationEventSource associationEventSource;
+
+    @Inject
+    private HL7ConnectionEventSource hl7ConnectionEventSource;
+
     private Status status = Status.STOPPED;
 
     private final DicomService echoscp = new BasicCEchoSCP();
@@ -131,6 +142,7 @@ public class ArchiveServiceImpl implements ArchiveService {
     public void init() {
         try {
             device.setConnectionMonitor(connectionEventSource);
+            device.setAssociationMonitor(associationEventSource);
             device.setExecutor(executor);
             device.setScheduledExecutor(scheduledExecutor);
             device.setAssociationHandler(associationHandler);
@@ -145,6 +157,7 @@ public class ArchiveServiceImpl implements ArchiveService {
             HL7DeviceExtension hl7Extension = device.getDeviceExtension(HL7DeviceExtension.class);
             if (hl7Extension != null) {
                 hl7Extension.setHL7MessageListener(hl7ServiceRegistry);
+                hl7Extension.setHL7ConnectionMonitor(hl7ConnectionEventSource);
             }
             configure();
             start(null);
@@ -196,6 +209,7 @@ public class ArchiveServiceImpl implements ArchiveService {
         deviceProducer.reloadConfiguration();
         for (Scheduler scheduler : schedulers) scheduler.reload();
         device.rebindConnections();
+        deviceCache.clear();
         aeCache.clear();
         hl7AppCache.clear();
         configure();
@@ -204,6 +218,7 @@ public class ArchiveServiceImpl implements ArchiveService {
 
     private void configure() {
         ArchiveDeviceExtension arcdev = device.getDeviceExtension(ArchiveDeviceExtension.class);
+        deviceCache.setStaleTimeout(arcdev.getAECacheStaleTimeoutSeconds());
         aeCache.setStaleTimeout(arcdev.getAECacheStaleTimeoutSeconds());
         hl7AppCache.setStaleTimeout(arcdev.getAECacheStaleTimeoutSeconds());
         leadingCFindSCPQueryCache.setStaleTimeout(

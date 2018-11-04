@@ -6,7 +6,8 @@
     "cn",
     "dcmRetentionPeriod",
     "dcmRulePriority",
-    "dcmExpireSeriesIndividually"
+    "dcmExpireSeriesIndividually",
+    "dcmStartRetentionPeriodOnStudyDate"
   ],
   "properties": {
     "cn": {
@@ -28,8 +29,8 @@
       "default": 0
     },
     "dcmProperty": {
-      "title": "Property",
-      "description": "Property in format <name>=<value>",
+      "title": "Conditions",
+      "description": "Conditions in format {attributeID}[!]={regEx}",
       "type": "array",
       "items": {
         "type": "string"
@@ -38,6 +39,12 @@
     "dcmExpireSeriesIndividually": {
       "title": "Expire Series Individually",
       "description": "Indicates if series should be expired individually or not.",
+      "type": "boolean",
+      "default": false
+    },
+    "dcmStartRetentionPeriodOnStudyDate": {
+      "title": "Start Retention Period on Study Date",
+      "description": "Indicates if retention period should be started on Study Date instead on receive of an object of the Study",
       "type": "boolean",
       "default": false
     }

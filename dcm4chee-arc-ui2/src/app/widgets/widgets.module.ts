@@ -3,7 +3,7 @@ import { CommonModule } from '@angular/common';
 import { WidgetsComponent } from './widgets.component';
 import {BrowserModule} from '@angular/platform-browser';
 import {FormsModule} from '@angular/forms';
-import {MdDialogConfig} from '@angular/material';
+import {MatDialogConfig} from '@angular/material';
 import { MessagingComponent } from './messaging/messaging.component';
 import {EditPatientComponent} from './dialogs/edit-patient/edit-patient.component';
 import { EditMwlComponent } from './dialogs/edit-mwl/edit-mwl.component';
@@ -28,6 +28,13 @@ import { TimePickerComponent } from './time-picker/time-picker.component';
 import { DurationPickerComponent } from './duration-picker/duration-picker.component';
 import { SchedulePickerComponent } from './schedule-picker/schedule-picker.component';
 import { AttributeInfoComponent } from './attribute-info/attribute-info.component';
+import { ViewerComponent } from './dialogs/viewer/viewer.component';
+import {DicomFlatListComponent} from "./dicom-list/dicom-flat-list.component";
+import { ModalityComponent } from './modality/modality.component';
+import { RangePickerComponent } from './range-picker/range-picker.component';
+import { DynamicFieldComponent } from './dynamic-field/dynamic-field.component';
+import { DcmSelectComponent } from './dcm-select/dcm-select.component';
+import { CsvRetrieveComponent } from './dialogs/csv-retrieve/csv-retrieve.component';
 
 
 @NgModule({
@@ -39,7 +46,7 @@ import { AttributeInfoComponent } from './attribute-info/attribute-info.componen
     ],
     declarations: [WidgetsComponent],
     exports: [WidgetsComponent],
-    providers: [MdDialogConfig]
+    providers: [MatDialogConfig]
 })
 export class WidgetsModule { }
 export const WidgetsComponents = [
@@ -65,5 +72,12 @@ export const WidgetsComponents = [
     TimePickerComponent,
     DurationPickerComponent,
     SchedulePickerComponent,
-    AttributeInfoComponent
+    AttributeInfoComponent,
+    ViewerComponent,
+    DicomFlatListComponent,
+    ModalityComponent,
+    RangePickerComponent,
+    DynamicFieldComponent,
+    DcmSelectComponent,
+    CsvRetrieveComponent
 ];

@@ -64,13 +64,18 @@ public class UpdateMetadataEJB {
                 .getResultList();
     }
 
-    public void updateDB(Long seriesPk, Metadata metadata) {
+    public int claim(Long seriesPk) {
+        return em.createNamedQuery(Series.CLAIM_METADATA_UPDATE)
+                .setParameter(1, seriesPk)
+                .executeUpdate();
+    }
+
+    public void commit(Long seriesPk, Metadata metadata) {
         Series series = em.find(Series.class, seriesPk);
         em.persist(metadata);
         Metadata prev = series.getMetadata();
         if (prev != null)
             prev.setStatus(Metadata.Status.TO_DELETE);
         series.setMetadata(metadata);
-        series.setMetadataScheduledUpdateTime(null);
     }
 }

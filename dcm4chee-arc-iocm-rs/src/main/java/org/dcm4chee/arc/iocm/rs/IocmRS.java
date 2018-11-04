@@ -46,28 +46,28 @@ import org.dcm4che3.json.JSONReader;
 import org.dcm4che3.json.JSONWriter;
 import org.dcm4che3.net.ApplicationEntity;
 import org.dcm4che3.net.Device;
+import org.dcm4che3.net.service.DicomServiceException;
 import org.dcm4che3.util.UIDUtils;
 import org.dcm4chee.arc.entity.*;
 import org.dcm4chee.arc.hl7.RESTfulHL7Sender;
-import org.dcm4chee.arc.keycloak.KeycloakContext;
 import org.dcm4chee.arc.conf.*;
 import org.dcm4chee.arc.delete.DeletionService;
 import org.dcm4chee.arc.delete.StudyNotEmptyException;
 import org.dcm4chee.arc.delete.StudyNotFoundException;
 import org.dcm4chee.arc.id.IDService;
-import org.dcm4chee.arc.patient.PatientMgtContext;
-import org.dcm4chee.arc.patient.PatientService;
-import org.dcm4chee.arc.patient.PatientTrackingNotAllowedException;
+import org.dcm4chee.arc.patient.*;
 import org.dcm4chee.arc.procedure.ProcedureContext;
 import org.dcm4chee.arc.procedure.ProcedureService;
 import org.dcm4chee.arc.query.QueryService;
-import org.dcm4chee.arc.retrieve.InstanceLocations;
+import org.dcm4chee.arc.retrieve.RetrieveService;
+import org.dcm4chee.arc.store.InstanceLocations;
 import org.dcm4chee.arc.rs.client.RSForward;
 import org.dcm4chee.arc.store.StoreContext;
 import org.dcm4chee.arc.store.StoreService;
 import org.dcm4chee.arc.store.StoreSession;
 import org.dcm4chee.arc.study.StudyMgtContext;
 import org.dcm4chee.arc.study.StudyService;
+import org.dcm4chee.arc.qmgt.HttpServletRequestInfo;
 import org.dcm4chee.arc.validation.constraints.ValidValueOf;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -78,6 +78,7 @@ import javax.json.Json;
 import javax.json.stream.JsonGenerator;
 import javax.json.stream.JsonParser;
 import javax.json.stream.JsonParsingException;
+import javax.persistence.NoResultException;
 import javax.servlet.http.HttpServletRequest;
 import javax.ws.rs.*;
 import javax.ws.rs.core.Context;
@@ -98,13 +99,15 @@ import java.util.*;
 public class IocmRS {
 
     private static final Logger LOG = LoggerFactory.getLogger(IocmRS.class);
-    private static final String ORG_KEYCLOAK_KEYCLOAK_SECURITY_CONTEXT = "org.keycloak.KeycloakSecurityContext";
 
     @Inject
     private Device device;
 
     @Inject
     private QueryService queryService;
+
+    @Inject
+    private RetrieveService retrieveService;
 
     @Inject
     private StoreService storeService;
@@ -172,7 +175,7 @@ public class IocmRS {
     @Consumes("application/json")
     @Produces("application/json")
     public Response copyInstances(@PathParam("StudyUID") String studyUID, InputStream in) throws Exception {
-        return copyOrMoveInstances(RSOperation.CopyInstances, studyUID, in, null, null);
+        return copyOrMoveInstances(studyUID, in, null, null);
     }
 
     @POST
@@ -184,43 +187,55 @@ public class IocmRS {
             @PathParam("CodeValue") String codeValue,
             @PathParam("CodingSchemeDesignator") String designator,
             InputStream in) throws Exception {
-        return copyOrMoveInstances(RSOperation.MoveInstances, studyUID, in, codeValue, designator);
+        return copyOrMoveInstances(studyUID, in, codeValue, designator);
     }
 
     @DELETE
     @Path("/patients/{PatientID}")
-    public void deletePatient(@PathParam("PatientID") IDWithIssuer patientID) throws Exception {
+    public void deletePatient(@PathParam("PatientID") IDWithIssuer patientID) {
         logRequest();
         ArchiveAEExtension arcAE = getArchiveAE();
         Patient patient = patientService.findPatient(patientID);
         if (patient == null)
-            throw new WebApplicationException(getResponse(
+            throw new WebApplicationException(errResponse(
                     "Patient having patient ID : " + patientID + " not found.", Response.Status.NOT_FOUND));
-        if (patient.getNumberOfStudies() > 0)
-            throw new WebApplicationException(getResponse(
-                    "Patient having patient ID : " + patientID + " has non empty studies.", Response.Status.FORBIDDEN));
-        PatientMgtContext ctx = patientService.createPatientMgtContextWEB(request);
-        ctx.setPatientID(patientID);
-        ctx.setAttributes(patient.getAttributes());
-        ctx.setEventActionCode(AuditMessages.EventActionCode.Delete);
-        ctx.setPatient(patient);
-        deletionService.deletePatient(ctx);
-        rsForward.forward(RSOperation.DeletePatient, arcAE, null, request);
+        AllowDeletePatient allowDeletePatient = arcAE.allowDeletePatient();
+        String patientDeleteForbidden = allowDeletePatient == AllowDeletePatient.NEVER
+                ? "Patient deletion as per configuration is never allowed."
+                : allowDeletePatient == AllowDeletePatient.WITHOUT_STUDIES && patient.getNumberOfStudies() > 0
+                    ? "Patient having patient ID : " + patientID + " has non empty studies."
+                    : null;
+        if (patientDeleteForbidden != null)
+            throw new WebApplicationException(errResponse(patientDeleteForbidden, Response.Status.FORBIDDEN));
+
+        try {
+            PatientMgtContext ctx = patientService.createPatientMgtContextWEB(request);
+            ctx.setPatientID(patientID);
+            ctx.setAttributes(patient.getAttributes());
+            ctx.setEventActionCode(AuditMessages.EventActionCode.Delete);
+            ctx.setPatient(patient);
+            deletionService.deletePatient(ctx, arcAE);
+            rsForward.forward(RSOperation.DeletePatient, arcAE, null, request);
+        } catch (Exception e) {
+            throw new WebApplicationException(errResponseAsTextPlain(e));
+        }
     }
 
     @DELETE
     @Path("/studies/{StudyUID}")
-    public void deleteStudy(@PathParam("StudyUID") String studyUID) throws Exception {
+    public void deleteStudy(@PathParam("StudyUID") String studyUID) {
         logRequest();
         ArchiveAEExtension arcAE = getArchiveAE();
         try {
-            deletionService.deleteStudy(studyUID, request, arcAE.getApplicationEntity());
+            deletionService.deleteStudy(studyUID, HttpServletRequestInfo.valueOf(request), arcAE);
             rsForward.forward(RSOperation.DeleteStudy, arcAE, null, request);
         } catch (StudyNotFoundException e) {
-            throw new WebApplicationException(getResponse("Study having study instance UID " + studyUID + " not found.",
+            throw new WebApplicationException(errResponse("Study with study instance UID " + studyUID + " not found.",
                     Response.Status.NOT_FOUND));
         } catch (StudyNotEmptyException e) {
-            throw new WebApplicationException(getResponse(e.getMessage() + studyUID, Response.Status.FORBIDDEN));
+            throw new WebApplicationException(errResponse(e.getMessage() + studyUID, Response.Status.FORBIDDEN));
+        } catch (Exception e) {
+            throw new WebApplicationException(errResponseAsTextPlain(e));
         }
     }
 
@@ -234,7 +249,7 @@ public class IocmRS {
             JSONReader reader = new JSONReader(Json.createParser(new InputStreamReader(in, "UTF-8")));
             Attributes attrs = reader.readDataset(null);
             if (attrs.containsValue(Tag.PatientID))
-                throw new WebApplicationException(getResponse("Patient ID in message body", Response.Status.BAD_REQUEST));
+                throw new WebApplicationException(errResponse("Patient ID in message body", Response.Status.BAD_REQUEST));
             idService.newPatientID(attrs);
             PatientMgtContext ctx = patientService.createPatientMgtContextWEB(request);
             ctx.setAttributes(attrs);
@@ -245,16 +260,16 @@ public class IocmRS {
             return IDWithIssuer.pidOf(attrs).toString();
         } catch (JsonParsingException e) {
             throw new WebApplicationException(
-                    getResponse(e.getMessage() + " at location : " + e.getLocation(), Response.Status.BAD_REQUEST));
+                    errResponse(e.getMessage() + " at location : " + e.getLocation(), Response.Status.BAD_REQUEST));
         } catch (IOException e) {
-            throw new WebApplicationException(getResponse(e.getMessage(), Response.Status.INTERNAL_SERVER_ERROR));
+            throw new WebApplicationException(errResponse(e.getMessage(), Response.Status.INTERNAL_SERVER_ERROR));
         }
     }
 
     @PUT
     @Path("/patients/{PatientID}")
     @Consumes("application/dicom+json,application/json")
-    public void updatePatient(@PathParam("PatientID") IDWithIssuer patientID, InputStream in) throws Exception {
+    public void updatePatient(@PathParam("PatientID") IDWithIssuer patientID, InputStream in) {
         logRequest();
         ArchiveAEExtension arcAE = getArchiveAE();
         try {
@@ -265,7 +280,7 @@ public class IocmRS {
             ctx.setAttributeUpdatePolicy(Attributes.UpdatePolicy.REPLACE);
             IDWithIssuer bodyPatientID = ctx.getPatientID();
             if (bodyPatientID == null)
-                throw new WebApplicationException(getResponse("missing Patient ID in message body", Response.Status.BAD_REQUEST));
+                throw new WebApplicationException(errResponse("missing Patient ID in message body", Response.Status.BAD_REQUEST));
             boolean newPatient = patientID.equals(bodyPatientID);
             if (newPatient)
                 patientService.updatePatient(ctx);
@@ -281,11 +296,14 @@ public class IocmRS {
             rsHL7Sender.sendHL7Message(msgType, ctx);
         } catch (JsonParsingException e) {
             throw new WebApplicationException(
-                    getResponse(e.getMessage() + " at location : " + e.getLocation(), Response.Status.BAD_REQUEST));
+                    errResponse(e.getMessage() + " at location : " + e.getLocation(), Response.Status.BAD_REQUEST));
         } catch (PatientTrackingNotAllowedException e) {
-            throw new WebApplicationException(getResponse(e.getMessage(), Response.Status.CONFLICT));
+            throw new WebApplicationException(errResponse(e.getMessage(), Response.Status.CONFLICT));
+        } catch (CircularPatientMergeException e) {
+            throw new WebApplicationException(
+                    errResponse("PriorPatientID same as target PatientID", Response.Status.CONFLICT));
         } catch(Exception e) {
-            throw new WebApplicationException(getResponseAsTextPlain(e));
+            throw new WebApplicationException(errResponseAsTextPlain(e));
         }
     }
 
@@ -308,7 +326,7 @@ public class IocmRS {
             rsForward.forwardMergeMultiplePatients(RSOperation.MergePatients, getArchiveAE(), baos.toByteArray(), request);
         } catch (JsonParsingException e) {
             throw new WebApplicationException(
-                    getResponse(e.getMessage() + " at location : " + e.getLocation(), Response.Status.BAD_REQUEST));
+                    errResponse(e.getMessage() + " at location : " + e.getLocation(), Response.Status.BAD_REQUEST));
         }
     }
 
@@ -317,16 +335,11 @@ public class IocmRS {
     public void mergePatient(@PathParam("priorPatientID") IDWithIssuer priorPatientID,
                              @PathParam("patientID") IDWithIssuer patientID) throws Exception {
         logRequest();
-        try {
-            Attributes priorPatAttr = new Attributes(3);
-            priorPatAttr.setString(Tag.PatientID, VR.LO, priorPatientID.getID());
-            setIssuer(priorPatientID, priorPatAttr);
-            mergePatient(patientID, priorPatAttr);
-            rsForward.forward(RSOperation.MergePatient, getArchiveAE(), null, request);
-        } catch (Exception e) {
-            throw new WebApplicationException(
-                    getResponse(e.getMessage(), Response.Status.INTERNAL_SERVER_ERROR));
-        }
+        Attributes priorPatAttr = new Attributes(3);
+        priorPatAttr.setString(Tag.PatientID, VR.LO, priorPatientID.getID());
+        setIssuer(priorPatientID, priorPatAttr);
+        mergePatient(patientID, priorPatAttr);
+        rsForward.forward(RSOperation.MergePatient, getArchiveAE(), null, request);
     }
 
     private void mergePatient(IDWithIssuer patientID, Attributes priorPatAttr) throws Exception {
@@ -338,10 +351,14 @@ public class IocmRS {
             setIssuer(patientID, patAttr);
             patMgtCtx.setAttributes(patAttr);
             patMgtCtx.setPreviousAttributes(priorPatAttr);
+            LOG.info("Prior patient ID {} and target patient ID {}", patMgtCtx.getPreviousPatientID(), patMgtCtx.getPatientID());
             patientService.mergePatient(patMgtCtx);
             rsHL7Sender.sendHL7Message("ADT^A40^ADT_A39", patMgtCtx);
-        } catch (Exception e) {
-            throw e;
+        } catch (NonUniquePatientException | PatientMergedException e) {
+            throw new WebApplicationException(errResponse(e.getMessage(), Response.Status.CONFLICT));
+        } catch (CircularPatientMergeException e) {
+            throw new WebApplicationException(
+                    errResponse("PriorPatientID same as target PatientID", Response.Status.CONFLICT));
         }
     }
 
@@ -352,23 +369,19 @@ public class IocmRS {
         logRequest();
         ArchiveAEExtension arcAE = getArchiveAE();
         try {
+            Patient prevPatient = patientService.findPatient(priorPatientID);
             PatientMgtContext ctx = patientService.createPatientMgtContextWEB(request);
-            Patient priorPatient = patientService.findPatient(priorPatientID);
-            if (priorPatient == null)
-                throw new WebApplicationException(getResponse(
-                        "Patient having patient ID : " + priorPatientID + " not found.", Response.Status.NOT_FOUND));
-            Attributes attrs = priorPatient.getAttributes();
-            attrs.setString(Tag.PatientID, VR.LO, patientID.getID());
-            setIssuer(patientID, attrs);
-            ctx.setAttributes(attrs);
             ctx.setAttributeUpdatePolicy(Attributes.UpdatePolicy.REPLACE);
             ctx.setPreviousAttributes(priorPatientID.exportPatientIDWithIssuer(null));
+            ctx.setAttributes(patientID.exportPatientIDWithIssuer(prevPatient.getAttributes()));
             patientService.changePatientID(ctx);
             rsHL7Sender.sendHL7Message("ADT^A47^ADT_A30", ctx);
             rsForward.forward(RSOperation.ChangePatientID, arcAE, null, request);
-        } catch (Exception e) {
+        } catch (PatientTrackingNotAllowedException e) {
+            throw new WebApplicationException(errResponse(e.getMessage(), Response.Status.CONFLICT));
+        } catch (CircularPatientMergeException e) {
             throw new WebApplicationException(
-                    getResponse(e.getMessage(), Response.Status.INTERNAL_SERVER_ERROR));
+                    errResponse("PriorPatientID same as target PatientID", Response.Status.CONFLICT));
         }
     }
 
@@ -382,8 +395,8 @@ public class IocmRS {
     }
 
     private void setPIDQualifier(Attributes attrs, Issuer pidIssuer) {
+        Sequence pidQualifiers = attrs.getSequence(Tag.IssuerOfPatientIDQualifiersSequence);
         if (hasUniversalEntityIDAndType(pidIssuer)) {
-            Sequence pidQualifiers = attrs.getSequence(Tag.IssuerOfPatientIDQualifiersSequence);
             if (pidQualifiers != null)
                 for (Attributes item : pidQualifiers)
                     setUniversalEntityIDAndType(pidIssuer, item);
@@ -395,6 +408,8 @@ public class IocmRS {
                 pidQualifiers.add(item);
             }
         }
+        if (pidQualifiers != null)
+            attrs.remove(Tag.IssuerOfPatientIDQualifiersSequence);
     }
 
     private boolean hasUniversalEntityIDAndType(Issuer pidIssuer) {
@@ -418,11 +433,11 @@ public class IocmRS {
             final Attributes attrs = reader.readDataset(null);
             IDWithIssuer patientID = IDWithIssuer.pidOf(attrs);
             if (patientID == null)
-                throw new WebApplicationException(getResponse("missing Patient ID in message body", Response.Status.BAD_REQUEST));
+                throw new WebApplicationException(errResponse("missing Patient ID in message body", Response.Status.BAD_REQUEST));
 
             Patient patient = patientService.findPatient(patientID);
             if (patient == null)
-                throw new WebApplicationException(getResponse("Patient[id=" + patientID + "] does not exist.",
+                throw new WebApplicationException(errResponse("Patient[id=" + patientID + "] does not exist.",
                         Response.Status.NOT_FOUND));
 
             boolean studyIUIDPresent = attrs.containsValue(Tag.StudyInstanceUID);
@@ -434,59 +449,62 @@ public class IocmRS {
             ctx.setAttributes(attrs);
             studyService.updateStudy(ctx);
             rsForward.forward(RSOperation.UpdateStudy, arcAE, attrs, request);
-            return new StreamingOutput() {
-                @Override
-                public void write(OutputStream out) throws IOException {
+            return out -> {
                     try (JsonGenerator gen = Json.createGenerator(out)) {
                         new JSONWriter(gen).write(attrs);
                     }
-                }
             };
         } catch (JsonParsingException e) {
             throw new WebApplicationException(
-                    getResponse(e.getMessage() + " at location : " + e.getLocation(), Response.Status.BAD_REQUEST));
+                    errResponse(e.getMessage() + " at location : " + e.getLocation(), Response.Status.BAD_REQUEST));
         }
     }
 
     @PUT
     @Path("/studies/{studyUID}/expire/{expirationDate}")
-    public void updateStudyExpirationDate(@PathParam("studyUID") String studyUID,
+    public Response updateStudyExpirationDate(@PathParam("studyUID") String studyUID,
                                           @PathParam("expirationDate")
                                           @ValidValueOf(type = ExpireDate.class, message = "Expiration date cannot be parsed.")
-                                                  String expirationDate) throws Exception {
-        updateExpirationDate(RSOperation.UpdateStudyExpirationDate, studyUID, null, expirationDate);
+                                                  String expirationDate) {
+        return updateExpirationDate(RSOperation.UpdateStudyExpirationDate, studyUID, null, expirationDate);
     }
 
     @PUT
     @Path("/studies/{studyUID}/series/{seriesUID}/expire/{expirationDate}")
-    public void updateSeriesExpirationDate(@PathParam("studyUID") String studyUID, @PathParam("seriesUID") String seriesUID,
+    public Response updateSeriesExpirationDate(@PathParam("studyUID") String studyUID, @PathParam("seriesUID") String seriesUID,
                                            @PathParam("expirationDate")
                                            @ValidValueOf(type = ExpireDate.class, message = "Expiration date cannot be parsed.")
-                                                   String expirationDate) throws Exception {
-        updateExpirationDate(RSOperation.UpdateSeriesExpirationDate, studyUID, seriesUID, expirationDate);
+                                                   String expirationDate) {
+        return updateExpirationDate(RSOperation.UpdateSeriesExpirationDate, studyUID, seriesUID, expirationDate);
     }
 
-    private void updateExpirationDate(RSOperation op, String studyUID, String seriesUID, String expirationDate)
-            throws Exception {
+    private Response updateExpirationDate(RSOperation op, String studyUID, String seriesUID, String expirationDate) {
         logRequest();
         ArchiveAEExtension arcAE = getArchiveAE();
+        boolean updateSeriesExpirationDate = seriesUID != null;
         try {
-            StudyMgtContext ctx = studyService.createStudyMgtContextWEB(request, arcAE.getApplicationEntity());
-            ctx.setStudyInstanceUID(studyUID);
+            StudyMgtContext ctx = createStudyMgtCtx(studyUID, expirationDate, arcAE);
             if (seriesUID != null)
                 ctx.setSeriesInstanceUID(seriesUID);
-            LocalDate expireDate = LocalDate.parse(expirationDate, DateTimeFormatter.BASIC_ISO_DATE);
-            ctx.setExpirationDate(expireDate);
             studyService.updateExpirationDate(ctx);
             rsForward.forward(op, arcAE, null, request);
+            return Response.noContent().build();
+        } catch (NoResultException e) {
+            return errResponse(
+                    updateSeriesExpirationDate ? "Series not found. " + seriesUID : "Study not found. " + studyUID,
+                    Response.Status.NOT_FOUND);
         } catch (Exception e) {
-            String message;
-            if (seriesUID != null)
-                message = "Series not found. " + seriesUID;
-            else
-                message = "Study not found. " + studyUID;
-            throw new WebApplicationException(getResponse(message, Response.Status.NOT_FOUND));
+            return errResponseAsTextPlain(e);
         }
+    }
+
+    private StudyMgtContext createStudyMgtCtx(String studyUID, String expirationDate, ArchiveAEExtension arcAE) {
+        StudyMgtContext ctx = studyService.createStudyMgtContextWEB(request, arcAE.getApplicationEntity());
+        ctx.setStudyInstanceUID(studyUID);
+        LocalDate expireDate = LocalDate.parse(expirationDate, DateTimeFormatter.BASIC_ISO_DATE);
+        ctx.setExpirationDate(expireDate);
+        ctx.setEventActionCode(AuditMessages.EventActionCode.Update);
+        return ctx;
     }
 
     public static final class ExpireDate {
@@ -505,8 +523,9 @@ public class IocmRS {
                                               @PathParam("codingSchemeDesignator") String designator,
                                               InputStream in) throws Exception {
         logRequest();
+        RejectionNote rjNote = toRejectionNote(codeValue, designator);
+        String rejectionNoteObjectStorageID = rjNote != null ? rejectionNoteObjectStorageID() : null;
         ArchiveAEExtension arcAE = getArchiveAE();
-        RejectionNote rjNote = toRejectionNote(arcAE, codeValue, designator);
         Attributes instanceRefs = parseSOPInstanceReferences(in);
 
         ProcedureContext ctx = procedureService.createProcedureContextWEB(request);
@@ -515,7 +534,7 @@ public class IocmRS {
 
         MWLItem mwl = procedureService.findMWLItem(ctx);
         if (mwl == null)
-            return getResponse("MWLItem[studyUID=" + studyUID + ", spsID=" + spsID + "] does not exist.",
+            return errResponse("MWLItem[studyUID=" + studyUID + ", spsID=" + spsID + "] does not exist.",
                         Response.Status.NOT_FOUND);
 
         ctx.setAttributes(mwl.getAttributes());
@@ -523,10 +542,12 @@ public class IocmRS {
         ctx.setSourceInstanceRefs(instanceRefs);
 
 
-        StoreSession session = storeService.newStoreSession(request, aet, arcAE.getApplicationEntity());
-        Collection<InstanceLocations> instanceLocations = storeService.queryInstances(session, instanceRefs, studyUID);
+        StoreSession session = storeService.newStoreSession(request, arcAE.getApplicationEntity(), null)
+                .withObjectStorageID(rejectionNoteObjectStorageID);
+        restoreInstances(session, instanceRefs);
+        Collection<InstanceLocations> instanceLocations = retrieveService.queryInstances(session, instanceRefs, studyUID);
         if (instanceLocations.isEmpty())
-            return getResponse("No Instances found. ", Response.Status.NOT_FOUND);
+            return errResponse("No Instances found. ", Response.Status.NOT_FOUND);
 
         final Attributes result;
 
@@ -538,11 +559,11 @@ public class IocmRS {
             Attributes sopInstanceRefs = getSOPInstanceRefs(instanceRefs, instanceLocations, arcAE.getApplicationEntity());
             moveSequence(sopInstanceRefs, Tag.ReferencedSeriesSequence, instanceRefs);
             session.setAcceptConflictingPatientID(AcceptConflictingPatientID.YES);
+            session.setPatientUpdatePolicy(null);
             session.setStudyUpdatePolicy(arcAE.linkMWLEntryUpdatePolicy());
             result = storeService.copyInstances(session, instanceLocations);
             rejectInstances(instanceRefs, rjNote, session, result);
         }
-
         return toResponse(result);
     }
 
@@ -566,13 +587,10 @@ public class IocmRS {
     }
 
     private Response toResponse(Attributes result) {
-        StreamingOutput entity = new StreamingOutput() {
-            @Override
-            public void write(OutputStream out) throws IOException {
+        StreamingOutput entity = out -> {
                 try (JsonGenerator gen = Json.createGenerator(out)) {
                     new JSONWriter(gen).write(result);
                 }
-            }
         };
         return Response.status(status(result)).entity(entity).build();
     }
@@ -598,81 +616,94 @@ public class IocmRS {
     }
 
     private ArchiveAEExtension getArchiveAE() {
-        ApplicationEntity ae = device.getApplicationEntity(aet, true);
-        if (ae == null || !ae.isInstalled())
-            throw new WebApplicationException(getResponse(
-                    "No such Application Entity: " + aet,
-                    Response.Status.SERVICE_UNAVAILABLE));
-        ArchiveAEExtension arcAE = ae.getAEExtension(ArchiveAEExtension.class);
-        if (request.getAttribute(ORG_KEYCLOAK_KEYCLOAK_SECURITY_CONTEXT) != null)
-            if(!authenticatedUser(arcAE.getAcceptedUserRoles()))
-                throw new WebApplicationException(getResponse("User not allowed to perform this service.",
-                        Response.Status.FORBIDDEN));
-        return arcAE;
+        return toArchiveAE(aet);
     }
 
-    private boolean authenticatedUser(String[] acceptedUserRoles) {
-        for (String s : KeycloakContext.valueOf(request).getUserRoles())
-            if (Arrays.asList(acceptedUserRoles).contains(s))
-                return true;
-        return false;
+    private ArchiveAEExtension toArchiveAE(String aet) {
+        ApplicationEntity ae = device.getApplicationEntity(aet, true);
+        if (ae == null || !ae.isInstalled())
+            throw new WebApplicationException(errResponse(
+                    "No such Application Entity: " + aet,
+                    Response.Status.NOT_FOUND));
+        return ae.getAEExtension(ArchiveAEExtension.class);
     }
 
     private void reject(RSOperation rsOp, String studyUID, String seriesUID, String objectUID,
-                        String codeValue, String designator) throws IOException {
+                        String codeValue, String designator) {
         logRequest();
-        ArchiveAEExtension arcAE = getArchiveAE();
-        RejectionNote rjNote = toRejectionNote(arcAE, codeValue, designator);
-        StoreSession session = storeService.newStoreSession(request, aet, arcAE.getApplicationEntity());
-        storeService.restoreInstances(session, studyUID, seriesUID);
+        try {
+            ArchiveAEExtension arcAE = getArchiveAE();
+            RejectionNote rjNote = toRejectionNote(codeValue, designator);
+            StoreSession session = storeService.newStoreSession(request, arcAE.getApplicationEntity(), null)
+                    .withObjectStorageID(rejectionNoteObjectStorageID());
+            storeService.restoreInstances(session, studyUID, seriesUID, null);
 
-        Attributes attrs = queryService.createRejectionNote(
-                arcAE.getApplicationEntity(), studyUID, seriesUID, objectUID, rjNote);
-        if (attrs == null)
-            throw new WebApplicationException(getResponse("No Study with UID: " + studyUID, Response.Status.NOT_FOUND));
+            Attributes attrs = queryService.createRejectionNote(
+                    arcAE.getApplicationEntity(), studyUID, seriesUID, objectUID, rjNote);
+            if (attrs == null)
+                throw new WebApplicationException(errResponse("No Study with UID: " + studyUID, Response.Status.NOT_FOUND));
 
-        StoreContext ctx = storeService.newStoreContext(session);
-        ctx.setSopClassUID(attrs.getString(Tag.SOPClassUID));
-        ctx.setSopInstanceUID(attrs.getString(Tag.SOPInstanceUID));
-        ctx.setReceiveTransferSyntax(UID.ExplicitVRLittleEndian);
-        storeService.store(ctx, attrs);
-        rsForward.forward(rsOp, arcAE, null, request);
+            StoreContext ctx = storeService.newStoreContext(session);
+            ctx.setSopClassUID(attrs.getString(Tag.SOPClassUID));
+            ctx.setSopInstanceUID(attrs.getString(Tag.SOPInstanceUID));
+            ctx.setReceiveTransferSyntax(UID.ExplicitVRLittleEndian);
+            storeService.store(ctx, attrs);
+            rsForward.forward(rsOp, arcAE, null, request);
+        } catch (DicomServiceException e) {
+            Response response = errResponse(e.getMessage(), Response.Status.CONFLICT);
+            throw new WebApplicationException(response);
+        } catch(WebApplicationException e) {
+            throw e;
+        } catch (Exception e) {
+            throw new WebApplicationException(errResponseAsTextPlain(e));
+        }
     }
 
-    private Response copyOrMoveInstances(
-            RSOperation op, String studyUID, InputStream in, String codeValue, String designator)
+    private Response copyOrMoveInstances(String studyUID, InputStream in, String codeValue, String designator)
             throws Exception {
         logRequest();
+        RejectionNote rjNote = toRejectionNote(codeValue, designator);
         ArchiveAEExtension arcAE = getArchiveAE();
-        RejectionNote rjNote = toRejectionNote(arcAE, codeValue, designator);
         Attributes instanceRefs = parseSOPInstanceReferences(in);
-        Attributes forwardOriginal = new Attributes(instanceRefs);
-        StoreSession session = storeService.newStoreSession(request, aet, arcAE.getApplicationEntity());
-        Collection<InstanceLocations> instances = storeService.queryInstances(session, instanceRefs, studyUID);
+        StoreSession session = storeService.newStoreSession(request, arcAE.getApplicationEntity(), null);
+        if (rjNote != null) {
+            session.withObjectStorageID(rejectionNoteObjectStorageID());
+        }
+        restoreInstances(session, instanceRefs);
+        Collection<InstanceLocations> instances = retrieveService.queryInstances(session, instanceRefs, studyUID);
         if (instances.isEmpty())
-            return getResponse("No Instances found. ", Response.Status.NOT_FOUND);
+            return errResponse("No Instances found. ", Response.Status.NOT_FOUND);
 
         Attributes sopInstanceRefs = getSOPInstanceRefs(instanceRefs, instances, arcAE.getApplicationEntity());
         moveSequence(sopInstanceRefs, Tag.ReferencedSeriesSequence, instanceRefs);
         session.setAcceptConflictingPatientID(AcceptConflictingPatientID.YES);
+        session.setPatientUpdatePolicy(null);
         session.setStudyUpdatePolicy(arcAE.copyMoveUpdatePolicy());
         Attributes result = storeService.copyInstances(session, instances);
         if (rjNote != null)
             rejectInstances(instanceRefs, rjNote, session, result);
 
-        rsForward.forward(op, arcAE, forwardOriginal, request);
         return toResponse(result);
     }
 
-    private RejectionNote toRejectionNote(ArchiveAEExtension arcAE, String codeValue, String designator) {
+    private void restoreInstances(StoreSession session, Attributes sopInstanceRefs) throws IOException {
+        String studyUID = sopInstanceRefs.getString(Tag.StudyInstanceUID);
+        Sequence seq = sopInstanceRefs.getSequence(Tag.ReferencedSeriesSequence);
+        if (seq == null || seq.isEmpty())
+            storeService.restoreInstances(session, studyUID, null, null);
+        else for (Attributes item : seq)
+            storeService.restoreInstances(session, studyUID, item.getString(Tag.SeriesInstanceUID), null);
+    }
+
+    private RejectionNote toRejectionNote(String codeValue, String designator) {
         if (codeValue == null)
             return null;
 
-        RejectionNote rjNote = arcAE.getArchiveDeviceExtension().getRejectionNote(
+        RejectionNote rjNote = device.getDeviceExtension(ArchiveDeviceExtension.class).getRejectionNote(
                 new Code(codeValue, designator, null, ""));
 
         if (rjNote == null)
-            throw new WebApplicationException(getResponse("Unknown Rejection Note Code: ("
+            throw new WebApplicationException(errResponse("Unknown Rejection Note Code: ("
                     + codeValue + ", " + designator + ')', Response.Status.NOT_FOUND));
 
         return rjNote;
@@ -689,7 +720,7 @@ public class IocmRS {
     private Set<String> failedIUIDs(Attributes result) {
         Sequence failedSOPSeq = result.getSequence(Tag.FailedSOPSequence);
         if (failedSOPSeq == null || failedSOPSeq.isEmpty())
-            return Collections.EMPTY_SET;
+            return Collections.emptySet();
 
         Set<String> failedIUIDs = new HashSet<>(failedSOPSeq.size() * 4 / 3 + 1);
         for (Attributes failedSOPRef : failedSOPSeq)
@@ -770,7 +801,7 @@ public class IocmRS {
     private void expect(JsonParser parser, JsonParser.Event expected) {
         JsonParser.Event next = parser.next();
         if (next != expected)
-            throw new WebApplicationException(getResponse("Unexpected " + next, Response.Status.BAD_REQUEST));
+            throw new WebApplicationException(errResponse("Unexpected " + next, Response.Status.BAD_REQUEST));
     }
 
     private Attributes parseOtherPatientIDs(InputStream in) throws IOException {
@@ -796,14 +827,14 @@ public class IocmRS {
                         break;
                     default:
                         throw new WebApplicationException(
-                                getResponse("Unexpected Key name", Response.Status.BAD_REQUEST));
+                                errResponse("Unexpected Key name", Response.Status.BAD_REQUEST));
                 }
             }
             otherPIDseq.add(otherPID);
         }
         if (otherPIDseq.isEmpty())
             throw new WebApplicationException(
-                    getResponse("Patients to be merged not sent in the request.", Response.Status.BAD_REQUEST));
+                    errResponse("Patients to be merged not sent in the request.", Response.Status.BAD_REQUEST));
         return attrs;
     }
 
@@ -821,7 +852,7 @@ public class IocmRS {
                     break;
                 default:
                     throw new WebApplicationException(
-                            getResponse("Unexpected Key name", Response.Status.BAD_REQUEST));
+                            errResponse("Unexpected Key name", Response.Status.BAD_REQUEST));
             }
         }
         return attr;
@@ -842,11 +873,11 @@ public class IocmRS {
                             attrs.newSequence(Tag.ReferencedSeriesSequence, 10));
                     break;
                 default:
-                    throw new WebApplicationException(getResponse("Unexpected Key name", Response.Status.BAD_REQUEST));
+                    throw new WebApplicationException(errResponse("Unexpected Key name", Response.Status.BAD_REQUEST));
             }
         }
         if (!attrs.contains(Tag.StudyInstanceUID))
-            throw new WebApplicationException(getResponse("Missing StudyInstanceUID", Response.Status.BAD_REQUEST));
+            throw new WebApplicationException(errResponse("Missing StudyInstanceUID", Response.Status.BAD_REQUEST));
 
         return attrs;
     }
@@ -870,11 +901,11 @@ public class IocmRS {
                             attrs.newSequence(Tag.ReferencedSOPSequence, 10));
                     break;
                 default:
-                    throw new WebApplicationException(getResponse("Unexpected Key name", Response.Status.BAD_REQUEST));
+                    throw new WebApplicationException(errResponse("Unexpected Key name", Response.Status.BAD_REQUEST));
             }
         }
         if (!attrs.contains(Tag.SeriesInstanceUID))
-            throw new WebApplicationException(getResponse("Missing SeriesInstanceUID", Response.Status.BAD_REQUEST));
+            throw new WebApplicationException(errResponse("Missing SeriesInstanceUID", Response.Status.BAD_REQUEST));
 
         return attrs;
     }
@@ -898,27 +929,40 @@ public class IocmRS {
                     attrs.setString(Tag.ReferencedSOPInstanceUID, VR.UI, parser.getString());
                     break;
                 default:
-                    throw new WebApplicationException(getResponse("Unexpected Key name", Response.Status.BAD_REQUEST));
+                    throw new WebApplicationException(errResponse("Unexpected Key name", Response.Status.BAD_REQUEST));
             }
         }
         if (!attrs.contains(Tag.ReferencedSOPClassUID))
-            throw new WebApplicationException(getResponse("Missing ReferencedSOPClassUID", Response.Status.BAD_REQUEST));
+            throw new WebApplicationException(errResponse("Missing ReferencedSOPClassUID", Response.Status.BAD_REQUEST));
 
         if (!attrs.contains(Tag.ReferencedSOPInstanceUID))
-            throw new WebApplicationException(getResponse("Missing ReferencedSOPInstanceUID", Response.Status.BAD_REQUEST));
+            throw new WebApplicationException(errResponse("Missing ReferencedSOPInstanceUID", Response.Status.BAD_REQUEST));
 
         return attrs;
     }
 
-    private Response getResponse(String errorMessage, Response.Status status) {
-        Object entity = "{\"errorMessage\":\"" + errorMessage + "\"}";
-        return Response.status(status).entity(entity).build();
+    private String rejectionNoteObjectStorageID() {
+        String rjNoteStorageAET = device.getDeviceExtension(ArchiveDeviceExtension.class).getRejectionNoteStorageAET();
+        if (rjNoteStorageAET == null)
+            return null;
+
+        ArchiveAEExtension arcAE = toArchiveAE(rjNoteStorageAET);
+        String[] objectStorageIDs = arcAE.getObjectStorageIDs();
+        if (objectStorageIDs.length == 0)
+            throw new WebApplicationException(
+                    errResponse("Object storage not configured for Rejection Note Storage AE." + rjNoteStorageAET,
+                            Response.Status.NOT_FOUND));
+        return objectStorageIDs[0];
     }
 
-    private Response getResponseAsTextPlain(Exception e) {
+    private Response errResponse(String errorMessage, Response.Status status) {
+        return Response.status(status).entity("{\"errorMessage\":\"" + errorMessage + "\"}").build();
+    }
+
+    private Response errResponseAsTextPlain(Exception e) {
         StringWriter sw = new StringWriter();
         e.printStackTrace(new PrintWriter(sw));
         String exceptionAsString = sw.toString();
-        return Response.status(Response.Status.BAD_REQUEST).entity(exceptionAsString).type("text/plain").build();
+        return Response.status(Response.Status.INTERNAL_SERVER_ERROR).entity(exceptionAsString).type("text/plain").build();
     }
 }

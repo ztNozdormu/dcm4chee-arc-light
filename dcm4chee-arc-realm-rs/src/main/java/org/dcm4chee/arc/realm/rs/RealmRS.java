@@ -17,7 +17,7 @@
  *
  * The Initial Developer of the Original Code is
  * J4Care.
- * Portions created by the Initial Developer are Copyright (C) 2013
+ * Portions created by the Initial Developer are Copyright (C) 2015-2017
  * the Initial Developer. All Rights Reserved.
  *
  * Contributor(s):
@@ -52,12 +52,13 @@ import javax.ws.rs.Path;
 import javax.ws.rs.Produces;
 import javax.ws.rs.core.Context;
 import javax.ws.rs.core.StreamingOutput;
-import java.io.IOException;
-import java.io.OutputStream;
 import java.io.OutputStreamWriter;
 import java.io.Writer;
+import java.util.stream.Stream;
 
 import org.dcm4chee.arc.keycloak.KeycloakContext;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 /**
  * @author Gunter Zeilinger <gunterze@gmail.com>
@@ -68,16 +69,17 @@ import org.dcm4chee.arc.keycloak.KeycloakContext;
 @Path("realm")
 public class RealmRS {
 
+    private static final Logger LOG = LoggerFactory.getLogger(RealmRS.class);
+
     @Context
     private HttpServletRequest request;
 
     @GET
     @NoCache
     @Produces("application/json")
-    public StreamingOutput query() throws Exception {
-        return new StreamingOutput() {
-            @Override
-            public void write(OutputStream out) throws IOException {
+    public StreamingOutput query() {
+        LOG.info("Process GET {} from {}@{}", request.getRequestURI(), request.getRemoteUser(), request.getRemoteHost());
+        return out -> {
                 if (request.getUserPrincipal() != null) {
                     JsonGenerator gen = Json.createGenerator(out);
                     JsonWriter writer = new JsonWriter(gen);
@@ -90,6 +92,9 @@ public class RealmRS {
                     writer.write("expiration", ctx.getExpiration());
                     writer.write("systemCurrentTime", (int) (System.currentTimeMillis()/1000L));
                     writer.writeNotEmpty("roles", ctx.getUserRoles());
+                    writer.writeNotDef("su",
+                            Stream.of(ctx.getUserRoles()).anyMatch(x -> x.equals(System.getProperty("super-user-role"))),
+                            false);
                     gen.writeEnd();
                     gen.flush();
                 } else {
@@ -97,7 +102,6 @@ public class RealmRS {
                     w.write("{\"auth-server-url\":null,\"realm\":null,\"token\":null,\"user\":null,\"roles\":[]}");
                     w.flush();
                 }
-            }
         };
     }
 }

@@ -40,29 +40,35 @@
 
 package org.dcm4chee.arc.export.mgt.impl;
 
-import com.querydsl.core.BooleanBuilder;
+import com.querydsl.core.Tuple;
+import com.querydsl.core.types.Expression;
+import com.querydsl.core.types.ExpressionUtils;
+import com.querydsl.core.types.OrderSpecifier;
+import com.querydsl.core.types.Predicate;
+import com.querydsl.jpa.hibernate.HibernateDeleteClause;
 import com.querydsl.jpa.hibernate.HibernateQuery;
-import org.dcm4che3.data.Attributes;
-import org.dcm4che3.data.Tag;
+import org.dcm4che3.data.*;
 import org.dcm4che3.net.Device;
+import org.dcm4che3.util.StringUtils;
 import org.dcm4chee.arc.conf.*;
 import org.dcm4chee.arc.entity.ExportTask;
 import org.dcm4chee.arc.entity.QExportTask;
 import org.dcm4chee.arc.entity.QQueueMessage;
 import org.dcm4chee.arc.entity.QueueMessage;
-import org.dcm4chee.arc.export.mgt.ExportManager;
-import org.dcm4chee.arc.qmgt.IllegalTaskStateException;
-import org.dcm4chee.arc.qmgt.JMSUtils;
-import org.dcm4chee.arc.qmgt.QueueManager;
+import org.dcm4chee.arc.event.QueueMessageEvent;
+import org.dcm4chee.arc.export.mgt.*;
+import org.dcm4chee.arc.qmgt.*;
 import org.dcm4chee.arc.query.QueryService;
-import org.dcm4chee.arc.retrieve.HttpServletRequestInfo;
 import org.dcm4chee.arc.store.StoreContext;
 import org.dcm4chee.arc.store.StoreSession;
 import org.hibernate.Session;
+import org.hibernate.StatelessSession;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import javax.ejb.Stateless;
+import javax.ejb.TransactionAttribute;
+import javax.ejb.TransactionAttributeType;
 import javax.enterprise.event.Observes;
 import javax.inject.Inject;
 import javax.jms.JMSException;
@@ -71,10 +77,7 @@ import javax.jms.ObjectMessage;
 import javax.persistence.EntityManager;
 import javax.persistence.NoResultException;
 import javax.persistence.PersistenceContext;
-import java.util.Calendar;
-import java.util.Date;
-import java.util.List;
-import java.util.Map;
+import java.util.*;
 
 /**
  * @author Gunter Zeilinger <gunterze@gmail.com>
@@ -93,13 +96,24 @@ public class ExportManagerEJB implements ExportManager {
     private Device device;
 
     @Inject
-    private QueueManager mgr;
-
-    @Inject
     private QueryService queryService;
 
     @Inject
     private QueueManager queueManager;
+
+    private static final Expression<?>[] SELECT = {
+            QQueueMessage.queueMessage.processingStartTime.min(),
+            QQueueMessage.queueMessage.processingStartTime.max(),
+            QQueueMessage.queueMessage.processingEndTime.min(),
+            QQueueMessage.queueMessage.processingEndTime.max(),
+            QExportTask.exportTask.createdTime.min(),
+            QExportTask.exportTask.createdTime.max(),
+            QExportTask.exportTask.updatedTime.min(),
+            QExportTask.exportTask.updatedTime.max(),
+            QExportTask.exportTask.scheduledTime.min(),
+            QExportTask.exportTask.scheduledTime.max(),
+            QQueueMessage.queueMessage.batchID
+    };
 
     @Override
     public void onStore(@Observes StoreContext ctx) {
@@ -149,9 +163,7 @@ public class ExportManagerEJB implements ExportManager {
                     .setParameter(1, exporterID)
                     .setParameter(2, studyIUID)
                     .getSingleResult();
-            task.setSeriesInstanceUID("*");
-            task.setSopInstanceUID("*");
-            task.setScheduledTime(scheduledTime);
+            updateExportTask(task, "*", "*", scheduledTime);
         } catch (NoResultException nre) {
             createExportTask(exporterID, studyIUID, "*", "*", scheduledTime);
         }
@@ -166,8 +178,7 @@ public class ExportManagerEJB implements ExportManager {
                     .setParameter(2, studyIUID)
                     .setParameter(3, seriesIUID)
                     .getSingleResult();
-            task.setSopInstanceUID("*");
-            task.setScheduledTime(scheduledTime);
+            updateExportTask(task, seriesIUID, "*", scheduledTime);
         } catch (NoResultException nre) {
             createExportTask(exporterID, studyIUID, seriesIUID, "*", scheduledTime);
         }
@@ -183,10 +194,27 @@ public class ExportManagerEJB implements ExportManager {
                     .setParameter(3, seriesIUID)
                     .setParameter(4, sopIUID)
                     .getSingleResult();
-            task.setScheduledTime(scheduledTime);
+            updateExportTask(task, seriesIUID, sopIUID, scheduledTime);
         } catch (NoResultException nre) {
             createExportTask(exporterID, studyIUID, seriesIUID, sopIUID, scheduledTime);
         }
+    }
+
+    private void updateExportTask(ExportTask task, String seriesIUID, String sopIUID, Date scheduledTime) {
+        task.setDeviceName(device.getDeviceName());
+        task.setSeriesInstanceUID(seriesIUID);
+        task.setSopInstanceUID(sopIUID);
+        task.setScheduledTime(scheduledTime);
+        QueueMessage queueMessage = task.getQueueMessage();
+        if (queueMessage != null) {
+            if (queueMessage.getStatus() == QueueMessage.Status.SCHEDULED) {
+                queueMessage.setStatus(QueueMessage.Status.CANCELED);
+                LOG.info("Cancel processing of Task[id={}] at Queue {}",
+                        queueMessage.getMessageID(), queueMessage.getQueueName());
+            }
+            task.setQueueMessage(null);
+        }
+        LOG.debug("Update {}", task);
     }
 
     private ExportTask createExportTask(
@@ -199,6 +227,7 @@ public class ExportManagerEJB implements ExportManager {
         task.setSopInstanceUID(sopIUID);
         task.setScheduledTime(scheduledTime);
         em.persist(task);
+        LOG.info("Create {}", task);
         return task;
     }
 
@@ -218,24 +247,65 @@ public class ExportManagerEJB implements ExportManager {
                 .setParameter(1, device.getDeviceName())
                 .setMaxResults(fetchSize)
                 .getResultList();
-        ArchiveDeviceExtension arcDev = device.getDeviceExtension(ArchiveDeviceExtension.class);
+        ArchiveDeviceExtension arcDev = device.getDeviceExtensionNotNull(ArchiveDeviceExtension.class);
+        int count = 0;
         for (ExportTask exportTask : resultList) {
             ExporterDescriptor exporter = arcDev.getExporterDescriptor(exportTask.getExporterID());
-            scheduleExportTask(exportTask, exporter, null);
+            try {
+                scheduleExportTask(exportTask, exporter, null, null);
+            } catch (QueueSizeLimitExceededException e) {
+                LOG.info(e.getLocalizedMessage() + " - retry to schedule Export Tasks");
+                return count;
+            }
+            count++;
         }
-        return resultList.size();
+        return count;
     }
 
     @Override
     public void scheduleExportTask(String studyUID, String seriesUID, String objectUID, ExporterDescriptor exporter,
-                                   HttpServletRequestInfo httpServletRequestInfo) {
-        ExportTask task = createExportTask(exporter.getExporterID(), studyUID, seriesUID, objectUID, new Date());
-        scheduleExportTask(task, exporter, httpServletRequestInfo);
+                                   HttpServletRequestInfo httpServletRequestInfo, String batchID)
+            throws QueueSizeLimitExceededException {
+        ExportTask task = createExportTask(
+                exporter.getExporterID(),
+                studyUID,
+                StringUtils.maskNull(seriesUID, "*"),
+                StringUtils.maskNull(objectUID, "*"),
+                new Date());
+        scheduleExportTask(task, exporter, httpServletRequestInfo, batchID);
     }
 
-    private void scheduleExportTask(ExportTask exportTask, ExporterDescriptor exporter, HttpServletRequestInfo httpServletRequestInfo) {
-        QueueMessage queueMessage = queueManager.scheduleMessage(exporter.getQueueName(),
-                createMessage(exportTask, exporter.getAETitle(), httpServletRequestInfo));
+    @Override
+    public boolean scheduleStudyExport(
+            String studyUID, ExporterDescriptor exporter, Date notExportedAfter, String batchID) {
+        try {
+            ExportTask prevTask = em.createNamedQuery(ExportTask.FIND_STUDY_EXPORT_AFTER, ExportTask.class)
+                    .setParameter(1, notExportedAfter)
+                    .setParameter(2, exporter.getExporterID())
+                    .setParameter(3, studyUID)
+                    .getSingleResult();
+            LOG.info("Previous {} found - suppress duplicate Export", prevTask);
+            return false;
+        } catch (NoResultException e) {
+        }
+
+        ExportTask task = createExportTask(exporter.getExporterID(), studyUID, "*", "*", new Date());
+        try {
+            scheduleExportTask(task, exporter, null, batchID);
+        } catch (QueueSizeLimitExceededException e) {
+            throw new RuntimeException(e);
+        }
+        return true;
+    }
+
+    private void scheduleExportTask(ExportTask exportTask, ExporterDescriptor exporter,
+                                    HttpServletRequestInfo httpServletRequestInfo, String batchID)
+            throws QueueSizeLimitExceededException {
+        QueueMessage queueMessage = queueManager.scheduleMessage(
+                exporter.getQueueName(),
+                createMessage(exportTask, httpServletRequestInfo),
+                exporter.getPriority(),
+                batchID);
         exportTask.setQueueMessage(queueMessage);
         try {
             Attributes attrs = queryService.queryExportTaskInfo(
@@ -256,14 +326,17 @@ public class ExportManagerEJB implements ExportManager {
         }
     }
 
-    private ObjectMessage createMessage(ExportTask exportTask, String aeTitle, HttpServletRequestInfo httpServletRequestInfo) {
+    private ObjectMessage createMessage(ExportTask exportTask, HttpServletRequestInfo httpServletRequestInfo) {
         ObjectMessage msg = queueManager.createObjectMessage(exportTask.getPk());
         try {
-            JMSUtils.setStringNotNull(msg,"StudyInstanceUID", exportTask.getStudyInstanceUID());
-            JMSUtils.setStringNotNull(msg,"SeriesInstanceUID", exportTask.getSeriesInstanceUID());
-            JMSUtils.setStringNotNull(msg,"SopInstanceUID", exportTask.getSopInstanceUID());
-            JMSUtils.setStringNotNull(msg,"ExporterID", exportTask.getExporterID());
-            JMSUtils.setStringNotNull(msg,"AETitle", aeTitle);
+            msg.setStringProperty("StudyInstanceUID", exportTask.getStudyInstanceUID());
+            if (!exportTask.getSeriesInstanceUID().equals("*")) {
+                msg.setStringProperty("SeriesInstanceUID", exportTask.getSeriesInstanceUID());
+                if (!exportTask.getSopInstanceUID().equals("*")) {
+                    msg.setStringProperty("SopInstanceUID", exportTask.getSopInstanceUID());
+                }
+            }
+            msg.setStringProperty("ExporterID", exportTask.getExporterID());
             if (httpServletRequestInfo != null)
                 httpServletRequestInfo.copyTo(msg);
         } catch (JMSException e) {
@@ -273,51 +346,64 @@ public class ExportManagerEJB implements ExportManager {
     }
 
     @Override
-    public void updateExportTask(Long pk) {
-        em.find(ExportTask.class, pk).setUpdatedTime();
+    @TransactionAttribute(TransactionAttributeType.NOT_SUPPORTED)
+    public ExportTaskQuery listExportTasks(QueueMessage.Status status, Predicate matchQueueMessage, Predicate matchExportTask,
+                                           OrderSpecifier<Date> order, int offset, int limit) {
+        return new ExportTaskQueryImpl(status,
+                openStatelessSession(), queryFetchSize(), matchQueueMessage, matchExportTask, order, offset, limit);
     }
 
     @Override
-    public List<ExportTask> search(
-            String deviceName, String exporterID, String studyUID, Date updatedBefore, QueueMessage.Status status, int offset, int limit) {
-        BooleanBuilder builder = new BooleanBuilder();
-        if (deviceName != null)
-            builder.and(QExportTask.exportTask.deviceName.eq(deviceName));
-        if (exporterID != null)
-            builder.and(QExportTask.exportTask.exporterID.eq(exporterID));
-        if (studyUID != null)
-            builder.and(QExportTask.exportTask.studyInstanceUID.eq(studyUID));
-        if (status != null)
-            builder.and(status == QueueMessage.Status.TO_SCHEDULE
-                    ? QExportTask.exportTask.queueMessage.isNull()
-                    : QQueueMessage.queueMessage.status.eq(status));
-        if (updatedBefore != null)
-            builder.and(QExportTask.exportTask.updatedTime.lt(updatedBefore));
+    public long countExportTasks(QueueMessage.Status status, Predicate matchQueueMessage, Predicate matchExportTask) {
+        return createQuery(status, matchQueueMessage, matchExportTask).fetchCount();
+    }
 
-        HibernateQuery<ExportTask> query = new HibernateQuery<ExportTask>(em.unwrap(Session.class))
+    private HibernateQuery<QueueMessage> createQuery(Predicate matchQueueMessage) {
+        return new HibernateQuery<QueueMessage>(em.unwrap(Session.class))
+                .from(QQueueMessage.queueMessage)
+                .where(matchQueueMessage);
+    }
+
+    private HibernateQuery<ExportTask> createQuery(Predicate matchQueueMessage, Predicate matchExportTask) {
+        return new HibernateQuery<ExportTask>(em.unwrap(Session.class))
                 .from(QExportTask.exportTask)
                 .leftJoin(QExportTask.exportTask.queueMessage, QQueueMessage.queueMessage)
-                .where(builder);
-        if (limit > 0)
-            query.limit(limit);
-        if (offset > 0)
-            query.offset(offset);
-        return query.fetch();
+                .where(matchExportTask, QExportTask.exportTask.queueMessage.in(createQuery(matchQueueMessage)));
+    }
+
+    private HibernateQuery<ExportTask> createQuery(QueueMessage.Status status, Predicate matchQueueMessage, Predicate matchExportTask) {
+        return new HibernateQuery<ExportTask>(em.unwrap(Session.class))
+                .from(QExportTask.exportTask)
+                .leftJoin(QExportTask.exportTask.queueMessage, QQueueMessage.queueMessage)
+                .where(matchExportTask, queuePredicate(status, createQuery(matchQueueMessage)));
+    }
+
+    private Predicate queuePredicate(QueueMessage.Status status, HibernateQuery<QueueMessage> queueMsgQuery) {
+        return status == QueueMessage.Status.TO_SCHEDULE
+                    ? QExportTask.exportTask.queueMessage.isNull()
+                    : status == null
+                        ? ExpressionUtils.or(QExportTask.exportTask.queueMessage.isNull(), QExportTask.exportTask.queueMessage.in(queueMsgQuery))
+                        : QExportTask.exportTask.queueMessage.in(queueMsgQuery);
     }
 
     @Override
-    public boolean deleteExportTask(Long pk) {
+    public boolean deleteExportTask(Long pk, QueueMessageEvent queueEvent) {
         ExportTask task = em.find(ExportTask.class, pk);
         if (task == null)
             return false;
 
-        em.remove(task);
+        QueueMessage queueMsg = task.getQueueMessage();
+        if (queueMsg == null)
+            em.remove(task);
+        else
+            queueManager.deleteTask(queueMsg.getMessageID(), queueEvent);
+
         LOG.info("Delete {}", task);
         return true;
     }
 
     @Override
-    public boolean cancelProcessing(Long pk) throws IllegalTaskStateException {
+    public boolean cancelExportTask(Long pk, QueueMessageEvent queueEvent) throws IllegalTaskStateException {
         ExportTask task = em.find(ExportTask.class, pk);
         if (task == null)
             return false;
@@ -326,24 +412,161 @@ public class ExportManagerEJB implements ExportManager {
         if (queueMessage == null)
             throw new IllegalTaskStateException("Cannot cancel Task with status: 'TO SCHEDULE'");
 
-        queueManager.cancelProcessing(queueMessage.getMessageID());
+        queueManager.cancelTask(queueMessage.getMessageID(), queueEvent);
         LOG.info("Cancel {}", task);
         return true;
     }
 
     @Override
-    public boolean rescheduleExportTask(Long pk, ExporterDescriptor exporter) throws IllegalTaskStateException {
-        ExportTask task = em.find(ExportTask.class, pk);
-        if (task == null)
-            return false;
-
-        QueueMessage queueMessage = task.getQueueMessage();
-        if (queueMessage != null)
-            queueManager.rescheduleMessage(queueMessage.getMessageID(), exporter.getQueueName());
-
-        task.setExporterID(exporter.getExporterID());
-        LOG.info("Reschedule {} to Exporter[id={}]", task, task.getExporterID());
-        return true;
+    public long cancelExportTasks(Predicate matchQueueMessage, Predicate matchExportTask, QueueMessage.Status prev)
+            throws IllegalTaskStateException {
+        return queueManager.cancelExportTasks(matchQueueMessage, matchExportTask, prev);
     }
 
+    @Override
+    public String findDeviceNameByPk(Long pk) {
+        try {
+            return em.createNamedQuery(ExportTask.FIND_DEVICE_BY_PK, String.class)
+                    .setParameter(1, pk)
+                    .getSingleResult();
+        } catch (NoResultException e) {
+            return null;
+        }
+    }
+
+    @Override
+    public void rescheduleExportTask(Long pk, ExporterDescriptor exporter, QueueMessageEvent queueEvent)
+            throws IllegalTaskStateException {
+        ExportTask task = em.find(ExportTask.class, pk);
+        if (task == null)
+            return;
+
+        if (task.getQueueMessage() != null)
+            rescheduleExportTask(task, exporter, queueEvent);
+        else
+            throw new IllegalTaskStateException("Cannot reschedule task[pk=" + task.getPk() + "] with status TO SCHEDULE");
+    }
+
+    @Override
+    public void rescheduleExportTask(ExportTask task, ExporterDescriptor exporter, QueueMessageEvent queueEvent) {
+        task.setExporterID(exporter.getExporterID());
+        queueManager.rescheduleTask(task.getQueueMessage().getMessageID(), exporter.getQueueName(), queueEvent);
+        LOG.info("Reschedule {} to Exporter[id={}]", task, task.getExporterID());
+    }
+
+    @Override
+    public int deleteTasks(Predicate matchQueueMessage, Predicate matchExportTask) {
+        HibernateQuery<ExportTask> exportTaskQuery = createQuery(matchQueueMessage, matchExportTask);
+        List<String> referencedQueueMsgIDs = exportTaskQuery.select(QExportTask.exportTask.queueMessage.messageID).fetch();
+
+        for (String queueMsgID : referencedQueueMsgIDs)
+            queueManager.deleteTask(queueMsgID, null);
+
+        int count = (int) new HibernateDeleteClause(em.unwrap(Session.class), QExportTask.exportTask)
+                .where(QExportTask.exportTask.queueMessage.isNull())
+                .execute();
+
+        return referencedQueueMsgIDs.size() + count;
+    }
+
+    @Override
+    public List<String> listDistinctDeviceNames(Predicate matchQueueMessage, Predicate matchExportTask) {
+        return createQuery(matchQueueMessage, matchExportTask)
+                .select(QQueueMessage.queueMessage.deviceName)
+                .distinct()
+                .fetch();
+    }
+
+    @Override
+    public List<ExportBatch> listExportBatches(Predicate matchQueueBatch, Predicate matchExportBatch,
+                                               OrderSpecifier<Date> order, int offset, int limit) {
+        HibernateQuery<ExportTask> exportTaskQuery = createQuery(matchQueueBatch, matchExportBatch);
+        if (limit > 0)
+            exportTaskQuery.limit(limit);
+        if (offset > 0)
+            exportTaskQuery.offset(offset);
+
+        List<Tuple> batches = exportTaskQuery.select(SELECT)
+                                .groupBy(QQueueMessage.queueMessage.batchID)
+                                .orderBy(order)
+                                .fetch();
+
+        List<ExportBatch> exportBatches = new ArrayList<>();
+        for (Tuple batch : batches) {
+            ExportBatch exportBatch = new ExportBatch();
+            String batchID = batch.get(QQueueMessage.queueMessage.batchID);
+            exportBatch.setBatchID(batchID);
+            exportBatch.setCreatedTimeRange(
+                    batch.get(QExportTask.exportTask.createdTime.min()),
+                    batch.get(QExportTask.exportTask.createdTime.max()));
+            exportBatch.setUpdatedTimeRange(
+                    batch.get(QExportTask.exportTask.updatedTime.min()),
+                    batch.get(QExportTask.exportTask.updatedTime.max()));
+            exportBatch.setScheduledTimeRange(
+                    batch.get(QExportTask.exportTask.scheduledTime.min()),
+                    batch.get(QExportTask.exportTask.scheduledTime.max()));
+            exportBatch.setProcessingStartTimeRange(
+                    batch.get(QQueueMessage.queueMessage.processingStartTime.min()),
+                    batch.get(QQueueMessage.queueMessage.processingStartTime.max()));
+            exportBatch.setProcessingEndTimeRange(
+                    batch.get(QQueueMessage.queueMessage.processingEndTime.min()),
+                    batch.get(QQueueMessage.queueMessage.processingEndTime.max()));
+
+            exportBatch.setDeviceNames(
+                    batchIDQuery(batchID)
+                        .select(QExportTask.exportTask.deviceName)
+                        .distinct()
+                        .orderBy(QExportTask.exportTask.deviceName.asc())
+                        .fetch());
+            exportBatch.setExporterIDs(
+                    batchIDQuery(batchID)
+                        .select(QExportTask.exportTask.exporterID)
+                        .distinct()
+                        .orderBy(QExportTask.exportTask.exporterID.asc())
+                        .fetch());
+
+            exportBatch.setCompleted(
+                    batchIDQuery(batchID)
+                        .where(QQueueMessage.queueMessage.status.eq(QueueMessage.Status.COMPLETED))
+                        .fetchCount());
+            exportBatch.setCanceled(
+                    batchIDQuery(batchID)
+                        .where(QQueueMessage.queueMessage.status.eq(QueueMessage.Status.CANCELED))
+                        .fetchCount());
+            exportBatch.setWarning(
+                    batchIDQuery(batchID)
+                        .where(QQueueMessage.queueMessage.status.eq(QueueMessage.Status.WARNING))
+                        .fetchCount());
+            exportBatch.setFailed(
+                    batchIDQuery(batchID)
+                        .where(QQueueMessage.queueMessage.status.eq(QueueMessage.Status.FAILED))
+                        .fetchCount());
+            exportBatch.setScheduled(
+                    batchIDQuery(batchID)
+                        .where(QQueueMessage.queueMessage.status.eq(QueueMessage.Status.SCHEDULED))
+                        .fetchCount());
+            exportBatch.setInProcess(
+                    batchIDQuery(batchID)
+                        .where(QQueueMessage.queueMessage.status.eq(QueueMessage.Status.IN_PROCESS))
+                        .fetchCount());
+
+            exportBatches.add(exportBatch);
+        }
+        return exportBatches;
+    }
+
+    private HibernateQuery<ExportTask> batchIDQuery(String batchID) {
+        return new HibernateQuery<ExportTask>(em.unwrap(Session.class))
+                .from(QExportTask.exportTask)
+                .leftJoin(QExportTask.exportTask.queueMessage, QQueueMessage.queueMessage)
+                .where(QQueueMessage.queueMessage.batchID.eq(batchID));
+    }
+
+    private StatelessSession openStatelessSession() {
+        return em.unwrap(Session.class).getSessionFactory().openStatelessSession();
+    }
+
+    private int queryFetchSize() {
+        return device.getDeviceExtensionNotNull(ArchiveDeviceExtension.class).getQueryFetchSize();
+    }
 }

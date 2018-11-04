@@ -1,11 +1,12 @@
 import { Component, OnInit } from '@angular/core';
 import {Input} from '@angular/core';
 import {Http} from '@angular/http';
-import {SlimLoadingBarService} from 'ng2-slim-loading-bar';
 import * as _ from 'lodash';
 import {AppService} from '../../app.service';
 import {WindowRefService} from "../window-ref.service";
 import {HttpErrorHandler} from "../http-error-handler";
+import {J4careHttpService} from "../j4care-http.service";
+import {LoadingBarService} from "@ngx-loading-bar/core";
 
 @Component({
   selector: 'file-attribute-list',
@@ -19,8 +20,8 @@ export class FileAttributeListComponent implements OnInit {
     @Input() aet;
     rows2 = [];
     constructor(
-        public $http: Http,
-        public cfpLoadingBar: SlimLoadingBarService,
+        public $http:J4careHttpService,
+        public cfpLoadingBar: LoadingBarService,
         public mainservice: AppService,
         public httpErrorHandler:HttpErrorHandler
     ) { }

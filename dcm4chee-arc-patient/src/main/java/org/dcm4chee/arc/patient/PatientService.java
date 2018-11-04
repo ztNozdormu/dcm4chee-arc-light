@@ -17,7 +17,7 @@
  *
  * The Initial Developer of the Original Code is
  * J4Care.
- * Portions created by the Initial Developer are Copyright (C) 2015
+ * Portions created by the Initial Developer are Copyright (C) 2015-2017
  * the Initial Developer. All Rights Reserved.
  *
  * Contributor(s):
@@ -41,9 +41,9 @@
 package org.dcm4chee.arc.patient;
 
 import org.dcm4che3.data.IDWithIssuer;
-import org.dcm4che3.hl7.HL7Segment;
 import org.dcm4che3.net.Association;
 import org.dcm4che3.net.hl7.HL7Application;
+import org.dcm4che3.net.hl7.UnparsedHL7Message;
 import org.dcm4chee.arc.entity.Patient;
 
 import javax.servlet.http.HttpServletRequest;
@@ -61,7 +61,7 @@ public interface PatientService {
 
     PatientMgtContext createPatientMgtContextWEB(HttpServletRequest httpRequest);
 
-    PatientMgtContext createPatientMgtContextHL7(HL7Application hl7App, Socket socket, HL7Segment msh);
+    PatientMgtContext createPatientMgtContextHL7(HL7Application hl7App, Socket socket, UnparsedHL7Message msg);
 
     PatientMgtContext createPatientMgtContextScheduler();
 
@@ -75,7 +75,7 @@ public interface PatientService {
             throws NonUniquePatientException, PatientMergedException;
 
     Patient mergePatient(PatientMgtContext ctx)
-            throws NonUniquePatientException, PatientMergedException;
+            throws NonUniquePatientException, PatientMergedException, CircularPatientMergeException;
 
     Patient changePatientID(PatientMgtContext ctx)
             throws NonUniquePatientException, PatientMergedException, PatientTrackingNotAllowedException;
@@ -85,4 +85,6 @@ public interface PatientService {
     void deletePatientFromUI(PatientMgtContext ctx);
 
     void deletePatientIfHasNoMergedWith(PatientMgtContext ctx);
+
+    Patient updatePatientStatus(PatientMgtContext ctx);
 }

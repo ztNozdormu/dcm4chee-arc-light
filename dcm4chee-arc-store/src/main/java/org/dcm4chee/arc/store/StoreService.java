@@ -1,11 +1,13 @@
 package org.dcm4chee.arc.store;
 
 import org.dcm4che3.data.Attributes;
-import org.dcm4che3.hl7.HL7Segment;
 import org.dcm4che3.net.ApplicationEntity;
 import org.dcm4che3.net.Association;
 import org.dcm4che3.net.hl7.HL7Application;
-import org.dcm4chee.arc.retrieve.InstanceLocations;
+import org.dcm4che3.net.hl7.UnparsedHL7Message;
+import org.dcm4chee.arc.conf.Duration;
+import org.dcm4chee.arc.entity.Instance;
+import org.dcm4chee.arc.entity.Location;
 
 import javax.servlet.http.HttpServletRequest;
 import java.io.IOException;
@@ -13,7 +15,6 @@ import java.io.InputStream;
 import java.net.Socket;
 import java.util.Collection;
 import java.util.List;
-import java.util.Map;
 import java.util.zip.ZipInputStream;
 
 /**
@@ -28,7 +29,7 @@ public interface StoreService {
     int REJECTION_FAILED_NO_SUCH_INSTANCE = 0xA772;
     int REJECTION_FAILED_CLASS_INSTANCE_CONFLICT  = 0xA773;
     int REJECTION_FAILED_ALREADY_REJECTED  = 0xA774;
-    int REJECTION_FOR_RETENTION_POLICY_EXPIRED_NOT_AUTHORIZED = 0xA775;
+    int REJECTION_FOR_RETENTION_POLICY_EXPIRED_NOT_ALLOWED = 0xA775;
     int RETENTION_PERIOD_OF_STUDY_NOT_YET_EXPIRED = 0xA776;
     int PATIENT_ID_MISSING_IN_OBJECT = 0xA777;
     int CONFLICTING_PID_NOT_ACCEPTED = 0xA778;
@@ -39,7 +40,7 @@ public interface StoreService {
     String REJECTION_FAILED_NO_SUCH_SERIES_MSG = "Failed to reject Instance of Series[uid={0}] - no such Series.";
     String REJECTION_FAILED_CLASS_INSTANCE_CONFLICT_MSG  = "Failed to reject Instance[uid={0}] - class-instance conflict.";
     String REJECTION_FAILED_ALREADY_REJECTED_MSG  = "Failed to reject Instance[uid={0}] - already rejected.";
-    String REJECTION_FOR_RETENTION_POLICY_EXPIRED_NOT_AUTHORIZED_MSG = "Rejection for Retention Policy Expired not authorized.";
+    String REJECTION_FOR_RETENTION_POLICY_EXPIRED_NOT_ALLOWED_MSG = "Rejection for Retention Policy Expired not allowed.";
     String RETENTION_PERIOD_OF_STUDY_NOT_YET_EXPIRED_MSG = "Retention Period of Study not yet expired.";
     String PATIENT_ID_MISSING_IN_OBJECT_MSG = "Patient ID missing in object.";
     String NOT_AUTHORIZED = "Storage denied.";
@@ -48,30 +49,36 @@ public interface StoreService {
 
     StoreSession newStoreSession(Association as);
 
-    StoreSession newStoreSession(HttpServletRequest httpRequest, String pathParam, ApplicationEntity ae);
+    StoreSession newStoreSession(HttpServletRequest httpRequest, ApplicationEntity ae, String sourceAET);
 
     StoreSession newStoreSession(ApplicationEntity ae);
 
-    StoreSession newStoreSession(HL7Application hl7App, Socket socket, HL7Segment msh, ApplicationEntity ae);
+    StoreSession newStoreSession(HL7Application hl7App, Socket socket, UnparsedHL7Message msg, ApplicationEntity ae);
 
     StoreContext newStoreContext(StoreSession session);
 
     void store(StoreContext ctx, InputStream data) throws IOException;
+
+    void addStorageID(String studyIUID, String storageID);
+
+    void scheduleMetadataUpdate(String studyIUID, String seriesIUID);
 
     void store(StoreContext ctx, Attributes attrs) throws IOException;
 
     Attributes copyInstances(StoreSession session, Collection<InstanceLocations> instances)
             throws Exception;
 
-    Collection<InstanceLocations> queryInstances(
-            StoreSession session, Attributes instanceRefs, String targetStudyIUID)
-            throws IOException;
-
     ZipInputStream openZipInputStream(
             StoreSession session, String storageID, String storagePath, String studyUID)
             throws IOException;
 
-    void restoreInstances(StoreSession session, String studyUID, String seriesUID) throws IOException;
+    List<Instance> restoreInstances(StoreSession session, String studyUID, String seriesUID, Duration duration)
+            throws IOException;
 
     List<String> studyIUIDsByAccessionNo(String accNo);
+
+    void addLocation(StoreSession storeSession, Long instancePk, Location location);
+
+    void compress(StoreContext ctx, InstanceLocations inst, InputStream data)
+            throws IOException;
 }

@@ -41,17 +41,19 @@
 package org.dcm4chee.arc.store;
 
 import org.dcm4che3.data.Attributes;
-import org.dcm4che3.hl7.HL7Segment;
 import org.dcm4che3.net.ApplicationEntity;
 import org.dcm4che3.net.Association;
 import org.dcm4che3.net.hl7.HL7Application;
+import org.dcm4che3.net.hl7.UnparsedHL7Message;
 import org.dcm4chee.arc.conf.AcceptConflictingPatientID;
 import org.dcm4chee.arc.conf.AcceptMissingPatientID;
 import org.dcm4chee.arc.conf.ArchiveAEExtension;
+import org.dcm4chee.arc.conf.PrefetchRule;
 import org.dcm4chee.arc.entity.Series;
 import org.dcm4chee.arc.entity.Study;
 import org.dcm4chee.arc.entity.UIDMap;
 import org.dcm4chee.arc.storage.Storage;
+import org.dcm4chee.arc.storage.StorageFactory;
 
 import javax.servlet.http.HttpServletRequest;
 import java.io.Closeable;
@@ -72,7 +74,7 @@ public interface StoreSession extends Closeable {
 
     Socket getSocket();
 
-    HL7Segment getHL7MessageHeader();
+    UnparsedHL7Message getUnparsedHL7Message();
 
     HL7Application getLocalHL7Application();
 
@@ -82,7 +84,7 @@ public interface StoreSession extends Closeable {
 
     StoreService getStoreService();
 
-    Storage getStorage(String storageID);
+    Storage getStorage(String storageID, StorageFactory storageFactory);
 
     void putStorage(String storageID, Storage storage);
 
@@ -98,13 +100,17 @@ public interface StoreSession extends Closeable {
 
     void cacheSeries(Series series);
 
+    boolean isNotProcessed(PrefetchRule rule);
+
+    boolean markAsProcessed(PrefetchRule rule);
+
     Map<Long, UIDMap> getUIDMapCache();
 
     Map<String, String> getUIDMap();
 
     String getObjectStorageID();
 
-    void setObjectStorageID(String objectStorageID);
+    StoreSession withObjectStorageID(String objectStorageID);
 
     String getMetadataStorageID();
 
@@ -116,7 +122,15 @@ public interface StoreSession extends Closeable {
 
     void setAcceptConflictingPatientID(AcceptConflictingPatientID acceptConflictingPatientID);
 
+    Attributes.UpdatePolicy getPatientUpdatePolicy();
+
+    void setPatientUpdatePolicy(Attributes.UpdatePolicy patientUpdatePolicy);
+
     Attributes.UpdatePolicy getStudyUpdatePolicy();
 
     void setStudyUpdatePolicy(Attributes.UpdatePolicy studyUpdatePolicy);
+
+    String getImpaxReportEndpoint();
+
+    void setImpaxReportEndpoint(String impaxReportEndpoint);
 }

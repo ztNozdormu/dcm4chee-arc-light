@@ -17,7 +17,7 @@
  *
  * The Initial Developer of the Original Code is
  * J4Care.
- * Portions created by the Initial Developer are Copyright (C) 2013
+ * Portions created by the Initial Developer are Copyright (C) 2015-2017
  * the Initial Developer. All Rights Reserved.
  *
  * Contributor(s):
@@ -41,10 +41,10 @@
 package org.dcm4chee.arc.delete;
 
 import org.dcm4che3.data.Code;
-import org.dcm4che3.net.ApplicationEntity;
+import org.dcm4chee.arc.conf.ArchiveAEExtension;
 import org.dcm4chee.arc.patient.PatientMgtContext;
+import org.dcm4chee.arc.qmgt.HttpServletRequestInfo;
 
-import javax.servlet.http.HttpServletRequest;
 import java.util.Date;
 
 
@@ -58,10 +58,10 @@ public interface DeletionService {
 
     int deleteRejectionNotesBefore(Code rjCode, Date before, int fetchSize);
 
-    StudyDeleteContext createStudyDeleteContext(Long pk, HttpServletRequest httpRequest);
+    StudyDeleteContext createStudyDeleteContext(Long pk, HttpServletRequestInfo httpServletRequestInfo);
 
-    void deleteStudy(String studyUID, HttpServletRequest request, ApplicationEntity ae)
-            throws StudyNotFoundException, StudyNotEmptyException;
+    void deleteStudy(String studyUID, HttpServletRequestInfo httpServletRequestInfo, ArchiveAEExtension arcAE)
+            throws Exception;
 
-    void deletePatient(PatientMgtContext ctx);
+    void deletePatient(PatientMgtContext ctx, ArchiveAEExtension arcAE);
 }

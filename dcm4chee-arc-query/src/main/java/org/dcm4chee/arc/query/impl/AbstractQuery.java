@@ -41,17 +41,26 @@
 package org.dcm4chee.arc.query.impl;
 
 import com.querydsl.core.Tuple;
+import com.querydsl.core.types.Order;
 import com.querydsl.core.types.OrderSpecifier;
 import com.querydsl.jpa.hibernate.HibernateQuery;
 import org.dcm4che3.data.Attributes;
+import org.dcm4che3.data.Tag;
+import org.dcm4che3.data.VR;
+import org.dcm4che3.dict.archive.ArchiveTag;
 import org.dcm4che3.net.service.DicomServiceException;
 import org.dcm4che3.util.StringUtils;
+import org.dcm4chee.arc.entity.QPatient;
 import org.dcm4chee.arc.query.Query;
 import org.dcm4chee.arc.query.QueryContext;
+import org.dcm4chee.arc.query.util.OrderByTag;
+import org.dcm4chee.arc.query.util.QueryBuilder;
 import org.hibernate.StatelessSession;
 import org.hibernate.Transaction;
 
+import java.util.ArrayList;
 import java.util.Iterator;
+import java.util.List;
 
 /**
  * @author Gunter Zeilinger <gunterze@gmail.com>
@@ -61,7 +70,7 @@ abstract class AbstractQuery implements Query {
 
     protected final QueryContext context;
     protected final StatelessSession session;
-    private HibernateQuery<Tuple> query;
+    protected HibernateQuery<Tuple> query;
     private Iterator<Tuple> results;
     private long offset;
     private long limit;
@@ -74,7 +83,24 @@ abstract class AbstractQuery implements Query {
     }
 
     public void initQuery() {
-        query = newHibernateQuery();
+        query = newHibernateQuery(false);
+        List<OrderByTag> orderByTags = context.getOrderByTags();
+        if (orderByTags != null) {
+            ArrayList<OrderSpecifier<?>> list = new ArrayList<>(orderByTags.size() + 1);
+            for (OrderByTag orderByTag : orderByTags) {
+                addOrderSpecifier(orderByTag.tag, orderByTag.order, list);
+            }
+            query.orderBy(list.toArray(new OrderSpecifier<?>[list.size()]));
+        }
+    }
+
+    protected boolean addOrderSpecifier(int tag, Order order, ArrayList<OrderSpecifier<?>> result) {
+        return QueryBuilder.addOrderSpecifier(context.getQueryRetrieveLevel(), tag, order, result);
+    }
+
+    @Override
+    public Iterator<Long> withUnknownSize(int fetchSize) {
+        throw new UnsupportedOperationException();
     }
 
     @Override
@@ -87,7 +113,7 @@ abstract class AbstractQuery implements Query {
         return session.beginTransaction();
     }
 
-    protected abstract HibernateQuery<Tuple> newHibernateQuery();
+    protected abstract HibernateQuery<Tuple> newHibernateQuery(boolean forCount);
 
     protected abstract Attributes toAttributes(Tuple results);
 
@@ -111,9 +137,8 @@ abstract class AbstractQuery implements Query {
     }
 
     @Override
-    public long count() {
-        checkQuery();
-        return query.fetchCount();
+    public long fetchSize() {
+        throw new UnsupportedOperationException();
     }
 
     @Override
@@ -128,12 +153,6 @@ abstract class AbstractQuery implements Query {
         checkQuery();
         query.offset(offset);
         this.offset = offset;
-    }
-
-    @Override
-    public void orderBy(OrderSpecifier<?>... orderSpecifiers) {
-        checkQuery();
-        query.orderBy(orderSpecifiers);
     }
 
     @Override

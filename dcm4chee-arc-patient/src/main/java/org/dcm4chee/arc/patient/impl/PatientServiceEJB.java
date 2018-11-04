@@ -45,10 +45,7 @@ import org.dcm4che3.data.*;
 import org.dcm4chee.arc.conf.AttributeFilter;
 import org.dcm4chee.arc.entity.*;
 import org.dcm4chee.arc.issuer.IssuerService;
-import org.dcm4chee.arc.patient.NonUniquePatientException;
-import org.dcm4chee.arc.patient.PatientAlreadyExistsException;
-import org.dcm4chee.arc.patient.PatientMergedException;
-import org.dcm4chee.arc.patient.PatientMgtContext;
+import org.dcm4chee.arc.patient.*;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -100,7 +97,8 @@ public class PatientServiceEJB {
         if (issuer != null) {
             for (Iterator<Patient> it = list.iterator(); it.hasNext();) {
                 IssuerEntity ie = it.next().getPatientID().getIssuer();
-                if (ie != null && !ie.getIssuer().matches(issuer))
+                Issuer other = ie != null ? ie.getIssuer() : null;
+                if (other != null && !other.matches(issuer))
                     it.remove();
             }
         }
@@ -113,6 +111,9 @@ public class PatientServiceEJB {
 
     private Patient createPatient(PatientMgtContext ctx, IDWithIssuer patientID, Attributes attributes) {
         Patient patient = new Patient();
+        patient.setVerificationStatus(ctx.getPatientVerificationStatus());
+        if (ctx.getPatientVerificationStatus() != Patient.VerificationStatus.UNVERIFIED)
+            patient.setVerificationTime(new Date());
         patient.setAttributes(attributes, ctx.getAttributeFilter(), ctx.getFuzzyStr());
         patient.setPatientID(createPatientID(patientID));
         em.persist(patient);
@@ -122,7 +123,6 @@ public class PatientServiceEJB {
 
     public Patient updatePatient(PatientMgtContext ctx)
             throws NonUniquePatientException, PatientMergedException {
-        ctx.setEventActionCode(AuditMessages.EventActionCode.Update);
         Patient pat = findPatient(ctx.getPatientID());
         if (pat == null) {
             if (ctx.isNoPatientCreate()) {
@@ -136,7 +136,7 @@ public class PatientServiceEJB {
     }
 
     private void logSuppressPatientCreate(PatientMgtContext ctx) {
-        LOG.info("{}: Suppress creation of Patient[id={}] by {}",  ctx, ctx.getPatientID(), ctx.getHL7MessageHeader());
+        LOG.info("{}: Suppress creation of Patient[id={}] by {}", ctx, ctx.getPatientID(), ctx.getUnparsedHL7Message().msh());
     }
 
     public Patient findPatient(IDWithIssuer pid)
@@ -157,6 +157,11 @@ public class PatientServiceEJB {
     }
 
     private void updatePatient(Patient pat, PatientMgtContext ctx) {
+        if (ctx.getPatientVerificationStatus() != Patient.VerificationStatus.UNVERIFIED) {
+            pat.setVerificationStatus(ctx.getPatientVerificationStatus());
+            pat.setVerificationTime(new Date());
+            pat.resetFailedVerifications();
+        }
         Attributes.UpdatePolicy updatePolicy = ctx.getAttributeUpdatePolicy();
         AttributeFilter filter = ctx.getAttributeFilter();
         Attributes attrs = pat.getAttributes();
@@ -169,6 +174,7 @@ public class PatientServiceEJB {
         } else if (!attrs.update(updatePolicy, newAttrs, null))
             return;
 
+        ctx.setEventActionCode(AuditMessages.EventActionCode.Update);
         pat.setAttributes(attrs, filter, ctx.getFuzzyStr());
         em.createNamedQuery(Series.SCHEDULE_METADATA_UPDATE_FOR_PATIENT)
                 .setParameter(1, pat)
@@ -177,7 +183,6 @@ public class PatientServiceEJB {
 
     public Patient mergePatient(PatientMgtContext ctx)
             throws NonUniquePatientException, PatientMergedException {
-        ctx.setEventActionCode(AuditMessages.EventActionCode.Update);
         Patient pat = findPatient(ctx.getPatientID());
         Patient prev = findPatient(ctx.getPreviousPatientID());
         if (pat == null && prev == null && ctx.isNoPatientCreate()) {
@@ -195,7 +200,7 @@ public class PatientServiceEJB {
             moveStudies(prev, pat);
             moveMPPS(prev, pat);
         }
-        if (ctx.getHttpRequest() != null) {
+        if (ctx.getHttpServletRequestInfo() != null) {
             if (pat.getPatientName() != null)
                 ctx.getAttributes().setString(Tag.PatientName, VR.PN, pat.getPatientName().toString());
             if (prev.getPatientName() != null)
@@ -230,8 +235,26 @@ public class PatientServiceEJB {
             updateIssuer(pat.getPatientID(), patientID.getIssuer());
         else
             throw new PatientAlreadyExistsException("Patient with Patient ID " + pat2.getPatientID() + "already exists");
-        updatePatient(pat, ctx);
+        updatePatientAttrs(ctx, pat);
         return pat;
+    }
+
+    private void updatePatientAttrs(PatientMgtContext ctx, Patient pat) {
+        IDWithIssuer patientID = ctx.getPatientID();
+        Attributes patientAttrs = pat.getAttributes();
+        if (patientAttrs.getString(Tag.IssuerOfPatientID) != null) {
+            Issuer patientIDIssuer = patientID.getIssuer();
+            if (patientIDIssuer == null) {
+                patientAttrs.remove(Tag.IssuerOfPatientID);
+                patientAttrs.remove(Tag.IssuerOfPatientIDQualifiersSequence);
+            } else if (patientIDIssuer.getUniversalEntityID() == null) {
+                patientAttrs.remove(Tag.IssuerOfPatientIDQualifiersSequence);
+            }
+        }
+        pat.setAttributes(patientID.exportPatientIDWithIssuer(patientAttrs), ctx.getAttributeFilter(), ctx.getFuzzyStr());
+        em.createNamedQuery(Series.SCHEDULE_METADATA_UPDATE_FOR_PATIENT)
+                .setParameter(1, pat)
+                .executeUpdate();
     }
 
     private void updateIssuer(PatientID patientID, Issuer issuer) {
@@ -312,7 +335,7 @@ public class PatientServiceEJB {
                 .setParameter(1, patient)
                 .getSingleResult() > 0)
             return false;
-        removeMPPSAndPatient(patient);
+        removeMPPSMWLAndPatient(patient);
         return true;
     }
 
@@ -320,15 +343,30 @@ public class PatientServiceEJB {
         List<Patient> patients = em.createNamedQuery(Patient.FIND_BY_MERGED_WITH, Patient.class).setParameter(1, patient).getResultList();
         for (Patient p : patients)
             deletePatientFromUI(p);
-        removeMPPSAndPatient(patient);
+        removeMPPSMWLAndPatient(patient);
     }
 
-    private void removeMPPSAndPatient(Patient patient) {
-        List<MPPS> mppsList = em.createNamedQuery(MPPS.FIND_BY_PATIENT, MPPS.class)
+    private void removeMPPSMWLAndPatient(Patient patient) {
+        em.createNamedQuery(MPPS.DELETE_BY_PATIENT)
                 .setParameter(1, patient)
-                .getResultList();
-        for (MPPS mpps : mppsList)
-            em.remove(mpps);
+                .executeUpdate();
+        em.createNamedQuery(MWLItem.DELETE_BY_PATIENT)
+                .setParameter(1, patient)
+                .executeUpdate();
         em.remove(em.contains(patient) ? patient : em.merge(patient));
+        LOG.info("Successfully removed {} from database along with any of its MPPS and MWLs", patient);
+    }
+
+    public Patient updatePatientStatus(PatientMgtContext ctx) {
+        Patient pat = findPatient(ctx.getPatientID());
+        if (pat != null) {
+            pat.setVerificationStatus(ctx.getPatientVerificationStatus());
+            pat.setVerificationTime(new Date());
+            if (ctx.getPatientVerificationStatus() == Patient.VerificationStatus.VERIFICATION_FAILED)
+                pat.incrementFailedVerifications();
+            else
+                pat.resetFailedVerifications();
+        }
+        return pat;
     }
 }

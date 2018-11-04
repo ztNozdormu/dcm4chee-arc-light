@@ -43,8 +43,10 @@ import org.dcm4che3.data.Attributes;
 import org.dcm4che3.data.ElementDictionary;
 import org.dcm4che3.data.Tag;
 import org.dcm4che3.data.VR;
+import org.dcm4che3.dict.archive.ArchiveTag;
 import org.dcm4che3.util.StringUtils;
 import org.dcm4che3.util.TagUtils;
+import org.dcm4chee.arc.conf.AttributesBuilder;
 
 import javax.ws.rs.core.MultivaluedMap;
 import javax.ws.rs.core.UriInfo;
@@ -62,10 +64,12 @@ public class QueryAttributes {
     private boolean includeAll;
 
     private final ArrayList<OrderByTag> orderByTags = new ArrayList<>();
-    private boolean orderByPatientName;
 
     public QueryAttributes(UriInfo info) {
-        MultivaluedMap<String, String> map = info.getQueryParameters();
+        this(info.getQueryParameters());
+    }
+
+    public QueryAttributes(MultivaluedMap<String, String> map) {
         for (Map.Entry<String, List<String>> entry : map.entrySet()) {
             String key = entry.getKey();
             switch (key) {
@@ -75,7 +79,9 @@ public class QueryAttributes {
                 case "orderby":
                     addOrderByTag(entry.getValue());
                     break;
+                case "access_token":
                 case "comparefield":
+                case "count":
                 case "different":
                 case "missing":
                 case "offset":
@@ -86,11 +92,29 @@ public class QueryAttributes {
                 case "returnempty":
                 case "expired":
                 case "retrievefailed":
+                case "compressionfailed":
+                case "patientVerificationStatus":
+                case "storageVerificationFailed":
+                case "storageVerificationPolicy":
+                case "storageVerificationUpdateLocationStatus":
+                case "storageVerificationStorageID":
                 case "incomplete":
-                case "SendingApplicationEntityTitleOfSeries":
-                case "StudyReceiveDateTime":
                 case "ExternalRetrieveAET":
                 case "ExternalRetrieveAET!":
+                case "only-stgcmt":
+                case "only-ian":
+                case "batchID":
+                case "queue":
+                case "SplitStudyDateRange":
+                case "ForceQueryByStudyUID":
+                    break;
+                case "SendingApplicationEntityTitleOfSeries":
+                    keys.setString(ArchiveTag.PrivateCreator, ArchiveTag.SendingApplicationEntityTitleOfSeries, VR.AE,
+                            entry.getValue().toArray(StringUtils.EMPTY_STRING));
+                    break;
+                case "StudyReceiveDateTime":
+                    keys.setString(ArchiveTag.PrivateCreator, ArchiveTag.StudyReceiveDateTime, VR.DT,
+                            entry.getValue().toArray(StringUtils.EMPTY_STRING));
                     break;
                 default:
                     addQueryKey(key, entry.getValue());
@@ -115,7 +139,7 @@ public class QueryAttributes {
         }
     }
 
-    public void addReturnTags(int[] tags) {
+    public void addReturnTags(int... tags) {
         for (int tag : tags)
             builder.setNullIfAbsent(tag);
     }
@@ -127,8 +151,6 @@ public class QueryAttributes {
                     boolean desc = field.charAt(0) == '-';
                     int tags[] = TagUtils.parseTagPath(desc ? field.substring(1) : field);
                     orderByTags.add(new OrderByTag(tags[tags.length - 1], desc ? Order.DESC : Order.ASC));
-                    if (tags[0] == Tag.PatientName)
-                        orderByPatientName = true;
                 }
             } catch (IllegalArgumentException e) {
                 throw new IllegalArgumentException("orderby=" + s);
@@ -161,20 +183,6 @@ public class QueryAttributes {
 
     public ArrayList<OrderByTag> getOrderByTags() {
         return orderByTags;
-    }
-
-    public boolean isOrderByPatientName() {
-        return orderByPatientName;
-    }
-
-    public static class OrderByTag {
-        public final int tag;
-        public final Order order;
-
-        private OrderByTag(int tag, Order order) {
-            this.tag = tag;
-            this.order = order;
-        }
     }
 
     private void addQueryKey(String attrPath, List<String> values) {

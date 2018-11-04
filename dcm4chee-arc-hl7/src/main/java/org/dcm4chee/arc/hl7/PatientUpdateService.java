@@ -1,25 +1,66 @@
+/*
+ * ** BEGIN LICENSE BLOCK *****
+ * Version: MPL 1.1/GPL 2.0/LGPL 2.1
+ *
+ * The contents of this file are subject to the Mozilla Public License Version
+ * 1.1 (the "License"); you may not use this file except in compliance with
+ * the License. You may obtain a copy of the License at
+ * http://www.mozilla.org/MPL/
+ *
+ * Software distributed under the License is distributed on an "AS IS" basis,
+ * WITHOUT WARRANTY OF ANY KIND, either express or implied. See the License
+ * for the specific language governing rights and limitations under the
+ * License.
+ *
+ * The Original Code is part of dcm4che, an implementation of DICOM(TM) in
+ * Java(TM), hosted at https://github.com/dcm4che.
+ *
+ * The Initial Developer of the Original Code is
+ * J4Care.
+ * Portions created by the Initial Developer are Copyright (C) 2015-2017
+ * the Initial Developer. All Rights Reserved.
+ *
+ * Contributor(s):
+ * See @authors listed below
+ *
+ * Alternatively, the contents of this file may be used under the terms of
+ * either the GNU General Public License Version 2 or later (the "GPL"), or
+ * the GNU Lesser General Public License Version 2.1 or later (the "LGPL"),
+ * in which case the provisions of the GPL or the LGPL are applicable instead
+ * of those above. If you wish to allow use of your version of this file only
+ * under the terms of either the GPL or the LGPL, and not to allow others to
+ * use your version of this file under the terms of the MPL, indicate your
+ * decision by deleting the provisions above and replace them with the notice
+ * and other provisions required by the GPL or the LGPL. If you do not delete
+ * the provisions above, a recipient may use your version of this file under
+ * the terms of any one of the MPL, the GPL or the LGPL.
+ *
+ * ** END LICENSE BLOCK *****
+ */
+
 package org.dcm4chee.arc.hl7;
 
 import org.dcm4che3.data.Attributes;
 import org.dcm4che3.data.Tag;
 import org.dcm4che3.hl7.ERRSegment;
 import org.dcm4che3.hl7.HL7Exception;
+import org.dcm4che3.hl7.HL7Message;
 import org.dcm4che3.hl7.HL7Segment;
+import org.dcm4che3.net.Connection;
 import org.dcm4che3.net.hl7.HL7Application;
 import org.dcm4che3.net.hl7.UnparsedHL7Message;
+import org.dcm4che3.net.hl7.service.DefaultHL7Service;
 import org.dcm4che3.net.hl7.service.HL7Service;
 import org.dcm4chee.arc.conf.ArchiveHL7ApplicationExtension;
 import org.dcm4chee.arc.entity.Patient;
+import org.dcm4chee.arc.patient.CircularPatientMergeException;
 import org.dcm4chee.arc.patient.PatientMgtContext;
 import org.dcm4chee.arc.patient.PatientService;
 import org.dcm4chee.arc.patient.PatientTrackingNotAllowedException;
-import org.xml.sax.SAXException;
 
 import javax.enterprise.context.ApplicationScoped;
 import javax.enterprise.inject.Typed;
 import javax.inject.Inject;
-import javax.xml.transform.TransformerConfigurationException;
-import java.io.IOException;
 import java.net.Socket;
 
 /**
@@ -29,7 +70,7 @@ import java.net.Socket;
  */
 @ApplicationScoped
 @Typed(HL7Service.class)
-class PatientUpdateService extends AbstractHL7Service {
+class PatientUpdateService extends DefaultHL7Service {
 
     private static final String[] MESSAGE_TYPES = {
             "ADT^A01",
@@ -58,18 +99,23 @@ class PatientUpdateService extends AbstractHL7Service {
     }
 
     @Override
-    protected void process(HL7Application hl7App, Socket s, UnparsedHL7Message msg) throws Exception {
-        updatePatient(hl7App, s, msg, patientService);
+    public UnparsedHL7Message onMessage(HL7Application hl7App, Connection conn, Socket s, UnparsedHL7Message msg)
+            throws HL7Exception {
+        ArchiveHL7Message archiveHL7Message = new ArchiveHL7Message(
+                HL7Message.makeACK(msg.msh(), HL7Exception.AA, null).getBytes(null));
+        updatePatient(hl7App, s, msg, patientService, archiveHL7Message);
+        return archiveHL7Message;
     }
 
-    static Patient updatePatient(HL7Application hl7App, Socket s, UnparsedHL7Message msg, PatientService patientService)
-            throws HL7Exception, IOException, SAXException, TransformerConfigurationException {
+    static Patient updatePatient(HL7Application hl7App, Socket s, UnparsedHL7Message msg, PatientService patientService,
+                                 ArchiveHL7Message archiveHL7Message)
+            throws HL7Exception {
         ArchiveHL7ApplicationExtension arcHL7App =
                 hl7App.getHL7ApplicationExtension(ArchiveHL7ApplicationExtension.class);
         HL7Segment msh = msg.msh();
         String hl7cs = msh.getField(17, hl7App.getHL7DefaultCharacterSet());
-        Attributes attrs = SAXTransformer.transform(msg.data(), hl7cs, arcHL7App.patientUpdateTemplateURI(), null);
-        PatientMgtContext ctx = patientService.createPatientMgtContextHL7(hl7App, s, msh);
+        Attributes attrs = transform(msg, arcHL7App, hl7cs);
+        PatientMgtContext ctx = patientService.createPatientMgtContextHL7(hl7App, s, msg);
         ctx.setAttributes(attrs);
         if (ctx.getPatientID() == null)
             throw new HL7Exception(
@@ -78,8 +124,11 @@ class PatientUpdateService extends AbstractHL7Service {
                             .setErrorLocation("PID^1^3")
                             .setUserMessage("Missing PID-3"));
         Attributes mrg = attrs.getNestedDataset(Tag.ModifiedAttributesSequence);
-        if (mrg == null)
-            return patientService.updatePatient(ctx);
+        if (mrg == null) {
+            Patient patient = patientService.updatePatient(ctx);
+            archiveHL7Message.setPatRecEventActionCode(ctx.getEventActionCode());
+            return patient;
+        }
 
         ctx.setPreviousAttributes(mrg);
         if (ctx.getPreviousPatientID() == null)
@@ -98,6 +147,28 @@ class PatientUpdateService extends AbstractHL7Service {
                             .setHL7ErrorCode(ERRSegment.DuplicateKeyIdentifier)
                             .setErrorLocation("PID^1^3")
                             .setUserMessage(e.getMessage()));
+        } catch (CircularPatientMergeException e) {
+            throw new HL7Exception(
+                    new ERRSegment(msg.msh())
+                            .setHL7ErrorCode(ERRSegment.DuplicateKeyIdentifier)
+                            .setErrorLocation("MRG^1^1")
+                            .setUserMessage("MRG-1 matches PID-3"));
+        } catch (Exception e) {
+            throw new HL7Exception(
+                    new ERRSegment(msg.msh())
+                            .setHL7ErrorCode(ERRSegment.ApplicationInternalError)
+                            .setUserMessage(e.getMessage()));
+        } finally {
+            archiveHL7Message.setPatRecEventActionCode(ctx.getEventActionCode());
+        }
+    }
+
+    private static Attributes transform(UnparsedHL7Message msg, ArchiveHL7ApplicationExtension arcHL7App,
+                                        String hl7cs) throws HL7Exception {
+        try {
+            return SAXTransformer.transform(msg.data(), hl7cs, arcHL7App.patientUpdateTemplateURI(), null);
+        } catch (Exception e) {
+            throw new HL7Exception(new ERRSegment(msg.msh()).setUserMessage(e.getMessage()), e);
         }
     }
 }

@@ -4,8 +4,9 @@
   "type": "object",
   "required": [
     "dcmFuzzyAlgorithmClass",
-    "dcmQueryRetrieveViewID",
     "dcmSeriesMetadataFetchSize",
+    "dcmSeriesMetadataThreads",
+    "dcmPurgeInstanceRecords",
     "dcmPurgeInstanceRecordsFetchSize",
     "dcmOverwritePolicy",
     "dcmAcceptMissingPatientID",
@@ -16,6 +17,7 @@
     "dcmQueryFetchSize",
     "dcmQueryMaxNumberOfResults",
     "dcmQidoMaxNumberOfResults",
+    "dcmWadoZIPEntryNameFormat",
     "dcmIanOnTimeout",
     "dcmIanTaskFetchSize",
     "dcmSpanningCFindSCPPolicy",
@@ -41,10 +43,23 @@
     "dcmStoreUpdateDBMaxRetryDelay",
     "dcmAllowRejectionForDataRetentionPolicyExpired",
     "dcmAllowDeleteStudyPermanently",
+    "dcmAllowDeletePatient",
+    "dcmStorageVerificationPolicy",
+    "dcmStorageVerificationUpdateLocationStatus",
+    "dcmStorageVerificationAETitle",
+    "dcmStorageVerificationFetchSize",
+    "dcmCompressionThreads",
+    "dcmCompressionFetchSize",
+    "dcmPatientVerificationFetchSize",
+    "dcmPatientVerificationAdjustIssuerOfPatientID",
+    "dcmPatientVerificationMaxRetries",
+    "dcmQueueTasksFetchSize",
     "hl7PSUMWL",
     "hl7PSUOnTimeout",
     "hl7PSUTaskFetchSize",
-    "hl7TrackChangedPatientID"
+    "hl7TrackChangedPatientID",
+    "dcmAuditSoftwareConfigurationVerbose",
+    "hl7UseNullValue"
   ],
   "properties": {
     "dcmFuzzyAlgorithmClass": {
@@ -89,31 +104,39 @@
       "minimum": 0,
       "exclusiveMinimum": true
     },
+    "dcmSeriesMetadataThreads": {
+      "title": "Update Series Metadata Threads",
+      "description": "Number of Threads used for creation and update of Series Metadata.",
+      "type": "integer",
+      "default" : 1,
+      "minimum": 0,
+      "exclusiveMinimum": true
+    },
+    "dcmPurgeInstanceRecords": {
+      "title": "Purge Instance Records",
+      "description": "Indicates that Instance Records may be purged from the DB.",
+      "type": "boolean",
+      "default" : false
+    },
     "dcmPurgeInstanceRecordsDelay": {
-      "title": "Remove Instance Records Delay",
-      "description": "Delay in ISO-8601 duration format PnDTnHnMn.nS for purging Instance Records from the DB. If absent, Instance Records will never be purged. May be overwritten by configured values for particular Archive Network AEs.",
+      "title": "Purge Instance Records Delay",
+      "description": "Delay in ISO-8601 duration format PnDTnHnMn.nS for purging Instance Records from the DB. May be overwritten by configured values for particular Archive Network AEs. Only effective, if Purge Instance Records = true.",
       "type": "string",
       "format": "dcmDuration"
     },
     "dcmPurgeInstanceRecordsPollingInterval": {
-      "title": "Remove Instance Records Polling Interval",
-      "description": "Polling Interval for Series scheduled for purging Instance Records from the DB in ISO-8601 duration format PnDTnHnMn.nS. If absent, Instance Records will not be purged.",
+      "title": "Purge Instance Records Polling Interval",
+      "description": "Polling Interval for Series scheduled for purging Instance Records from the DB in ISO-8601 duration format PnDTnHnMn.nS. Only effective, if Purge Instance Records = true.",
       "type": "string",
       "format": "dcmDuration"
     },
     "dcmPurgeInstanceRecordsFetchSize": {
-      "title": "Remove Instance Records Fetch Size",
-      "description": "Maximal number of Series scheduled for purging Instance Records from the DB fetched by one query.",
+      "title": "Purge Instance Records Fetch Size",
+      "description": "Maximal number of Series scheduled for purging Instance Records from the DB fetched by one query. Only effective, if Purge Instance Records = true.",
       "type": "integer",
       "default" : 100,
       "minimum": 0,
       "exclusiveMinimum": true
-    },
-    "dcmQueryRetrieveViewID": {
-      "title": "Query/Retrieve View ID",
-      "description": "Query/Retrieve View Identifier. May be overwritten by configured values for particular Archive Network AEs.",
-      "type": "string",
-      "format": "dcmQueryRetrieveViewID"
     },
     "dcmOverwritePolicy": {
       "title": "Overwrite Policy",
@@ -215,6 +238,17 @@
       "description": "Specifies URI for the style sheet used to render structured reports to plain text. May be overwritten by configured values for particular Archive Network AEs.",
       "type": "string"
     },
+    "dcmWadoCDA2HtmlTemplateURI": {
+      "title": "Wado CDA to HTML Template URI",
+      "description": "URL to XSL style sheet inserted as <?xml-stylesheet type=\"text/xsl\" href=\"<url>\" > in CDA documents returned by WADO-URI service. If absent, the embedded CDI document is returned verbatim. May be overwritten by configured values for particular Archive Network AEs.",
+      "type": "string"
+    },
+    "dcmWadoZIPEntryNameFormat": {
+      "title": "Wado ZIP Entry Name Format",
+      "description": "Format of entry names in ZIP archive returned by WADO-RS. May be overwritten by configured value for particular Archive Network AEs.",
+      "type": "string",
+      "default": "DICOM/{0020000D,hash}/{0020000E,hash}/{00080018,hash}"
+    },
     "dcmQueryFetchSize": {
       "title": "Query Fetch Size",
       "description": "Number of rows fetched from the database at once by the Query Service.",
@@ -290,7 +324,7 @@
     },
     "dcmSpanningCFindSCPPolicy": {
       "title": "Spanning C-Find SCP Policy",
-      "description": "Specifies policy for combining matches returned from configured Spanning C-Find SCP with matching entries from the archive DB. May be overwritten by configured values for particular Archive Network AEs.",
+      "description": "Specifies policy for combining matches returned from configured Spanning C-Find SCP with matching entries from the archive DB. SUPPLEMENT (= returns local matches before additional matches from Spanning C-Find SCP ), MERGE (= returns matches from Spanning C-Find SCP before additional local matches), REPLACE (= returns only matches from Spanning C-Find SCP). May be overwritten by configured values for particular Archive Network AEs.",
       "type": "string",
       "default": "REPLACE",
       "enum": [
@@ -335,7 +369,8 @@
       "title": "Fallback C-Move SCP Retries",
       "description": "Maximal number of retries to retrieve not available objects from C-MOVE SCP configured by dcmFallbackCMoveSCP. -1 = forever.",
       "type": "integer",
-      "default": 0
+      "default": 0,
+      "minimum": -1
     },
     "dcmAltCMoveSCP": {
       "title": "Alternative C-Move SCP",
@@ -499,6 +534,11 @@
       "description": "Specifies URI for the style sheet to transcode received HL7 ORM^O01, OMI^O23, OMG^O19 to DICOM MWL items. May be overwritten by configured values for particular Archive HL7 Application.",
       "type": "string"
     },
+    "hl7OutgoingPatientUpdateTemplateURI": {
+      "title": "HL7 Outgoing Patient Update Template URI",
+      "description": "Specifies URI for the style sheet to transcode DICOM object patient attributes to HL7 ADT messages.",
+      "type": "string"
+    },
     "hl7ScheduledProtocolCodeInOrder": {
       "title": "HL7 Schedule Protocol Code in Order",
       "description": "Specifies location of Scheduled Protocol Code in received HL7 Order message. May be overwritten by configured values for particular Archive HL7 Application.",
@@ -511,7 +551,7 @@
     },
     "hl7ScheduledStationAETInOrder": {
       "title": "HL7 Schedule Station AET in Order",
-      "description": "Specifies location of Scheduled Station AE Title in received HL7 Order message. Not effective for HL7 v2.5.1 OMI^O23 with IPC segment. If absent or no value is provided in the configured field, the Scheduled Station AE Title is selected according configured rules. May be overwritten by configured values for particular Archive HL7 Application.",
+      "description": "Specifies location of Scheduled Station AE Title in received HL7 Order message. Should not be configured for HL7 v2.5.1 OMI^O23 with IPC segment. If absent or no value is provided in the configured field, the Scheduled Station AE Title is selected according configured rules. May be overwritten by configured values for particular Archive HL7 Application.",
       "type": "string",
       "enum": [
         "ORC_18"
@@ -630,8 +670,8 @@
       "minimum": 0
     },
     "dcmStoreUpdateDBMaxRetryDelay": {
-      "title": "Store Update DB Maximum Delay of Retry",
-      "description": "Maximum delay in ms of retry to update the database on storage.",
+      "title": "Store Update DB Delay of Retry",
+      "description": "Delay in ms of retry to update the database on storage.",
       "type": "integer",
       "default": 1000,
       "minimum": 0
@@ -640,11 +680,12 @@
       "title": "Allow Rejection For Data Retention Policy Expired",
       "description": "Allow Rejection For Data Retention Policy Expired. May be overwritten by configured values for particular Archive Network AEs.",
       "type": "string",
-      "default": "STUDY_RETENTION_POLICY",
+      "default": "EXPIRED_UNSET",
       "enum": [
         "NEVER",
         "ALWAYS",
-        "STUDY_RETENTION_POLICY"
+        "EXPIRED_UNSET",
+        "ONLY_EXPIRED"
       ]
     },
     "dcmAllowDeleteStudyPermanently": {
@@ -657,6 +698,17 @@
         "REJECTED"
       ]
     },
+    "dcmAllowDeletePatient": {
+      "title": "Allow Delete Patient",
+      "description": "Allow permanent deletion of Patients. Enumerated values: NEVER, ALWAYS, WITHOUT_STUDIES. If absent, WITHOUT_STUDIES will be applied.",
+      "type": "string",
+      "default": "WITHOUT_STUDIES",
+      "enum": [
+          "NEVER",
+          "ALWAYS",
+          "WITHOUT_STUDIES"
+        ]
+      },
     "dcmStorePermissionServiceExpirationDatePattern": {
       "title": "Store Permission Service Expiration Date Pattern",
       "description": "Regular Expression applied to responses from Store Permission Service to extract the initial Study Expiration Date. E.g. \"expirationdate\"\\s*:\\s*\"([0-9]{8})\". If absent, locally configured Study Retention Policy Rules will be applied. May be overwritten by configured values for particular Archive Network AEs.",
@@ -677,7 +729,8 @@
     "dcmDefaultCharacterSet": {
       "title": "Default Character Set",
       "description": "Value of Specific Character Set (0008,0005) added to Data Sets without Specific Character Set (0008,0005) attribute received by any AE. May be overwritten by configured values for particular Archive Network AEs.",
-      "type": "string"
+      "type": "string",
+      "format": "dcmCharset"
     },
     "dcmStorePermissionServiceErrorCommentPattern": {
       "title": "Store Permission Service Error Comment Pattern",
@@ -710,23 +763,12 @@
       "type": "string",
       "format": "dcmArchiveAETitle"
     },
-    "dcmAttributeFilter": {
-      "title": "Attribute Filter",
-      "description": "Specifies Attributes stored in the database",
-      "type": "array",
-      "titleKey":"{dcmEntity}",
-      "items" : {
-        "$ref": "attributeFilter.schema.json"
-      }
-    },
-    "dcmAttributeSet": {
-      "title": "Attribute Set",
-      "description": "Named Attribute Set for Query Parameter 'comparefield' of DIFF-RS and Query Parameter 'includefields' of WADO-RS Metadata requests.",
-      "type": "array",
-      "titleKey":"{dcmAttributeSetType}:{dcmAttributeSetID}",
-      "items" : {
-        "$ref": "attributeSet.schema.json"
-      }
+    "dcmQueueTasksFetchSize": {
+      "title": "Queue Tasks Fetch Size",
+      "description": "Maximal number of Tasks rescheduled or deleted or canceled in one transaction.",
+      "type": "integer",
+      "default": 100,
+      "minimum": 1
     },
     "dcmRemapRetrieveURL": {
       "title": "Remap Retrieve URL",
@@ -736,11 +778,6 @@
     "dcmAuditRecordRepositoryURL": {
       "title": "Audit Record Repository URL",
       "description": "Access URL of Audit Record Repository. E.g. http://kibana:5601",
-      "type": "string"
-    },
-    "dcmElasticSearchURL": {
-      "title": "Elastic Search URL",
-      "description": "Access URL of Elastic Search. E.g. http://elasticsearch:9200",
       "type": "string"
     },
     "dcmAudit2JsonFhirTemplateURI": {
@@ -785,27 +822,211 @@
         "REPLACE"
       ]
     },
+    "dcmStorageVerificationPolicy": {
+      "title": "Storage Verification Policy",
+      "description": "DB_RECORD_EXISTS: only check for existence of DB records, OBJECT_EXISTS: check if object exists on Storage System, OBJECT_SIZE: check size of object on Storage System, OBJECT_FETCH: fetch object from Storage System), OBJECT_CHECKSUM: recalculate checksum of object on Storage System, S3_MD5SUM: check MD5 checksum of object on S3 Storage System. May be overwritten by configured values for particular Archive Network AEs.",
+      "type": "string",
+      "default": "OBJECT_CHECKSUM",
+      "enum": [
+        "DB_RECORD_EXISTS",
+        "OBJECT_EXISTS",
+        "OBJECT_SIZE",
+        "OBJECT_FETCH",
+        "OBJECT_CHECKSUM",
+        "S3_MD5SUM"
+      ]
+    },
+    "dcmStorageVerificationUpdateLocationStatus": {
+      "title": "Storage Verification Update Location Status",
+      "description": "Indicates if the Status of the Location DB record shall be updated on Storage Verification accordingly. Not effective with Storage Verification Policy: DB_RECORD_EXISTS. False if absent. May be overwritten by configured values for particular Archive Network AEs.",
+      "type": "boolean",
+      "default": false
+    },
+    "dcmStorageVerificationStorageID": {
+      "title": "Storage Verification Storage IDs",
+      "description": "Indicates that for successful Storage Verification the object must be stored on (one of) the specified Storage System. If absent, successful verification of the storage on any Storage System is sufficient. Not effective with Storage Validation Policy: DB_RECORD_EXISTS. May be overwritten by configured values for particular Archive Network AEs.",
+      "type": "array",
+      "items" : { "type": "string" },
+      "format": "dcmStorageID"
+    },
+    "dcmStorageVerificationAETitle": {
+      "title": "Storage Verification AE Title",
+      "description": "Archive AE Title used for scheduled Storage Verifications.",
+      "type": "string",
+      "format": "dcmArchiveAETitle"
+    },
+    "dcmStorageVerificationBatchID": {
+      "title": "Storage Verification Batch ID",
+      "description": "Batch ID of Storage Verification Tasks triggered by scheduler.",
+      "type": "string"
+    },
+    "dcmStorageVerificationInitialDelay": {
+      "title": "Storage Verification Initial Delay",
+      "description": "Delay of first Storage Verification of a Series after it was received. May be overwritten by configured values for particular Archive Network AEs.",
+      "type": "string",
+      "format": "dcmPeriod"
+    },
+    "dcmStorageVerificationPeriod": {
+      "title": "Storage Verification Period",
+      "description": "Period between successive Storage Verifications of one Series.",
+      "type": "string",
+      "format": "dcmPeriod"
+    },
+    "dcmStorageVerificationMaxScheduled": {
+      "title": "Maximal scheduled Storage Verifications",
+      "description": "Maximal number of scheduled Storage Verification tasks on this device. Shall be set > 0 to distribute tasks over nodes of a clustered archive.",
+      "type": "integer",
+      "default": 0,
+      "minimum": 0
+    },
+    "dcmStorageVerificationPollingInterval": {
+      "title": "Storage Verification Polling Interval",
+      "description": "Polling Interval for Series scheduled for Storage Verification in ISO-8601 duration format PnDTnHnMn.nS.",
+      "type": "string",
+      "format": "dcmDuration"
+    },
+    "dcmStorageVerificationSchedule": {
+      "title": "Storage Verification Schedule",
+      "description": "Limits Storage Verification to specified times in format 'hour=[0-23] dayOfWeek=[0-6]' (0=Sunday).",
+      "type": "array",
+      "items": {
+        "type": "string"
+      },
+      "format": "dcmSchedule"
+    },
+    "dcmStorageVerificationFetchSize": {
+      "title": "Storage Verification Fetch Size",
+      "description": "Maximal number of Series scheduled for Storage Verification fetched by one query.",
+      "type": "integer",
+      "default" : 100,
+      "minimum": 0,
+      "exclusiveMinimum": true
+    },
+    "dcmCompressionAETitle": {
+      "title": "Compression AE Title",
+      "description": "Archive AE Title used for delayed Compression.",
+      "type": "string",
+      "format": "dcmArchiveAETitle"
+    },
+    "dcmCompressionPollingInterval": {
+      "title": "Compression Polling Interval",
+      "description": "Polling Interval for Series to be compressed in ISO-8601 duration format PnDTnHnMn.nS.",
+      "type": "string",
+      "format": "dcmDuration"
+    },
+    "dcmCompressionThreads": {
+      "title": "Compression Threads",
+      "description": "Number of Threads used for Compression.",
+      "type": "integer",
+      "default" : 1,
+      "minimum": 0,
+      "exclusiveMinimum": true
+    },
+    "dcmCompressionSchedule": {
+      "title": "Compression Schedule",
+      "description": "Limits compression to specified times in format 'hour=[0-23] dayOfWeek=[0-6]' (0=Sunday)",
+      "type": "array",
+      "items": {
+        "type": "string"
+      },
+      "format": "dcmSchedule"
+    },
+    "dcmCompressionFetchSize": {
+      "title": "Compression Fetch Size",
+      "description": "Maximal number of Series fetched for compression by one query.",
+      "type": "integer",
+      "default" : 100,
+      "minimum": 0,
+      "exclusiveMinimum": true
+    },
+    "dcmDiffTaskProgressUpdateInterval": {
+      "title": "Diff Task Progress Update Interval",
+      "description": "Interval of updating Diff Tasks in process for progress monitoring; disabled if absent.",
+      "type": "string",
+      "format": "dcmDuration"
+    },
+    "dcmPatientVerificationPDQServiceID": {
+      "title": "Patient Verification PDQ Service ID",
+      "description": "ID of PDQ Service used for Verification of Patient Demographic. If absent, no Patient Verification will be performed.",
+      "type": "string",
+      "format": "dcmPDQServiceID"
+    },
+    "dcmPatientVerificationPollingInterval": {
+      "title": "Patient Verification Polling Interval",
+      "description": "Patient Verification Polling Interval. If absent, no Patient Verification will be performed.",
+      "type": "string",
+      "format": "dcmDuration"
+    },
+    "dcmPatientVerificationFetchSize": {
+      "title": "Patient Verification Fetch Size",
+      "description": "Maximal number of Patients fetched for Patient Verification in one query.",
+      "type": "integer",
+      "default" : 100,
+      "minimum": 0,
+      "exclusiveMinimum": true
+    },
+    "dcmPatientVerificationAdjustIssuerOfPatientID": {
+      "title": "Patient Verification Adjust Issuer of Patient ID",
+      "description": "Indicates if the Issuer Of Patient ID shall be adjusted to the value returned by the PDQ Service.",
+      "type": "boolean",
+      "default" : false
+    },
+    "dcmPatientVerificationPeriod": {
+      "title": "Patient Verification Period",
+      "description": "Period in which Patient Demographic will be verified. If absent, Patient Verification will not be renewed for Patients verified in the past.",
+      "type": "string",
+      "format": "dcmPeriod"
+    },
+    "dcmPatientVerificationPeriodOnNotFound": {
+      "title": "Patient Verification Period Not Found",
+      "description": "Period in which Patient Demographic will be retried for Patients which were not found by the configured PDQ Service on last attempt. If absent, Patient Verification will not be retried for Patients not found in the past.",
+      "type": "string",
+      "format": "dcmPeriod"
+    },
+    "dcmPatientVerificationRetryInterval": {
+      "title": "Patient Verification Retry Interval",
+      "description": "Patient Verification Retry Interval in which failed attempts to verify Patient Demographics against the PDQ Service configured by Patient Verification PDQ Service ID will be retried until the maximal number of retries specified by Patient Verification Max Retries is reached. If absent, failed Patient Verification attempts will not be retried.",
+      "type": "string",
+      "format": "dcmDuration"
+    },
+    "dcmPatientVerificationMaxRetries": {
+      "title": "Patient Verification Maximum Number of Retries",
+      "description": "Maximum number of retries to verify Patient Demographics against the PDQ Service configured by dcmPatientVerificationPDQServiceID. Only effective if Patient Verification Retry Interval is specified. -1 = forever.",
+      "type": "integer",
+      "default": 0,
+      "minimum": -1
+    },
+    "dcmPatientVerificationMaxStaleness": {
+      "title": "Patient Verification Maximum Staleness",
+      "description": "Indicates to renew the verification of Patient Demographics on receive of objects for a patient, if previous verification is longer ago as the specified Interval. If absent, Patient Verification on receive of objects is disabled.",
+      "type": "string",
+      "format": "dcmDuration"
+    },
     "hl7ADTSendingApplication": {
       "title": "HL7 ADT Sending Application",
       "description": "Application|Facility name of Sending Application for HL7 ADT messages to synchronize external systems about performed Patient Information updates. If absent, synchronization of external systems by HL7 ADT messages is disabled.",
-      "type": "string"
+      "type": "string",
+      "format": "hl7ApplicationName"
     },
     "hl7ADTReceivingApplication": {
       "title": "HL7 ADT Receiving Application",
       "description": "Application|Facility name of Receiving Application for HL7 ADT messages to synchronize external systems about performed Patient Information updates. If absent, synchronization of external systems by HL7 ADT messages is disabled.",
       "type": "array",
-      "items" : { "type": "string" }
+      "items" : { "type": "string" },
+      "format": "hl7ApplicationName"
     },
     "hl7PSUSendingApplication": {
       "title": "HL7 Procedure Status Update Sending Application",
       "description": "Application|Facility name of Sending Application for HL7 Procedure Status Update. HL7 Procedure Status Update disabled, if absent. May be overwritten by configured values for particular Archive Network AEs.",
-      "type": "string"
+      "type": "string",
+      "format": "hl7ApplicationName"
     },
     "hl7PSUReceivingApplication": {
       "title": "HL7 Procedure Status Update Receiving Application",
       "description": "Application|Facility name of Receiving Application for HL7 Procedure Status Update. May be overwritten by configured values for particular Archive Network AEs.",
       "type": "array",
-      "items" : { "type": "string" }
+      "items" : { "type": "string" },
+      "format": "hl7ApplicationName"
     },
     "hl7PSUDelay": {
       "title": "HL7 Procedure Status Update Delay",
@@ -851,6 +1072,48 @@
       "type": "boolean",
       "default": true
     },
+    "dcmAuditSoftwareConfigurationVerbose": {
+      "title": "Audit Software Configuration Verbose",
+      "description": "Specifies if Child Objects and Attributes of created Objects should be included in Software Configuration Audit Message.",
+      "type": "boolean",
+      "default": false
+    },
+    "hl7UseNullValue": {
+      "title": "Use HL7 Null Value",
+      "description": "Specifies if HL7 v2 null values (|\"\"|) are used in sent HL7 messages for not present or empty entity attributes. Required to unset entity attributes at the remote HL7 Application. May be overwritten by configured values for particular Archive HL7 Application.",
+      "type": "boolean",
+      "default": false
+    },
+    "dcmRejectionNoteStorageAET": {
+      "title": "Rejection Note Storage AE title",
+      "description": "Title of Archive Application Entity, of which first configured Object Storage will be used for storing Rejection Notes generated either by IOCM-RS services or by Delete Expired Studies Scheduler. If absent, for IOCM services the Object Storage configured for Archive AE referred in the IOCM-RS request will be used, or for Delete Expired Studies Scheduler the Object Storage configured for Reject Expired Studies AE will be used.",
+      "type": "string",
+      "format": "dcmArchiveAETitle"
+    },
+    "dcmUIConfigurationDeviceName": {
+      "title": "UI Configuration Device Name",
+      "description": "Specifies the device name containing the Archive UI Configuration.",
+      "type": "string",
+      "format": "dicomDeviceName"
+    },
+    "dcmAttributeFilter": {
+      "title": "Attribute Filter",
+      "description": "Specifies Attributes stored in the database",
+      "type": "array",
+      "titleKey":"{dcmEntity}",
+      "items" : {
+        "$ref": "attributeFilter.schema.json"
+      }
+    },
+    "dcmAttributeSet": {
+      "title": "Attribute Set",
+      "description": "Named Attribute Set for Query Parameter 'comparefield' of DIFF-RS and Query Parameter 'includefields' of WADO-RS Metadata requests.",
+      "type": "array",
+      "titleKey":"{dcmAttributeSetType}:{dcmAttributeSetID}",
+      "items" : {
+        "$ref": "attributeSet.schema.json"
+      }
+    },
     "dcmStorage": {
       "title": "Storage Descriptor",
       "description": "Specifies Storage System",
@@ -878,6 +1141,15 @@
         "$ref": "queue.schema.json"
       }
     },
+    "dcmPDQService": {
+      "title": "PDQ Service Descriptor",
+      "description": "PDQ Service Descriptor",
+      "type": "array",
+      "titleKey":"{dcmPDQServiceID}",
+      "items" : {
+        "$ref": "pdqService.schema.json"
+      }
+    },
     "dcmExporter": {
       "title": "Exporter Descriptor",
       "description": "Exporter Descriptor",
@@ -896,6 +1168,15 @@
         "$ref": "exportRule.schema.json"
       }
     },
+    "dcmPrefetchRule": {
+      "title": "DICOM Prefetch Rule",
+      "description": "Prefetch Rules applied to DICOM objects received by any AE. May be supplemented by configured Prefetch Rules for particular Archive Network AEs.",
+      "type": "array",
+      "titleKey":"{cn}",
+      "items" : {
+        "$ref": "prefetchRule.schema.json"
+      }
+    },
     "dcmRSForwardRule": {
       "title": "RESTful Forward Rule",
       "description": "RESTful Forward Rules. May be supplemented by configured RESTful Forward Rules for particular Archive Network AEs.",
@@ -903,6 +1184,15 @@
       "titleKey":"{cn}",
       "items" : {
         "$ref": "rsForwardRule.schema.json"
+      }
+    },
+    "dcmKeycloakServer": {
+      "title": "Keycloak Server",
+      "description": "Keycloak Server",
+      "type": "array",
+      "titleKey":"{dcmKeycloakServerID}",
+      "items" : {
+        "$ref": "keycloakServer.schema.json"
       }
     },
     "dcmArchiveCompressionRule": {
@@ -968,6 +1258,24 @@
         "$ref": "hl7ForwardRule.schema.json"
       }
     },
+    "hl7PrefetchRule": {
+      "title": "HL7 Prefetch Rule",
+      "description": "Prefetch Rules applied to HL7 messages received by any HL7 Application. May be supplemented by configured Prefetch Rules for particular HL7 Application.",
+      "type": "array",
+      "titleKey":"{cn}",
+      "items" : {
+        "$ref": "hl7PrefetchRule.schema.json"
+      }
+    },
+    "hl7StudyRetentionPolicy": {
+      "title": "HL7 Study Retention Policy",
+      "description": "HL7 Study Retention Policies triggered by HL7 messages received by any HL7 Application. May be supplemented by configured Study Retention Policies for particular HL7 Applications.",
+      "type": "array",
+      "titleKey":"{cn}",
+      "items" : {
+        "$ref": "hl7StudyRetentionPolicy.schema.json"
+      }
+    },
     "hl7OrderScheduledStation": {
       "title": "Scheduled Station for HL7 Order",
       "description": "Scheduled Station selected on MWL HL7 Order Feed received by any HL7 Application. May be supplemented by configured values for particular HL7 Applications.",
@@ -984,6 +1292,22 @@
       "titleKey":"{dcmSPSStatus}",
       "items" : {
         "$ref": "hl7OrderSPSStatus.schema.json"
+      }
+    },
+    "dcmXRoadProperty": {
+      "title": "X-Road Property",
+      "description": "Properties for accessing Estonian National Patient Registry in format <name>=<value>",
+      "type": "array",
+      "items": {
+        "type": "string"
+      }
+    },
+    "dcmImpaxReportProperty": {
+      "title": "Impax Report Property",
+      "description": "Properties for accessing Agfa Impax Report Service in format <name>=<value>",
+      "type": "array",
+      "items": {
+        "type": "string"
       }
     }
   }

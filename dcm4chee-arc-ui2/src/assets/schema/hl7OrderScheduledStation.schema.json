@@ -4,7 +4,7 @@
   "type": "object",
   "required": [
     "cn",
-    "hl7OrderScheduledStationDeviceReference",
+    "hl7OrderScheduledStationDeviceName",
     "dcmRulePriority"
   ],
   "properties": {
@@ -13,9 +13,9 @@
       "description": "Arbitrary/Meaningful name for the Scheduled Station Order Mapping",
       "type": "string"
     },
-    "hl7OrderScheduledStationDeviceReference": {
-      "title": "Scheduled Station Device Reference",
-      "description": "The DN of a dicomDeviceObject referenced by hl7OrderScheduledStation",
+    "hl7OrderScheduledStationDeviceName": {
+      "title": "Scheduled Station Device Name",
+      "description": "Device name of Scheduled Station used for HL7 Order Messages.",
       "type": "string",
       "format": "dicomDeviceName"
     },
@@ -28,7 +28,7 @@
     },
     "dcmProperty": {
       "title": "Conditions",
-      "description": "Conditions in format {attributeID}[!]={regEx} or MSH-#[!]={regEx}",
+      "description": "Conditions in format {SEG}-{Seq#}[.{Comp#}[.{SubComp#}]][!]={regEx}. Examples: MSH-4=FORWARD or MSH-9=ADT\\^A28\\^ADT_A05",
       "type": "array",
       "items": {
         "type": "string"

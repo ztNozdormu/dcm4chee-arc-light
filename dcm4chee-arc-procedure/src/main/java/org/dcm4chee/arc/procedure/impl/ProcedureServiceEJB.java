@@ -111,7 +111,17 @@ public class ProcedureServiceEJB {
                 if (mwlItem.getPatient().getPk() != patient.getPk())
                     throw new PatientMismatchException("" + patient + " does not match " +
                             mwlItem.getPatient() + " in previous " + mwlItem);
-                updateMWL(ctx, issuerOfAccessionNumber, mwlItem, mwlAttrs);
+
+                Attributes attrs = mwlItem.getAttributes();
+                Attributes spsItem = attrs.getNestedDataset(Tag.ScheduledProcedureStepSequence);
+                Attributes mwlSPSItem = mwlAttrs.getNestedDataset(Tag.ScheduledProcedureStepSequence);
+                attrs.remove(Tag.ScheduledProcedureStepSequence);
+                mwlAttrs.remove(Tag.ScheduledProcedureStepSequence);
+                if (!(attrs.update(ctx.getAttributeUpdatePolicy(), mwlAttrs, null)
+                        && spsItem.update(ctx.getAttributeUpdatePolicy(), mwlSPSItem, null)))
+                    return;
+                attrs.newSequence(Tag.ScheduledProcedureStepSequence, 1).add(spsItem);
+                updateMWL(ctx, issuerOfAccessionNumber, mwlItem, attrs);
             }
         }
         for (Attributes mwlAttrs : mwlAttrsMap.values())
@@ -152,6 +162,9 @@ public class ProcedureServiceEJB {
         ArchiveDeviceExtension arcDev = device.getDeviceExtension(ArchiveDeviceExtension.class);
         MWLItem mwlItem = new MWLItem();
         mwlItem.setPatient(patient);
+        Attributes spsItem = attrs.getNestedDataset(Tag.ScheduledProcedureStepSequence);
+        if (!spsItem.containsValue(Tag.ScheduledProcedureStepStartDate))
+            spsItem.setDate(Tag.ScheduledProcedureStepStartDateAndTime, new Date());
         mwlItem.setAttributes(attrs, arcDev.getAttributeFilter(Entity.MWL), arcDev.getFuzzyStr());
         mwlItem.setIssuerOfAccessionNumber(issuerOfAccessionNumber);
         em.persist(mwlItem);

@@ -31,6 +31,9 @@ DCM4CHE.elementName = (function (dictionary) {
         tag = tag.slice(0,2) + "xx" + tag.slice(4);
       }
     }
+    if(tag === "all"){
+        return dictionary;
+    }
     while (i--) {
       if (privateCreator === tables[i].privateCreator) {
         value = tables[i][tag];
@@ -261,6 +264,7 @@ DCM4CHE.elementName = (function (dictionary) {
 "0008114B":"Referenced Real World Value Mapping Instance Sequence",
 "00081150":"Referenced SOP Class UID",
 "00081155":"Referenced SOP Instance UID",
+"00081156":"Definition Source Sequence",
 "0008115A":"SOP Classes Supported",
 "00081160":"Referenced Frame Number",
 "00081161":"Simple Frame List",
@@ -2253,6 +2257,7 @@ DCM4CHE.elementName = (function (dictionary) {
 "00400612":"Specimen Preparation Step Content Item Sequence",
 "00400620":"Specimen Localization Content Item Sequence",
 "004006FA":"Slide Identifier",
+"00400710":"Whole Slide Microscopy Image Frame Type Sequence",
 "0040071A":"Image Center Point Coordinates Sequence",
 "0040072A":"X Offset in Slide Coordinate System",
 "0040073A":"Y Offset in Slide Coordinate System",
@@ -2300,6 +2305,7 @@ DCM4CHE.elementName = (function (dictionary) {
 "00404005":"Scheduled Procedure Step Start DateTime",
 "00404006":"Multiple Copies Flag",
 "00404007":"Performed Processing Applications Code Sequence",
+"00404008":"Scheduled Procedure Step Expiration DateTime",
 "00404009":"Human Performer Code Sequence",
 "00404010":"Scheduled Procedure Step Modification DateTime",
 "00404011":"Expected Completion DateTime",
@@ -2619,6 +2625,8 @@ DCM4CHE.elementName = (function (dictionary) {
 "0048021E":"Column Position In Total Image Pixel Matrix",
 "0048021F":"Row Position In Total Image Pixel Matrix",
 "00480301":"Pixel Origin Interpretation",
+"00480302":"Number of Optical Paths",
+"00480303":"Total Pixel Matrix Focal Planes",
 "00500004":"Calibration Image",
 "00500010":"Device Sequence",
 "00500012":"Container Component Type Code Sequence",
@@ -2767,6 +2775,7 @@ DCM4CHE.elementName = (function (dictionary) {
 "00620010":"Segmentation Fractional Type",
 "00620011":"Segmented Property Type Modifier Code Sequence",
 "00620012":"Used Segments Sequence",
+"00620013":"Segments Overlap",
 "00620020":"Tracking ID",
 "00620021":"Tracking UID",
 "00640002":"Deformable Registration Sequence",
@@ -2914,6 +2923,9 @@ DCM4CHE.elementName = (function (dictionary) {
 "006865F0":"2D Plane Intersection",
 "00686610":"3D Plane Origin",
 "00686620":"3D Plane Normal",
+"00687001":"Model Modification",
+"00687002":"Model Mirroring",
+"00687003":"Model Usage Code Sequence",
 "00700001":"Graphic Annotation Sequence",
 "00700002":"Graphic Layer",
 "00700003":"Bounding Box Annotation Units",
@@ -3014,6 +3026,7 @@ DCM4CHE.elementName = (function (dictionary) {
 "00700314":"Used Fiducials Sequence",
 "00700318":"Graphic Coordinates Data Sequence",
 "0070031A":"Fiducial UID",
+"0070031B":"Referenced Fiducial UID",
 "0070031C":"Fiducial Set Sequence",
 "0070031E":"Fiducial Sequence",
 "0070031F":"Fiducials Property Category Code Sequence",
@@ -3408,6 +3421,7 @@ DCM4CHE.elementName = (function (dictionary) {
 "04000563":"Modifying System",
 "04000564":"Source of Previous Values",
 "04000565":"Reason for the Attribute Modification",
+"04000600":"Instance Origin Status",
 "1000xxx0":"Escape Triplet",
 "1000xxx1":"Run Length Triplet",
 "1000xxx2":"Huffman Table Size",
@@ -3601,6 +3615,7 @@ DCM4CHE.elementName = (function (dictionary) {
 "30060030":"RT Related ROI Sequence",
 "30060033":"RT ROI Relationship",
 "30060036":"ROI Generation Algorithm",
+"30060037":"ROI Derivation Algorithm Identification Sequence",
 "30060038":"ROI Generation Description",
 "30060039":"ROI Contour Sequence",
 "30060040":"Contour Sequence",
@@ -3797,6 +3812,7 @@ DCM4CHE.elementName = (function (dictionary) {
 "300A0091":"Alternate Beam Dose",
 "300A0092":"Alternate Beam Dose Type",
 "300A0093":"Depth Value Averaging Flag",
+"300A0094":"Beam Dose Point Source to External Contour Distance",
 "300A00A0":"Number of Brachy Application Setups",
 "300A00A2":"Brachy Application Setup Dose Specification Point",
 "300A00A4":"Brachy Application Setup Dose",

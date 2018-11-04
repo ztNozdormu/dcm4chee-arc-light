@@ -68,6 +68,21 @@
       },
       "format": "dcmSOPClass"
     },
+    "dcmDeIdentification": {
+      "title": "De-identification",
+      "description": "De-identify objects according the Basic Application Level Confidentiality Profile specified in DICOM PS3.15. Selecting any Option implicitly includes the Basic Application Level Confidentiality Profile.",
+      "type": "array",
+      "items": {
+        "type": "string",
+        "enum": [
+          "BasicApplicationConfidentialityProfile",
+          "RetainLongitudinalTemporalInformationFullDatesOption",
+          "RetainDeviceIdentityOption",
+          "RetainInstitutionIdentityOption",
+          "RetainUIDsOption"
+        ]
+      }
+    },
     "dcmURI": {
       "title": "XSL Stylesheet URI",
       "description": "Specifies URI of the XSL style sheet for Attribute Coercion",
@@ -102,14 +117,40 @@
     },
     "dcmAttributeUpdatePolicy": {
       "title": "Attribute Update Policy",
-      "description": "Specifies how attributes shall be updated with attributes fetched from Leading C-FIND SCP.",
+      "description": "Specifies how attributes shall be updated with attributes fetched from Leading C-FIND SCP. SUPPLEMENT (= attributes not present in original dataset will be supplemented), REPLACE (= original dataset is completely replaced), MERGE (= attribute values will be written from new dataset), OVERWRITE (= attribute values if null in new dataset, will be nullified in original dataset)",
       "type": "string",
       "default": "MERGE",
       "enum": [
         "SUPPLEMENT",
         "MERGE",
+        "REPLACE",
         "OVERWRITE"
       ]
+    },
+    "dcmNullifyTag": {
+      "title": "Nullify Attribute Tag",
+      "description": "DICOM Tag of Attribute to be nullified as hex string",
+      "type": "array",
+      "items" : { "type": "string" },
+      "format": "dcmTag"
+    },
+    "dcmNullifyIssuerOfPatientID": {
+      "title": "Nullify Issuer of Patient ID",
+      "description": "Conditionally nullify Issuer of Patient ID (0010,0021) and Issuer of Patient ID Qualifiers Sequence (0010,0024) from received objects",
+      "type": "string",
+      "enum": [
+        "ALWAYS",
+        "MATCHING",
+        "NOT_MATCHING"
+      ]
+    },
+    "dcmIssuerOfPatientID": {
+      "title": "Issuer of Patient ID",
+      "description": "Issuer of Patient ID (0010,0021), and optionally also values for the Universal Entity ID (0040,0032) and the Universal Entity ID Type (0040,0033) of the Item of the Issuer of Patient ID Qualifiers Sequence (0010,0024) against values in received objects are matched, if Nullify Issuer of Patient ID is set to MATCHING or NOT_MATCHING. Format: <Issuer of Patient ID> [& <Universal Entity ID> & <Universal Entity ID Type>].",
+      "type": "array",
+      "items": {
+        "type": "string"
+      }
     },
     "dcmSupplementFromDeviceName": {
       "title": "Supplement from Device",

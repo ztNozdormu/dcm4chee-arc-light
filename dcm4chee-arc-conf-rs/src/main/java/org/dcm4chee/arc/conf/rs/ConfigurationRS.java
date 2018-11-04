@@ -45,11 +45,11 @@ import org.dcm4che3.conf.api.hl7.HL7ApplicationAlreadyExistsException;
 import org.dcm4che3.conf.api.hl7.HL7Configuration;
 import org.dcm4che3.conf.json.ConfigurationDelegate;
 import org.dcm4che3.conf.json.JsonConfiguration;
-import org.dcm4che3.net.ApplicationEntityInfo;
-import org.dcm4che3.net.Device;
-import org.dcm4che3.net.DeviceInfo;
-import org.dcm4che3.net.HL7ApplicationInfo;
+import org.dcm4che3.net.*;
+import org.dcm4che3.net.hl7.HL7ApplicationInfo;
 import org.dcm4che3.util.ByteUtils;
+import org.dcm4che3.util.StringUtils;
+import org.dcm4chee.arc.conf.ArchiveDeviceExtension;
 import org.dcm4chee.arc.event.SoftwareConfiguration;
 import org.jboss.resteasy.annotations.cache.NoCache;
 import org.slf4j.Logger;
@@ -94,14 +94,26 @@ public class ConfigurationRS {
     @Inject
     private Event<SoftwareConfiguration> softwareConfigurationEvent;
 
-    @QueryParam("options")
+    @Inject
+    private Device device;
+
+    @QueryParam("register")
     @Pattern(regexp = "true|false")
     private String register;
 
+    @QueryParam("dcmWebServiceClass")
+    @Pattern(regexp = "WADO_URI|WADO_RS|STOW_RS|QIDO_RS|UPS_RS|DCM4CHEE_ARC")
+    private String dcmWebServiceClass;
+
     private ConfigurationDelegate configDelegate = new ConfigurationDelegate() {
         @Override
-        public Device findDevice(String name) throws ConfigurationException {
-            return conf.findDevice(name);
+        public Device findDevice(String name) {
+            try {
+                return conf.findDevice(name);
+            } catch (ConfigurationException e) {
+                LOG.info("Failed to load device with name " + name, e);
+            }
+            return null;
         }
     };
 
@@ -109,22 +121,20 @@ public class ConfigurationRS {
     @NoCache
     @Path("/devices/{DeviceName}")
     @Produces("application/json")
-    public StreamingOutput getDevice(@PathParam("DeviceName") String deviceName) throws Exception {
+    public StreamingOutput getDevice(@PathParam("DeviceName") String deviceName) {
+        logRequest();
         final Device device;
         try {
             device = conf.findDevice(deviceName);
-            return new StreamingOutput() {
-                @Override
-                public void write(OutputStream out) throws IOException {
-                    JsonGenerator w = Json.createGenerator(out);
-                    jsonConf.writeTo(device, w, true);
-                    w.flush();
-                }
+            return out -> {
+                JsonGenerator w = Json.createGenerator(out);
+                jsonConf.writeTo(device, w, true);
+                w.flush();
             };
         } catch (ConfigurationNotFoundException e) {
-            throw new WebApplicationException(getResponse(e.getMessage(), Response.Status.NOT_FOUND));
+            throw new WebApplicationException(errResponse(e.getMessage(), Response.Status.NOT_FOUND));
         } catch (Exception e) {
-            throw new WebApplicationException(getResponseAsTextPlain(e));
+            throw new WebApplicationException(errResponseAsTextPlain(e));
         }
     }
 
@@ -132,23 +142,21 @@ public class ConfigurationRS {
     @NoCache
     @Path("/devices")
     @Produces("application/json")
-    public StreamingOutput listDevices() throws Exception {
+    public StreamingOutput listDevices() {
+        logRequest();
         try {
-            final DeviceInfo[] deviceInfos = conf.listDeviceInfos(new DeviceInfoBuilder(uriInfo).deviceInfo);
+            final DeviceInfo[] deviceInfos = conf.listDeviceInfos(toDeviceInfo(uriInfo));
             Arrays.sort(deviceInfos, Comparator.comparing(DeviceInfo::getDeviceName));
-            return new StreamingOutput() {
-                @Override
-                public void write(OutputStream out) throws IOException {
+            return out -> {
                     JsonGenerator gen = Json.createGenerator(out);
                     gen.writeStartArray();
                     for (DeviceInfo deviceInfo : deviceInfos)
                         jsonConf.writeTo(deviceInfo, gen);
                     gen.writeEnd();
                     gen.flush();
-                }
             };
         } catch (Exception e) {
-            throw new WebApplicationException(getResponseAsTextPlain(e));
+            throw new WebApplicationException(errResponseAsTextPlain(e));
         }
     }
 
@@ -156,24 +164,43 @@ public class ConfigurationRS {
     @NoCache
     @Path("/aes")
     @Produces("application/json")
-    public StreamingOutput listAETs() throws Exception {
+    public StreamingOutput listAETs() {
+        logRequest();
         try {
-            final ApplicationEntityInfo[] aeInfos =
-                    conf.listAETInfos(new ApplicationEntityInfoBuilder(uriInfo).aetInfo);
+            final ApplicationEntityInfo[] aeInfos = conf.listAETInfos(toApplicationEntityInfo(uriInfo));
             Arrays.sort(aeInfos, Comparator.comparing(ApplicationEntityInfo::getAETitle));
-            return new StreamingOutput() {
-                @Override
-                public void write(OutputStream out) throws IOException {
-                    JsonGenerator gen = Json.createGenerator(out);
-                    gen.writeStartArray();
-                    for (ApplicationEntityInfo aeInfo : aeInfos)
-                        jsonConf.writeTo(aeInfo, gen);
-                    gen.writeEnd();
-                    gen.flush();
-                }
+            return out -> {
+                JsonGenerator gen = Json.createGenerator(out);
+                gen.writeStartArray();
+                for (ApplicationEntityInfo aeInfo : aeInfos)
+                    jsonConf.writeTo(aeInfo, gen);
+                gen.writeEnd();
+                gen.flush();
             };
         } catch (Exception e) {
-            throw new WebApplicationException(getResponseAsTextPlain(e));
+            throw new WebApplicationException(errResponseAsTextPlain(e));
+        }
+    }
+
+    @GET
+    @NoCache
+    @Path("/webapps")
+    @Produces("application/json")
+    public StreamingOutput listWebApps() {
+        logRequest();
+        try {
+            final WebApplicationInfo[] webappInfos = conf.listWebApplicationInfos(toWebApplicationInfo(uriInfo));
+            Arrays.sort(webappInfos, Comparator.comparing(WebApplicationInfo::getApplicationName));
+            return out -> {
+                JsonGenerator gen = Json.createGenerator(out);
+                gen.writeStartArray();
+                for (WebApplicationInfo webappInfo : webappInfos)
+                    jsonConf.writeTo(webappInfo, gen);
+                gen.writeEnd();
+                gen.flush();
+            };
+        } catch (Exception e) {
+            throw new WebApplicationException(errResponseAsTextPlain(e));
         }
     }
 
@@ -181,25 +208,22 @@ public class ConfigurationRS {
     @NoCache
     @Path("/hl7apps")
     @Produces("application/json")
-    public StreamingOutput listHL7Apps() throws Exception {
+    public StreamingOutput listHL7Apps() {
+        logRequest();
         try {
             HL7Configuration hl7Conf = conf.getDicomConfigurationExtension(HL7Configuration.class);
-            final HL7ApplicationInfo[] hl7AppInfos =
-                    hl7Conf.listHL7AppInfos(new HL7ApplicationInfoBuilder(uriInfo).hl7AppInfo);
+            final HL7ApplicationInfo[] hl7AppInfos = hl7Conf.listHL7AppInfos(toHL7ApplicationInfo(uriInfo));
             Arrays.sort(hl7AppInfos, Comparator.comparing(HL7ApplicationInfo::getHl7ApplicationName));
-            return new StreamingOutput() {
-                @Override
-                public void write(OutputStream out) throws IOException, WebApplicationException {
+            return out -> {
                     JsonGenerator gen = Json.createGenerator(out);
                     gen.writeStartArray();
                     for (HL7ApplicationInfo hl7AppInfo : hl7AppInfos)
                         jsonConf.writeTo(hl7AppInfo, gen);
                     gen.writeEnd();
                     gen.flush();
-                }
             };
         } catch (Exception e) {
-            throw new WebApplicationException(getResponseAsTextPlain(e));
+            throw new WebApplicationException(errResponseAsTextPlain(e));
         }
     }
 
@@ -207,12 +231,12 @@ public class ConfigurationRS {
     @NoCache
     @Path("/unique/aets")
     @Produces("application/json")
-    public StreamingOutput listRegisteredAETS() throws Exception {
+    public StreamingOutput listRegisteredAETS() {
+        logRequest();
         try {
-            String[] registeredAETs = conf.listRegisteredAETitles();
-            return writeJsonArray(registeredAETs);
+            return writeJsonArray(conf.listRegisteredAETitles());
         } catch (Exception e) {
-            throw new WebApplicationException(getResponseAsTextPlain(e));
+            throw new WebApplicationException(errResponseAsTextPlain(e));
         }
     }
 
@@ -220,35 +244,35 @@ public class ConfigurationRS {
     @NoCache
     @Path("/unique/hl7apps")
     @Produces("application/json")
-    public StreamingOutput listRegisteredHL7Apps() throws Exception {
+    public StreamingOutput listRegisteredHL7Apps() {
+        logRequest();
         try {
-            HL7Configuration hl7Conf = conf.getDicomConfigurationExtension(HL7Configuration.class);
-            String[] registeredHL7Apps = hl7Conf.listRegisteredHL7ApplicationNames();
-            return writeJsonArray(registeredHL7Apps);
+            return writeJsonArray(
+                    conf.getDicomConfigurationExtension(HL7Configuration.class)
+                            .listRegisteredHL7ApplicationNames());
         } catch (Exception e) {
-            throw new WebApplicationException(getResponseAsTextPlain(e));
+            throw new WebApplicationException(errResponseAsTextPlain(e));
         }
     }
 
     private StreamingOutput writeJsonArray(String[] values) {
-        return new StreamingOutput() {
-            @Override
-            public void write(OutputStream out) throws IOException {
+        return out -> {
                 JsonGenerator gen = Json.createGenerator(out);
                 gen.writeStartArray();
                 for (String value : values)
                     gen.write(value);
                 gen.writeEnd();
                 gen.flush();
-            }
         };
     }
 
     private EnumSet<DicomConfiguration.Option> options() {
+        ArchiveDeviceExtension arcDev = device.getDeviceExtension(ArchiveDeviceExtension.class);
         EnumSet<DicomConfiguration.Option> options = EnumSet.of(
                 DicomConfiguration.Option.PRESERVE_VENDOR_DATA,
                 DicomConfiguration.Option.PRESERVE_CERTIFICATE,
-                DicomConfiguration.Option.CONFIGURATION_CHANGES);
+                arcDev.isAuditSoftwareConfigurationVerbose()
+                    ? DicomConfiguration.Option.CONFIGURATION_CHANGES_VERBOSE : DicomConfiguration.Option.CONFIGURATION_CHANGES);
         if (register == null || Boolean.parseBoolean(register))
             options.add(DicomConfiguration.Option.REGISTER);
         return options;
@@ -257,129 +281,127 @@ public class ConfigurationRS {
     @POST
     @Path("/devices/{DeviceName}")
     @Consumes("application/json")
-    public void createDevice(@PathParam("DeviceName") String deviceName, Reader content) throws Exception {
+    public void createDevice(@PathParam("DeviceName") String deviceName, Reader content) {
         logRequest();
         try {
             Device device = jsonConf.loadDeviceFrom(Json.createParser(content), configDelegate);
             if (!device.getDeviceName().equals(deviceName))
-                throw new WebApplicationException(
-                        "Device name in content[" + device.getDeviceName() + "] does not match Device name in URL",
-                        Response.Status.BAD_REQUEST);
+                throw new IllegalArgumentException(
+                        "Device name in content[" + device.getDeviceName() + "] does not match Device name in URL");
             ConfigurationChanges diffs = conf.persist(device, options());
             softwareConfigurationEvent.fire(new SoftwareConfiguration(request, deviceName, diffs));
         } catch (ConfigurationNotFoundException e) {
-            throw new WebApplicationException(getResponse(e.getMessage(), Response.Status.NOT_FOUND));
+            throw new WebApplicationException(errResponse(e.getMessage(), Response.Status.NOT_FOUND));
         } catch (IllegalArgumentException e) {
-            throw new WebApplicationException(getResponse(e.getMessage(), Response.Status.BAD_REQUEST));
+            throw new WebApplicationException(errResponse(e.getMessage(), Response.Status.BAD_REQUEST));
         } catch (JsonParsingException e) {
             throw new WebApplicationException(
-                    getResponse(e.getMessage() + " at location : " + e.getLocation(), Response.Status.BAD_REQUEST));
+                    errResponse(e.getMessage() + " at location : " + e.getLocation(), Response.Status.BAD_REQUEST));
         } catch (AETitleAlreadyExistsException | HL7ApplicationAlreadyExistsException e) {
-            throw new WebApplicationException(getResponse(e.getMessage(), Response.Status.CONFLICT));
+            throw new WebApplicationException(errResponse(e.getMessage(), Response.Status.CONFLICT));
         } catch (Exception e) {
-            throw new WebApplicationException(getResponseAsTextPlain(e));
+            throw new WebApplicationException(errResponseAsTextPlain(e));
         }
     }
 
     @PUT
     @Path("/devices/{DeviceName}")
     @Consumes("application/json")
-    public void updateDevice(@PathParam("DeviceName") String deviceName, Reader content) throws Exception {
+    public void updateDevice(@PathParam("DeviceName") String deviceName, Reader content) {
         logRequest();
         try {
             Device device = jsonConf.loadDeviceFrom(Json.createParser(content), configDelegate);
             if (!device.getDeviceName().equals(deviceName))
-                throw new WebApplicationException(getResponse(
-                        "Device name in content[" + device.getDeviceName() + "] does not match Device name in URL",
-                        Response.Status.BAD_REQUEST));
+                throw new IllegalArgumentException(
+                        "Device name in content[" + device.getDeviceName() + "] does not match Device name in URL");
             ConfigurationChanges diffs = conf.merge(device, options());
             if (!diffs.isEmpty())
                 softwareConfigurationEvent.fire(new SoftwareConfiguration(request, deviceName, diffs));
         } catch (ConfigurationNotFoundException e) {
-            throw new WebApplicationException(getResponse(e.getMessage(), Response.Status.NOT_FOUND));
+            throw new WebApplicationException(errResponse(e.getMessage(), Response.Status.NOT_FOUND));
         } catch (IllegalArgumentException e) {
-            throw new WebApplicationException(getResponse(e.getMessage(), Response.Status.BAD_REQUEST));
+            throw new WebApplicationException(errResponse(e.getMessage(), Response.Status.BAD_REQUEST));
         } catch (JsonParsingException e) {
             throw new WebApplicationException(
-                    getResponse(e.getMessage() + " at location : " + e.getLocation(), Response.Status.BAD_REQUEST));
+                    errResponse(e.getMessage() + " at location : " + e.getLocation(), Response.Status.BAD_REQUEST));
         } catch (AETitleAlreadyExistsException | HL7ApplicationAlreadyExistsException e) {
-            throw new WebApplicationException(getResponse(e.getMessage(), Response.Status.CONFLICT));
+            throw new WebApplicationException(errResponse(e.getMessage(), Response.Status.CONFLICT));
         } catch (Exception e) {
-            throw new WebApplicationException(getResponseAsTextPlain(e));
+            throw new WebApplicationException(errResponseAsTextPlain(e));
         }
     }
 
     @POST
     @Path("/unique/aets/{aet}")
     @Consumes("application/json")
-    public void registerAET(@PathParam("aet") String aet) throws Exception {
+    public void registerAET(@PathParam("aet") String aet) {
         logRequest();
         try {
             if (!conf.registerAETitle(aet))
-                throw new WebApplicationException(getResponse(
+                throw new WebApplicationException(errResponse(
                         "Application Entity Title " + aet + " already registered.", Response.Status.CONFLICT));
         } catch (ConfigurationException e) {
-            throw new WebApplicationException(getResponseAsTextPlain(e));
+            throw new WebApplicationException(errResponseAsTextPlain(e));
         }
     }
 
     @DELETE
     @Path("/unique/aets/{aet}")
-    public void unregisterAET(@PathParam("aet") String aet) throws Exception {
+    public void unregisterAET(@PathParam("aet") String aet) {
         logRequest();
         try {
             List<String> aets = Arrays.asList(conf.listRegisteredAETitles());
             if (!aets.contains(aet))
-                throw new WebApplicationException(getResponse(
+                throw new WebApplicationException(errResponse(
                         "Application Entity Title " + aet + " not registered.", Response.Status.NOT_FOUND));
             conf.unregisterAETitle(aet);
         } catch (ConfigurationException e) {
-            throw new WebApplicationException(getResponseAsTextPlain(e));
+            throw new WebApplicationException(errResponseAsTextPlain(e));
         }
     }
 
     @POST
     @Path("/unique/hl7apps/{appName}")
     @Consumes("application/json")
-    public void registerHL7App(@PathParam("appName") String appName) throws Exception {
+    public void registerHL7App(@PathParam("appName") String appName) {
         logRequest();
         try {
             HL7Configuration hl7Conf = conf.getDicomConfigurationExtension(HL7Configuration.class);
             if (!hl7Conf.registerHL7Application(appName))
-                throw new WebApplicationException(getResponse(
+                throw new WebApplicationException(errResponse(
                         "HL7 Application " + appName + " already registered.", Response.Status.CONFLICT));
         } catch (ConfigurationException e) {
-            throw new WebApplicationException(getResponseAsTextPlain(e));
+            throw new WebApplicationException(errResponseAsTextPlain(e));
         }
     }
 
     @DELETE
     @Path("/unique/hl7apps/{appName}")
-    public void unregisterHL7App(@PathParam("appName") String appName) throws Exception {
+    public void unregisterHL7App(@PathParam("appName") String appName) {
         logRequest();
         try {
             HL7Configuration hl7Conf = conf.getDicomConfigurationExtension(HL7Configuration.class);
             List<String> hl7apps = Arrays.asList(hl7Conf.listRegisteredHL7ApplicationNames());
             if (!hl7apps.contains(appName))
-                throw new WebApplicationException(getResponse(
+                throw new WebApplicationException(errResponse(
                         "HL7 Application " + appName + " not registered.", Response.Status.NOT_FOUND));
                 hl7Conf.unregisterHL7Application(appName);
         } catch (Exception e) {
-            throw new WebApplicationException(getResponseAsTextPlain(e));
+            throw new WebApplicationException(errResponseAsTextPlain(e));
         }
     }
 
     @DELETE
     @Path("/devices/{DeviceName}")
-    public void deleteDevice(@PathParam("DeviceName") String deviceName) throws Exception {
+    public void deleteDevice(@PathParam("DeviceName") String deviceName) {
         logRequest();
         try {
             ConfigurationChanges diffs = conf.removeDevice(deviceName, options());
             softwareConfigurationEvent.fire(new SoftwareConfiguration(request, deviceName, diffs));
         } catch (ConfigurationNotFoundException e) {
-            throw new WebApplicationException(getResponse(e.getMessage(), Response.Status.NOT_FOUND));
+            throw new WebApplicationException(errResponse(e.getMessage(), Response.Status.NOT_FOUND));
         } catch (Exception e) {
-            throw new WebApplicationException(getResponseAsTextPlain(e));
+            throw new WebApplicationException(errResponseAsTextPlain(e));
         }
     }
 
@@ -387,7 +409,8 @@ public class ConfigurationRS {
     @NoCache
     @Path("/devices/{deviceName}/vendordata")
     @Produces("application/zip")
-    public Response getVendorData(@PathParam("deviceName") String deviceName) throws Exception {
+    public Response getVendorData(@PathParam("deviceName") String deviceName) {
+        logRequest();
         byte[] content = ByteUtils.EMPTY_BYTES;
         Response.Status status = Response.Status.NO_CONTENT;
         try {
@@ -397,9 +420,9 @@ public class ConfigurationRS {
                 status = Response.Status.OK;
             }
         } catch (ConfigurationNotFoundException e) {
-            throw new WebApplicationException(getResponse(e.getMessage(), Response.Status.NOT_FOUND));
+            return errResponse(e.getMessage(), Response.Status.NOT_FOUND);
         } catch (Exception e) {
-            throw new WebApplicationException(getResponseAsTextPlain(e));
+            return errResponseAsTextPlain(e);
         }
         return Response.ok(content).status(status).type("application/zip").header("Content-Disposition", "attachment; filename=vendordata.zip").build();
     }
@@ -407,153 +430,168 @@ public class ConfigurationRS {
     @PUT
     @Path("/devices/{deviceName}/vendordata")
     @Consumes("application/zip")
-    public Response updateVendorData(@PathParam("deviceName") String deviceName, File file) throws Exception {
+    public Response updateVendorData(@PathParam("deviceName") String deviceName, File file) {
+        logRequest();
         try {
             ConfigurationChanges diffs = conf.updateDeviceVendorData(deviceName, Files.readAllBytes(file.toPath()));
             if (!diffs.isEmpty())
                 softwareConfigurationEvent.fire(new SoftwareConfiguration(request, deviceName, diffs));
         } catch (ConfigurationNotFoundException e) {
-            throw new WebApplicationException(getResponse(e.getMessage(), Response.Status.NOT_FOUND));
+            return errResponse(e.getMessage(), Response.Status.NOT_FOUND);
         } catch (Exception e) {
-            throw new WebApplicationException(getResponseAsTextPlain(e));
+            return errResponseAsTextPlain(e);
         }
         return Response.ok().status(Response.Status.NO_CONTENT).build();
     }
 
     @DELETE
     @Path("/devices/{deviceName}/vendordata")
-    public Response deleteVendorData(@PathParam("deviceName") String deviceName) throws Exception {
+    public Response deleteVendorData(@PathParam("deviceName") String deviceName) {
+        logRequest();
         try {
             ConfigurationChanges diffs = conf.updateDeviceVendorData(deviceName);
             if (!diffs.isEmpty())
                 softwareConfigurationEvent.fire(new SoftwareConfiguration(request, deviceName, diffs));
         } catch (ConfigurationNotFoundException e) {
-            throw new WebApplicationException(getResponse(e.getMessage(), Response.Status.NOT_FOUND));
+            return errResponse(e.getMessage(), Response.Status.NOT_FOUND);
         } catch (Exception e) {
-            throw new WebApplicationException(getResponseAsTextPlain(e));
+            return errResponseAsTextPlain(e);
         }
         return Response.ok().status(Response.Status.NO_CONTENT).build();
     }
 
-    private static class DeviceInfoBuilder {
-        final DeviceInfo deviceInfo = new DeviceInfo();
-
-        DeviceInfoBuilder(UriInfo info) {
-            MultivaluedMap<String, String> map = info.getQueryParameters();
-            for (Map.Entry<String, List<String>> entry : map.entrySet()) {
-                switch(entry.getKey()) {
-                    case "dicomDeviceName":
-                        deviceInfo.setDeviceName(toString(entry));
-                        break;
-                    case "dicomDescription":
-                        deviceInfo.setDescription(toString(entry));
-                        break;
-                    case "dicomManufacturer":
-                        deviceInfo.setManufacturer(toString(entry));
-                        break;
-                    case "dicomManufacturerModelName":
-                        deviceInfo.setManufacturerModelName(toString(entry));
-                        break;
-                    case "dicomSoftwareVersion":
-                        deviceInfo.setSoftwareVersions(toStrings(entry));
-                        break;
-                    case "dicomStationName":
-                        deviceInfo.setStationName(toString(entry));
-                        break;
-                    case "dicomInstitutionName":
-                        deviceInfo.setInstitutionNames(toStrings(entry));
-                        break;
-                    case "dicomInstitutionDepartmentName":
-                        deviceInfo.setInstitutionalDepartmentNames(toStrings(entry));
-                        break;
-                    case "dicomPrimaryDeviceType":
-                        deviceInfo.setPrimaryDeviceTypes(toStrings(entry));
-                        break;
-                    case "dicomInstalled":
-                        deviceInfo.setInstalled(Boolean.parseBoolean(toString(entry)));
-                        break;
-                    case "hasArcDevExt":
-                        deviceInfo.setArcDevExt(Boolean.parseBoolean(toString(entry)));
-                        break;
-                }
+    private static DeviceInfo toDeviceInfo(UriInfo info) {
+        DeviceInfo deviceInfo = new DeviceInfo();
+        for (Map.Entry<String, List<String>> entry : info.getQueryParameters().entrySet()) {
+            switch (entry.getKey()) {
+                case "dicomDeviceName":
+                    deviceInfo.setDeviceName(firstValueOf(entry));
+                    break;
+                case "dicomDescription":
+                    deviceInfo.setDescription(firstValueOf(entry));
+                    break;
+                case "dicomManufacturer":
+                    deviceInfo.setManufacturer(firstValueOf(entry));
+                    break;
+                case "dicomManufacturerModelName":
+                    deviceInfo.setManufacturerModelName(firstValueOf(entry));
+                    break;
+                case "dicomSoftwareVersion":
+                    deviceInfo.setSoftwareVersions(toArray(entry));
+                    break;
+                case "dicomStationName":
+                    deviceInfo.setStationName(firstValueOf(entry));
+                    break;
+                case "dicomInstitutionName":
+                    deviceInfo.setInstitutionNames(toArray(entry));
+                    break;
+                case "dicomInstitutionDepartmentName":
+                    deviceInfo.setInstitutionalDepartmentNames(toArray(entry));
+                    break;
+                case "dicomPrimaryDeviceType":
+                    deviceInfo.setPrimaryDeviceTypes(toArray(entry));
+                    break;
+                case "dicomInstalled":
+                    deviceInfo.setInstalled(Boolean.parseBoolean(firstValueOf(entry)));
+                    break;
+                case "hasArcDevExt":
+                    deviceInfo.setArcDevExt(Boolean.parseBoolean(firstValueOf(entry)));
+                    break;
             }
         }
+        return deviceInfo;
+    }
 
-        static String[] toStrings(Map.Entry<String, List<String>> entry) {
-            return entry.getValue().toArray(new String[entry.getValue().size()]);
-        }
+    private static String firstValueOf(Map.Entry<String, List<String>> entry) {
+        return entry.getValue().get(0);
+    }
 
-        static String toString(Map.Entry<String, List<String>> entry) {
-            return entry.getValue().get(0);
-        }
+    private static String[] toArray(Map.Entry<String, List<String>> entry) {
+        return entry.getValue().toArray(StringUtils.EMPTY_STRING);
     }
 
 
-    private static class ApplicationEntityInfoBuilder {
-        final ApplicationEntityInfo aetInfo = new ApplicationEntityInfo();
-
-        ApplicationEntityInfoBuilder(UriInfo info) {
-            MultivaluedMap<String, String> map = info.getQueryParameters();
-            for (Map.Entry<String, List<String>> entry : map.entrySet()) {
-                switch(entry.getKey()) {
-                    case "dicomDeviceName":
-                        aetInfo.setDeviceName(toString(entry));
-                        break;
-                    case "dicomAETitle":
-                        aetInfo.setAETitle(toString(entry));
-                        break;
-                    case "dicomAssociationInitiator":
-                        aetInfo.setAssociationInitiator(Boolean.parseBoolean(toString(entry)));
-                        break;
-                    case "dicomAssociationAcceptor":
-                        aetInfo.setAssociationAcceptor(Boolean.parseBoolean(toString(entry)));
-                        break;
-                    case "dicomDescription":
-                        aetInfo.setDescription(toString(entry));
-                        break;
-                    case "dicomApplicationCluster":
-                        aetInfo.setApplicationCluster(toStrings(entry));
-                        break;
-                }
+    private static ApplicationEntityInfo toApplicationEntityInfo(UriInfo info) {
+        ApplicationEntityInfo aetInfo = new ApplicationEntityInfo();
+        for (Map.Entry<String, List<String>> entry : info.getQueryParameters().entrySet()) {
+            switch (entry.getKey()) {
+                case "dicomDeviceName":
+                    aetInfo.setDeviceName(firstValueOf(entry));
+                    break;
+                case "dicomAETitle":
+                    aetInfo.setAETitle(firstValueOf(entry));
+                    break;
+                case "dicomAssociationInitiator":
+                    aetInfo.setAssociationInitiator(Boolean.parseBoolean(firstValueOf(entry)));
+                    break;
+                case "dicomAssociationAcceptor":
+                    aetInfo.setAssociationAcceptor(Boolean.parseBoolean(firstValueOf(entry)));
+                    break;
+                case "dicomDescription":
+                    aetInfo.setDescription(firstValueOf(entry));
+                    break;
+                case "dicomApplicationCluster":
+                    aetInfo.setApplicationClusters(toArray(entry));
+                    break;
             }
         }
-
-        static String[] toStrings(Map.Entry<String, List<String>> entry) {
-            return entry.getValue().toArray(new String[entry.getValue().size()]);
-        }
-
-        static String toString(Map.Entry<String, List<String>> entry) {
-            return entry.getValue().get(0);
-        }
+        return aetInfo;
     }
 
-    private static class HL7ApplicationInfoBuilder {
-        final HL7ApplicationInfo hl7AppInfo = new HL7ApplicationInfo();
-
-        HL7ApplicationInfoBuilder(UriInfo info) {
-            MultivaluedMap<String, String> map = info.getQueryParameters();
-            for (Map.Entry<String, List<String>> entry : map.entrySet()) {
-                switch (entry.getKey()) {
-                    case "dicomDeviceName":
-                        hl7AppInfo.setDeviceName(toString(entry));
-                        break;
-                    case "hl7ApplicationName":
-                        hl7AppInfo.setHl7ApplicationName(toString(entry));
-                        break;
-                    case "dicomApplicationCluster":
-                        hl7AppInfo.setApplicationClusters(toStrings(entry));
-                        break;
-                }
+    private static WebApplicationInfo toWebApplicationInfo(UriInfo info) {
+        WebApplicationInfo webappInfo = new WebApplicationInfo();
+        for (Map.Entry<String, List<String>> entry : info.getQueryParameters().entrySet()) {
+            switch (entry.getKey()) {
+                case "dicomDeviceName":
+                    webappInfo.setDeviceName(firstValueOf(entry));
+                    break;
+                case "dcmWebAppName":
+                    webappInfo.setApplicationName(firstValueOf(entry));
+                    break;
+                case "dicomDescription":
+                    webappInfo.setDescription(firstValueOf(entry));
+                    break;
+                case "dcmWebServicePath":
+                    webappInfo.setServicePath(firstValueOf(entry));
+                    break;
+                case "dcmWebServiceClass":
+                    webappInfo.setServiceClasses(toServiceClasses(entry.getValue()));
+                    break;
+                case "dicomAETitle":
+                    webappInfo.setAETitle(firstValueOf(entry));
+                    break;
+                case "dicomApplicationCluster":
+                    webappInfo.setApplicationClusters(toArray(entry));
+                    break;
             }
         }
+        return webappInfo;
+    }
 
-        static String[] toStrings(Map.Entry<String, List<String>> entry) {
-            return entry.getValue().toArray(new String[entry.getValue().size()]);
+    private static WebApplication.ServiceClass[] toServiceClasses(List<String> values) {
+        WebApplication.ServiceClass[] serviceClasses = new WebApplication.ServiceClass[values.size()];
+        for (int i = 0; i < serviceClasses.length; i++) {
+            serviceClasses[i] = WebApplication.ServiceClass.valueOf(values.get(i));
         }
+        return serviceClasses;
+    }
 
-        static String toString(Map.Entry<String, List<String>> entry) {
-            return entry.getValue().get(0);
+    private static HL7ApplicationInfo toHL7ApplicationInfo(UriInfo info) {
+        HL7ApplicationInfo hl7AppInfo = new HL7ApplicationInfo();
+        for (Map.Entry<String, List<String>> entry : info.getQueryParameters().entrySet()) {
+            switch (entry.getKey()) {
+                case "dicomDeviceName":
+                    hl7AppInfo.setDeviceName(firstValueOf(entry));
+                    break;
+                case "hl7ApplicationName":
+                    hl7AppInfo.setHl7ApplicationName(firstValueOf(entry));
+                    break;
+                case "dicomApplicationCluster":
+                    hl7AppInfo.setApplicationClusters(toArray(entry));
+                    break;
+            }
         }
+        return hl7AppInfo;
     }
 
     private void logRequest() {
@@ -561,12 +599,12 @@ public class ConfigurationRS {
                 request.getRemoteUser(), request.getRemoteHost());
     }
 
-    private Response getResponse(Object errorMessage, Response.Status status) {
+    private Response errResponse(Object errorMessage, Response.Status status) {
         Object entity = "{\"errorMessage\":\"" + errorMessage + "\"}";
         return Response.status(status).entity(entity).build();
     }
 
-    private Response getResponseAsTextPlain(Exception e) {
+    private Response errResponseAsTextPlain(Exception e) {
         StringWriter sw = new StringWriter();
         e.printStackTrace(new PrintWriter(sw));
         String exceptionAsString = sw.toString();

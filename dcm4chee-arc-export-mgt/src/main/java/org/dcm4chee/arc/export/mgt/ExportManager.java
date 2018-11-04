@@ -40,11 +40,13 @@
 
 package org.dcm4chee.arc.export.mgt;
 
+import com.querydsl.core.types.OrderSpecifier;
+import com.querydsl.core.types.Predicate;
 import org.dcm4chee.arc.conf.ExporterDescriptor;
 import org.dcm4chee.arc.entity.ExportTask;
 import org.dcm4chee.arc.entity.QueueMessage;
-import org.dcm4chee.arc.qmgt.IllegalTaskStateException;
-import org.dcm4chee.arc.retrieve.HttpServletRequestInfo;
+import org.dcm4chee.arc.event.QueueMessageEvent;
+import org.dcm4chee.arc.qmgt.*;
 import org.dcm4chee.arc.store.StoreContext;
 
 import javax.enterprise.event.Observes;
@@ -62,17 +64,33 @@ public interface ExportManager {
     int scheduleExportTasks(int fetchSize);
 
     void scheduleExportTask(String studyUID, String seriesUID, String objectUID, ExporterDescriptor exporter,
-                            HttpServletRequestInfo httpServletRequestInfo);
+                            HttpServletRequestInfo httpServletRequestInfo, String batchID)
+            throws QueueSizeLimitExceededException;
 
-    void updateExportTask(Long pk);
+    boolean scheduleStudyExport(String suid, ExporterDescriptor exporter, Date notExportedAfter, String batchID);
 
-    List<ExportTask> search(
-            String deviceName, String exporterID, String studyUID, Date updatedBefore, QueueMessage.Status status,
-            int offset, int limit);
+    ExportTaskQuery listExportTasks(QueueMessage.Status status, Predicate matchQueueMessage, Predicate matchExportTask,
+                                    OrderSpecifier<Date> order, int offset, int limit);
 
-    boolean deleteExportTask(Long pk);
+    long countExportTasks(QueueMessage.Status status, Predicate matchQueueMessage, Predicate matchExportTask);
 
-    boolean cancelProcessing(Long pk) throws IllegalTaskStateException;
+    boolean deleteExportTask(Long pk, QueueMessageEvent queueEvent);
 
-    boolean rescheduleExportTask(Long pk, ExporterDescriptor exporter) throws IllegalTaskStateException;
+    boolean cancelExportTask(Long pk, QueueMessageEvent queueEvent) throws IllegalTaskStateException;
+
+    long cancelExportTasks(Predicate matchQueueMessage, Predicate matchExportTask, QueueMessage.Status prev)
+            throws IllegalTaskStateException;
+
+    String findDeviceNameByPk(Long pk);
+
+    void rescheduleExportTask(Long pk, ExporterDescriptor exporter, QueueMessageEvent queueEvent) throws IllegalTaskStateException;
+
+    void rescheduleExportTask(ExportTask task, ExporterDescriptor exporter, QueueMessageEvent queueEvent);
+
+    int deleteTasks(Predicate matchQueueMessage, Predicate matchExportTask);
+
+    List<String> listDistinctDeviceNames(Predicate matchQueueMessage, Predicate matchExportTask);
+
+    List<ExportBatch> listExportBatches(Predicate matchQueueBatch, Predicate matchExportBatch,
+                                        OrderSpecifier<Date> order, int offset, int limit);
 }

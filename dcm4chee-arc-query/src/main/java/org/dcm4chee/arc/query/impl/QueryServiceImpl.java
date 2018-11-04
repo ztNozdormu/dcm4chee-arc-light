@@ -43,6 +43,7 @@ package org.dcm4chee.arc.query.impl;
 import com.querydsl.core.BooleanBuilder;
 import org.dcm4che3.conf.api.IApplicationEntityCache;
 import org.dcm4che3.data.*;
+import org.dcm4che3.io.SAXTransformer;
 import org.dcm4che3.io.TemplatesCache;
 import org.dcm4che3.io.XSLTAttributesCoercion;
 import org.dcm4che3.net.*;
@@ -96,6 +97,12 @@ class QueryServiceImpl implements QueryService {
     private QueryServiceEJB ejb;
 
     @Inject
+    QuerySizeEJB querySizeEJB;
+
+    @Inject
+    QueryAttributesEJB queryAttributesEJB;
+
+    @Inject
     private CFindSCU cfindscu;
 
     @Inject
@@ -123,22 +130,18 @@ class QueryServiceImpl implements QueryService {
         QueryParam queryParam = new QueryParam(ae);
         queryParam.setCombinedDatetimeMatching(queryOpts.contains(QueryOption.DATETIME));
         queryParam.setFuzzySemanticMatching(queryOpts.contains(QueryOption.FUZZY));
-        return new QueryContextImpl(as, sopClassUID, ae, initCodeEntities(queryParam), this);
+        return new QueryContextImpl(ae, queryParam, this).find(as, sopClassUID);
     }
 
     @Override
     public QueryContext newQueryContextQIDO(
             HttpServletRequest httpRequest, String searchMethod, ApplicationEntity ae, QueryParam queryParam) {
-        return new QueryContextImpl(httpRequest, searchMethod, ae, initCodeEntities(queryParam), this);
+        return new QueryContextImpl(ae, queryParam, this).qido(httpRequest, searchMethod);
     }
 
-    private QueryParam initCodeEntities(QueryParam param) {
-        QueryRetrieveView qrView = param.getQueryRetrieveView();
-        param.setHideRejectionNotesWithCode(
-                codeCache.findOrCreateEntities(qrView.getHideRejectionNotesWithCodes()));
-        param.setShowInstancesRejectedByCode(
-                codeCache.findOrCreateEntities(qrView.getShowInstancesRejectedByCodes()));
-        return param;
+    @Override
+    public QueryContext newQueryContext(ApplicationEntity ae, QueryParam queryParam) {
+        return new QueryContextImpl(ae, queryParam, this);
     }
 
     @Override
@@ -173,7 +176,7 @@ class QueryServiceImpl implements QueryService {
 
     @Override
     public Query createInstanceQuery(QueryContext ctx) {
-        return new InstanceQuery(ctx, openStatelessSession());
+        return new InstanceQuery(ctx, openStatelessSession(), codeCache);
     }
 
     @Override
@@ -183,25 +186,33 @@ class QueryServiceImpl implements QueryService {
     }
 
     @Override
-    public Attributes getSeriesAttributes(Long seriesPk, QueryParam queryParam) {
-        return ejb.getSeriesAttributes(seriesPk, queryParam);
+    public Attributes getSeriesAttributes(QueryContext context, Long seriesPk) {
+        return ejb.getSeriesAttributes(seriesPk, context);
     }
 
     @Override
-    public StudyQueryAttributes calculateStudyQueryAttributes(Long studyPk, QueryParam queryParam) {
-        return ejb.calculateStudyQueryAttributes(studyPk, queryParam);
+    public void addLocationAttributes(Attributes attrs, Long instancePk) {
+        ejb.addLocationAttributes(attrs, instancePk);
     }
 
     @Override
-    public SeriesQueryAttributes calculateSeriesQueryAttributesIfNotExists(Long seriesPk, QueryParam queryParam) {
-        return ejb.calculateSeriesQueryAttributesIfNotExists(seriesPk, queryParam);
+    public long calculateStudySize(Long studyPk) {
+        return querySizeEJB.calculateStudySize(studyPk);
+    }
+
+    @Override
+    public StudyQueryAttributes calculateStudyQueryAttributes(Long studyPk, QueryRetrieveView qrView) {
+        return queryAttributesEJB.calculateStudyQueryAttributes(studyPk, qrView);
+    }
+
+    @Override
+    public SeriesQueryAttributes calculateSeriesQueryAttributesIfNotExists(Long seriesPk, QueryRetrieveView qrView) {
+        return ejb.calculateSeriesQueryAttributesIfNotExists(seriesPk, qrView);
     }
 
     @Override
     public SeriesQueryAttributes calculateSeriesQueryAttributes(Long seriesPk, QueryRetrieveView qrView) {
-        return ejb.calculateSeriesQueryAttributes(seriesPk, qrView,
-                codeCache.findOrCreateEntities(qrView.getHideRejectionNotesWithCodes()),
-                codeCache.findOrCreateEntities(qrView.getShowInstancesRejectedByCodes()));
+        return queryAttributesEJB.calculateSeriesQueryAttributes(seriesPk, qrView);
     }
 
     @Override
@@ -254,10 +265,11 @@ class QueryServiceImpl implements QueryService {
 
     @Override
     public Attributes queryExportTaskInfo(String studyIUID, String seriesIUID, String sopIUID, ApplicationEntity ae) {
+        QueryRetrieveView qrView = ae.getAEExtensionNotNull(ArchiveAEExtension.class).getQueryRetrieveView();
         if (seriesIUID == null || seriesIUID.equals("*"))
-            return ejb.queryStudyExportTaskInfo(studyIUID, initCodeEntities(new QueryParam(ae)));
+            return ejb.queryStudyExportTaskInfo(studyIUID, qrView);
         if (sopIUID == null || sopIUID.equals("*"))
-            return ejb.querySeriesExportTaskInfo(studyIUID, seriesIUID, initCodeEntities(new QueryParam(ae)));
+            return ejb.querySeriesExportTaskInfo(studyIUID, seriesIUID, qrView);
         return ejb.queryObjectExportTaskInfo(studyIUID, seriesIUID, sopIUID);
     }
 
@@ -291,6 +303,11 @@ class QueryServiceImpl implements QueryService {
 
     private void mkKOS(Attributes attrs, RejectionNote rjNote) {
         mkKOS(attrs, rjNote.getRejectionNoteCode(), rjNote.getSeriesNumber(), rjNote.getInstanceNumber());
+    }
+
+    @Override
+    public Attributes getStudyAttributes(String studyUID) {
+        return ejb.getStudyAttributes(studyUID);
     }
 
     @Override
@@ -364,7 +381,11 @@ class QueryServiceImpl implements QueryService {
     }
 
     private String typeOf(String cuid) {
-        return "COMPOSITE";
+        String uidName = UID.nameOf(cuid);
+        int index = uidName.lastIndexOf(" Storage");
+        return uidName.startsWith("Image", index - 5) ? "IMAGE"
+            : uidName.startsWith("Waveform", index - 8) ? "WAVEFORM"
+            : "COMPOSITE";
     }
 
     private Attributes templateIdentifier() {
@@ -405,9 +426,12 @@ class QueryServiceImpl implements QueryService {
         }
 
         public BooleanBuilder build(ApplicationEntity ae) {
-            QueryParam queryParam = initCodeEntities(new QueryParam(ae));
-            predicate.and(QueryBuilder.hideRejectedInstance(queryParam));
-            predicate.and(QueryBuilder.hideRejectionNote(queryParam));
+            QueryRetrieveView qrView = ae.getAEExtensionNotNull(ArchiveAEExtension.class).getQueryRetrieveView();
+            predicate.and(QueryBuilder.hideRejectedInstance(
+                    codeCache.findOrCreateEntities(qrView.getShowInstancesRejectedByCodes()),
+                    qrView.isHideNotRejectedInstances()));
+            predicate.and(QueryBuilder.hideRejectionNote(
+                    codeCache.findOrCreateEntities(qrView.getHideRejectionNotesWithCodes())));
             return predicate;
         }
     }
@@ -426,7 +450,9 @@ class QueryServiceImpl implements QueryService {
         if (xsltStylesheetURI != null)
             try {
                 Templates tpls = TemplatesCache.getDefault().get(StringUtils.replaceSystemProperties(xsltStylesheetURI));
-                coercion = new XSLTAttributesCoercion(tpls, null).includeKeyword(!rule.isNoKeywords());
+                coercion = new XSLTAttributesCoercion(tpls, null)
+                        .includeKeyword(!rule.isNoKeywords())
+                        .setupTransformer(setupTransformer(ctx));
             } catch (TransformerConfigurationException e) {
                 LOG.error("{}: Failed to compile XSL: {}", ctx.getAssociation(), xsltStylesheetURI, e);
             }
@@ -435,11 +461,28 @@ class QueryServiceImpl implements QueryService {
             coercion = new CFindSCUAttributeCoercion(ctx.getLocalApplicationEntity(), leadingCFindSCP,
                     rule.getAttributeUpdatePolicy(), cfindscu, leadingCFindSCPQueryCache, coercion);
         }
+        LOG.info("Coerce Attributes from rule: {}", rule);
         return coercion;
+    }
+
+    private SAXTransformer.SetupTransformer setupTransformer(QueryContext ctx) {
+        return t -> {
+            t.setParameter("LocalAET", ctx.getCalledAET());
+            if (ctx.getCallingAET() != null)
+                t.setParameter("RemoteAET", ctx.getCallingAET());
+
+            t.setParameter("RemoteHost", ctx.getRemoteHostName());
+        };
     }
 
     @Override
     public CFindSCU cfindSCU() {
         return cfindscu;
+    }
+
+    @Override
+    public List<String> getDistinctModalities() {
+        return em.createNamedQuery(Series.FIND_DISTINCT_MODALITIES, String.class)
+                .getResultList();
     }
 }

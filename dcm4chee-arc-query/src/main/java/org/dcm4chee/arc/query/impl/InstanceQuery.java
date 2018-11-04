@@ -44,23 +44,21 @@ import com.querydsl.core.BooleanBuilder;
 import com.querydsl.core.Tuple;
 import com.querydsl.core.types.Expression;
 import com.querydsl.jpa.hibernate.HibernateQuery;
-import org.dcm4che3.data.Attributes;
-import org.dcm4che3.data.Sequence;
-import org.dcm4che3.data.Tag;
-import org.dcm4che3.data.VR;
+import org.dcm4che3.data.*;
 import org.dcm4che3.dict.archive.ArchiveTag;
 import org.dcm4che3.json.JSONReader;
 import org.dcm4che3.net.Status;
 import org.dcm4che3.net.service.DicomServiceException;
 import org.dcm4che3.net.service.QueryRetrieveLevel2;
 import org.dcm4che3.util.SafeClose;
-import org.dcm4che3.util.StringUtils;
+import org.dcm4chee.arc.code.CodeCache;
 import org.dcm4chee.arc.conf.Availability;
 import org.dcm4chee.arc.conf.Entity;
 import org.dcm4chee.arc.conf.QueryRetrieveView;
 import org.dcm4chee.arc.entity.*;
 import org.dcm4chee.arc.query.QueryContext;
 import org.dcm4chee.arc.query.util.QueryBuilder;
+import org.dcm4chee.arc.query.util.QueryParam;
 import org.hibernate.StatelessSession;
 
 import javax.json.Json;
@@ -79,6 +77,7 @@ class InstanceQuery extends AbstractQuery {
 
     private static final Expression<?>[] SELECT = {
             QSeries.series.pk,
+            QInstance.instance.pk,
             QInstance.instance.retrieveAETs,
             QInstance.instance.externalRetrieveAET,
             QInstance.instance.availability,
@@ -87,11 +86,6 @@ class InstanceQuery extends AbstractQuery {
             QCodeEntity.codeEntity.codeValue,
             QCodeEntity.codeEntity.codingSchemeDesignator,
             QCodeEntity.codeEntity.codeMeaning,
-            QLocation.location.storageID,
-            QLocation.location.storagePath,
-            QLocation.location.transferSyntaxUID,
-            QLocation.location.digest,
-            QLocation.location.size,
             QInstance.instance.attributesBlob.encodedAttributes
     };
 
@@ -111,9 +105,10 @@ class InstanceQuery extends AbstractQuery {
             ArchiveTag.StoragePath | 0x1000,
             ArchiveTag.StorageTransferSyntaxUID | 0x1000,
             ArchiveTag.StorageObjectSize | 0x1000,
-            ArchiveTag.StorageObjectDigest | 0x1000
+            ArchiveTag.StorageObjectDigest | 0x1000,
+            ArchiveTag.StorageObjectStatus | 0x1000
     };
-
+    private final CodeCache codeCache;
     private Long seriesPk;
     private Attributes seriesAttrs;
     private List<Tuple> seriesMetadataStoragePaths;
@@ -123,43 +118,41 @@ class InstanceQuery extends AbstractQuery {
     private int[] instTags;
     private Attributes instQueryKeys;
 
-    public InstanceQuery(QueryContext context, StatelessSession session) {
+    public InstanceQuery(QueryContext context, StatelessSession session, CodeCache codeCache) {
         super(context, session);
+        this.codeCache = codeCache;
     }
 
     @Override
-    protected HibernateQuery<Tuple> newHibernateQuery() {
+    protected HibernateQuery<Tuple> newHibernateQuery(boolean forCount) {
         HibernateQuery<Tuple> q = new HibernateQuery<Void>(session).select(SELECT).from(QInstance.instance);
-        q = QueryBuilder.applyInstanceLevelJoins(q,
-                context.getQueryKeys(),
-                context.getQueryParam());
-        q = q.leftJoin(QInstance.instance.locations, QLocation.location)
-                .on(QLocation.location.objectType.eq(Location.ObjectType.DICOM_FILE));
-        q = QueryBuilder.applySeriesLevelJoins(q,
-                context.getQueryKeys(),
-                context.getQueryParam());
-        q = QueryBuilder.applyStudyLevelJoins(q,
-                context.getQueryKeys(),
-                context.getQueryParam());
-        q = QueryBuilder.applyPatientLevelJoins(q,
-                context.getPatientIDs(),
-                context.getQueryKeys(),
-                context.getQueryParam(),
-                context.isOrderByPatientName());
+        return newHibernateQuery(q, forCount);
+    }
+
+    @Override
+    public long fetchCount() {
+        HibernateQuery<Void> q = new HibernateQuery<Void>(session).from(QInstance.instance);
+        return newHibernateQuery(q, true).fetchCount();
+    }
+
+    private <T> HibernateQuery<T> newHibernateQuery(HibernateQuery<T> q, boolean forCount) {
+        Attributes keys = context.getQueryKeys();
+        IDWithIssuer[] pids = context.getPatientIDs();
+        QueryParam queryParam = context.getQueryParam();
+        QueryRetrieveView qrView = queryParam.getQueryRetrieveView();
+        q = QueryBuilder.applyInstanceLevelJoins(q, keys, queryParam, forCount);
+//        q = q.leftJoin(QInstance.instance.locations, QLocation.location)
+//                .on(QLocation.location.objectType.eq(Location.ObjectType.DICOM_FILE));
+        q = QueryBuilder.applySeriesLevelJoins(q, keys, queryParam, forCount);
+        q = QueryBuilder.applyStudyLevelJoins(q, keys, queryParam, forCount, true);
+        q = QueryBuilder.applyPatientLevelJoins(q, pids, keys, queryParam, context.isOrderByPatientName(), forCount);
         BooleanBuilder predicates = new BooleanBuilder();
-        QueryBuilder.addPatientLevelPredicates(predicates,
-                context.getPatientIDs(),
-                context.getQueryKeys(),
-                context.getQueryParam());
-        QueryBuilder.addStudyLevelPredicates(predicates,
-                context.getQueryKeys(),
-                context.getQueryParam(), QueryRetrieveLevel2.IMAGE);
-        QueryBuilder.addSeriesLevelPredicates(predicates,
-                context.getQueryKeys(),
-                context.getQueryParam(), QueryRetrieveLevel2.IMAGE);
-        QueryBuilder.addInstanceLevelPredicates(predicates,
-                context.getQueryKeys(),
-                context.getQueryParam());
+        QueryBuilder.addPatientLevelPredicates(predicates, pids, keys, queryParam);
+        QueryBuilder.addStudyLevelPredicates(predicates, keys, queryParam, QueryRetrieveLevel2.IMAGE);
+        QueryBuilder.addSeriesLevelPredicates(predicates, keys, queryParam, QueryRetrieveLevel2.IMAGE);
+        QueryBuilder.addInstanceLevelPredicates(predicates, keys, queryParam,
+                codeCache.findOrCreateEntities(qrView.getShowInstancesRejectedByCodes()),
+                codeCache.findOrCreateEntities(qrView.getHideRejectionNotesWithCodes()));
         return q.where(predicates);
     }
 
@@ -184,8 +177,7 @@ class InstanceQuery extends AbstractQuery {
         String retrieveAETs = results.get(QInstance.instance.retrieveAETs);
         Availability availability = results.get(QInstance.instance.availability);
         if (!seriesPk.equals(this.seriesPk)) {
-            this.seriesAttrs = context.getQueryService()
-                    .getSeriesAttributes(seriesPk, context.getQueryParam());
+            this.seriesAttrs = context.getQueryService().getSeriesAttributes(context, seriesPk);
             this.seriesPk = seriesPk;
         }
         Attributes instAtts = AttributesBlob.decodeAttributes(
@@ -197,6 +189,9 @@ class InstanceQuery extends AbstractQuery {
         String externalRetrieveAET = results.get(QInstance.instance.externalRetrieveAET);
         attrs.setString(Tag.RetrieveAETitle, VR.AE, splitAndAppend(retrieveAETs, externalRetrieveAET));
         attrs.setString(Tag.InstanceAvailability, VR.CS, availability.toString());
+        if (context.getReturnKeys() != null)
+            return attrs;
+
         attrs.setDate(ArchiveTag.PrivateCreator, ArchiveTag.InstanceReceiveDateTime, VR.DT,
                 results.get(QInstance.instance.createdTime));
         attrs.setDate(ArchiveTag.PrivateCreator, ArchiveTag.InstanceUpdateDateTime, VR.DT,
@@ -209,19 +204,7 @@ class InstanceQuery extends AbstractQuery {
             item.setString(Tag.CodingSchemeDesignator, VR.SH, results.get(QCodeEntity.codeEntity.codingSchemeDesignator));
             rejectionCodeSeq.add(item);
         }
-        if (results.get(QLocation.location.storageID) != null) {
-            attrs.setString(ArchiveTag.PrivateCreator, ArchiveTag.StorageID, VR.LO,
-                    results.get(QLocation.location.storageID));
-            attrs.setString(ArchiveTag.PrivateCreator, ArchiveTag.StoragePath, VR.LO,
-                    StringUtils.split(results.get(QLocation.location.storagePath), '/'));
-            attrs.setString(ArchiveTag.PrivateCreator, ArchiveTag.StorageTransferSyntaxUID, VR.UI,
-                    results.get(QLocation.location.transferSyntaxUID));
-            attrs.setInt(ArchiveTag.PrivateCreator, ArchiveTag.StorageObjectSize, VR.UL,
-                    results.get(QLocation.location.size).intValue());
-            if (results.get(QLocation.location.digest) != null)
-                attrs.setString(ArchiveTag.PrivateCreator, ArchiveTag.StorageObjectDigest, VR.LO,
-                        results.get(QLocation.location.digest));
-        }
+        context.getQueryService().addLocationAttributes(attrs, results.get(QInstance.instance.pk));
         return attrs;
     }
 
@@ -269,8 +252,7 @@ class InstanceQuery extends AbstractQuery {
             return false;
 
         Tuple tuple = seriesMetadataStoragePaths.remove(0);
-        this.seriesAttrs = context.getQueryService()
-                .getSeriesAttributes(tuple.get(QSeries.series.pk), context.getQueryParam());
+        this.seriesAttrs = context.getQueryService().getSeriesAttributes(context, tuple.get(QSeries.series.pk));
         seriesMetadataStream = context.getQueryService().openZipInputStream(context,
                 tuple.get(QMetadata.metadata.storageID), tuple.get(QMetadata.metadata.storagePath));
         return true;

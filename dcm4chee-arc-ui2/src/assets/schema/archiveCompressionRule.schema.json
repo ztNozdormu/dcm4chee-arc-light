@@ -17,7 +17,6 @@
       "title": "DICOM Transfer Syntax UID",
       "description": "A Transfer Syntax UID",
       "type": "string",
-      "pattern": "^[0-2]((\\.0)|(\\.[1-9][0-9]*))*$",
       "format": "dcmTransferSyntax"
     },
     "dcmRulePriority": {
@@ -28,8 +27,8 @@
       "minimum": 0
     },
     "dcmProperty": {
-      "title": "Property",
-      "description": "Property in format <name>=<value>",
+      "title": "Conditions",
+      "description": "Conditions in format {attributeID}[!]={regEx}",
       "type": "array",
       "items": {
         "type": "string"
@@ -42,6 +41,12 @@
       "items": {
         "type": "string"
       }
+    },
+    "dcmCompressionDelay": {
+      "title": "Compression Delay",
+      "description": "Compression delay in ISO-8601 duration format PnDTnHnMn.nS. Compress on receive if absent.",
+      "type": "string",
+      "format": "dcmDuration"
     }
   }
 }

@@ -42,6 +42,7 @@ package org.dcm4chee.arc.conf.ldap;
 
 import org.dcm4che3.conf.api.ConfigurationException;
 import org.dcm4che3.conf.api.ConfigurationChanges;
+import org.dcm4che3.conf.ldap.LdapDicomConfiguration;
 import org.dcm4che3.conf.ldap.LdapUtils;
 import org.dcm4che3.conf.ldap.hl7.LdapHL7ConfigurationExtension;
 import org.dcm4che3.net.hl7.HL7Application;
@@ -78,6 +79,7 @@ public class LdapArchiveHL7Configuration extends LdapHL7ConfigurationExtension {
         LdapUtils.storeNotNullOrDef(ldapObj, attrs, "hl7ScheduledProtocolCodeInOrder", ext.getHl7ScheduledProtocolCodeInOrder(), null);
         LdapUtils.storeNotNullOrDef(ldapObj, attrs, "hl7ScheduledStationAETInOrder", ext.getHl7ScheduledStationAETInOrder(), null);
         LdapUtils.storeNotEmpty(ldapObj, attrs, "hl7NoPatientCreateMessageType", ext.getHl7NoPatientCreateMessageTypes());
+        LdapUtils.storeNotNullOrDef(ldapObj, attrs, "hl7UseNullValue", ext.getHl7UseNullValue(), null);
     }
 
     @Override
@@ -87,9 +89,13 @@ public class LdapArchiveHL7Configuration extends LdapHL7ConfigurationExtension {
         if (ext == null)
             return;
 
-        LdapArchiveConfiguration.storeHL7ForwardRules(diffs, ext.getHL7ForwardRules(), appDN, getDicomConfiguration());
-        LdapArchiveConfiguration.storeScheduledStations(diffs, ext.getHL7OrderScheduledStations(), appDN, getDicomConfiguration());
-        LdapArchiveConfiguration.storeHL7OrderSPSStatus(diffs, ext.getHL7OrderSPSStatuses(), appDN, getDicomConfiguration());
+        LdapDicomConfiguration config = getDicomConfiguration();
+        LdapArchiveConfiguration.storeHL7ForwardRules(diffs, ext.getHL7ForwardRules(), appDN, config);
+        LdapArchiveConfiguration.storeHL7PrefetchRules(diffs, ext.getHL7PrefetchRules(), appDN, config);
+        LdapArchiveConfiguration.storeScheduledStations(diffs, ext.getHL7OrderScheduledStations(), appDN, config);
+        LdapArchiveConfiguration.storeHL7OrderSPSStatus(diffs, ext.getHL7OrderSPSStatuses(), appDN, config);
+        LdapArchiveConfiguration.storeHL7StudyRetentionPolicies(diffs, ext.getHL7StudyRetentionPolicies(), appDN,
+                config);
     }
 
     @Override
@@ -111,6 +117,7 @@ public class LdapArchiveHL7Configuration extends LdapHL7ConfigurationExtension {
         ext.setHl7ScheduledStationAETInOrder(LdapUtils.enumValue(ScheduledStationAETInOrder.class,
                 attrs.get("hl7ScheduledStationAETInOrder"), null));
         ext.setHl7NoPatientCreateMessageTypes(LdapUtils.stringArray(attrs.get("hl7NoPatientCreateMessageType")));
+        ext.setHl7UseNullValue(LdapUtils.booleanValue(attrs.get("hl7UseNullValue"), null));
     }
 
     @Override
@@ -120,10 +127,13 @@ public class LdapArchiveHL7Configuration extends LdapHL7ConfigurationExtension {
         if (ext == null)
             return;
 
-        LdapArchiveConfiguration.loadHL7ForwardRules(ext.getHL7ForwardRules(), appDN, getDicomConfiguration());
-        LdapArchiveConfiguration.loadScheduledStations(ext.getHL7OrderScheduledStations(), appDN, getDicomConfiguration(),
+        LdapDicomConfiguration config = getDicomConfiguration();
+        LdapArchiveConfiguration.loadHL7ForwardRules(ext.getHL7ForwardRules(), appDN, config);
+        LdapArchiveConfiguration.loadHL7PrefetchRules(ext.getHL7PrefetchRules(), appDN, config);
+        LdapArchiveConfiguration.loadScheduledStations(ext.getHL7OrderScheduledStations(), appDN, config,
                 hl7App.getDevice());
-        LdapArchiveConfiguration.loadHL7OrderSPSStatus(ext.getHL7OrderSPSStatuses(), appDN, getDicomConfiguration());
+        LdapArchiveConfiguration.loadHL7OrderSPSStatus(ext.getHL7OrderSPSStatuses(), appDN, config);
+        LdapArchiveConfiguration.loadHL7StudyRetentionPolicies(ext.getHL7StudyRetentionPolicies(), appDN, config);
     }
 
     @Override
@@ -162,6 +172,8 @@ public class LdapArchiveHL7Configuration extends LdapHL7ConfigurationExtension {
                 aa.getHl7ScheduledStationAETInOrder(), bb.getHl7ScheduledStationAETInOrder(), null);
         LdapUtils.storeDiff(ldapObj, mods, "hl7NoPatientCreateMessageType",
                 aa.getHl7NoPatientCreateMessageTypes(), bb.getHl7NoPatientCreateMessageTypes());
+        LdapUtils.storeDiffObject(ldapObj, mods, "hl7UseNullValue",
+                aa.getHl7UseNullValue(), bb.getHl7UseNullValue(), null);
         if (remove)
             mods.add(new ModificationItem(DirContext.REMOVE_ATTRIBUTE,
                     LdapUtils.attr("objectClass", "dcmArchiveHL7Application")));
@@ -179,12 +191,17 @@ public class LdapArchiveHL7Configuration extends LdapHL7ConfigurationExtension {
         else if (bb == null)
             bb = new ArchiveHL7ApplicationExtension();
 
+        LdapDicomConfiguration config = getDicomConfiguration();
         LdapArchiveConfiguration.mergeHL7ForwardRules(
-                diffs, aa.getHL7ForwardRules(), bb.getHL7ForwardRules(), appDN, getDicomConfiguration());
+                diffs, aa.getHL7ForwardRules(), bb.getHL7ForwardRules(), appDN, config);
+        LdapArchiveConfiguration.mergeHL7PrefetchRules(
+                diffs, aa.getHL7PrefetchRules(), bb.getHL7PrefetchRules(), appDN, config);
         LdapArchiveConfiguration.mergeScheduledStations(
-                diffs, aa.getHL7OrderScheduledStations(), bb.getHL7OrderScheduledStations(), appDN, getDicomConfiguration());
+                diffs, aa.getHL7OrderScheduledStations(), bb.getHL7OrderScheduledStations(), appDN, config);
         LdapArchiveConfiguration.mergeHL7OrderSPSStatus(
-                diffs, aa.getHL7OrderSPSStatuses(), bb.getHL7OrderSPSStatuses(), appDN, getDicomConfiguration());
+                diffs, aa.getHL7OrderSPSStatuses(), bb.getHL7OrderSPSStatuses(), appDN, config);
+        LdapArchiveConfiguration.mergeHL7StudyRetentionPolicies(
+                diffs, aa.getHL7StudyRetentionPolicies(), bb.getHL7StudyRetentionPolicies(), appDN, config);
     }
 
 }

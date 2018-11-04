@@ -47,6 +47,7 @@ import org.dcm4chee.arc.conf.Duration;
 import org.dcm4chee.arc.conf.QueueDescriptor;
 import org.dcm4chee.arc.entity.QueueMessage;
 import org.dcm4chee.arc.qmgt.QueueManager;
+import org.dcm4chee.arc.query.util.MatchTask;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -67,7 +68,7 @@ public class PurgeQueueMessageScheduler extends Scheduler {
     private Device device;
 
     @Inject
-    private QueueManager ejb;
+    private QueueManager mgr;
 
     protected PurgeQueueMessageScheduler() {
         super(Mode.scheduleWithFixedDelay);
@@ -96,6 +97,16 @@ public class PurgeQueueMessageScheduler extends Scheduler {
             return;
 
         Date before = new Date(System.currentTimeMillis() - delay.getSeconds() * 1000);
-        ejb.deleteMessages(queueName, status, before);
+        int deleted = 0;
+        int count;
+        int deleteTaskFetchSize = device.getDeviceExtensionNotNull(ArchiveDeviceExtension.class).getQueueTasksFetchSize();
+        do {
+            count = mgr.deleteTasks(
+                    MatchTask.matchQueueMessage(queueName, null, status, null, null,null, null, before),
+                    deleteTaskFetchSize);
+            deleted += count;
+        } while (count >= deleteTaskFetchSize);
+        if (deleted > 0)
+            LOG.info("Deleted " + deleted + " messages from queue: " + queueName);
     }
 }

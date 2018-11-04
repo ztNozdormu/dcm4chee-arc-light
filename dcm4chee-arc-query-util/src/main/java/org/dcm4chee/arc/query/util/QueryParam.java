@@ -44,7 +44,7 @@ import org.dcm4che3.data.Issuer;
 import org.dcm4che3.net.ApplicationEntity;
 import org.dcm4che3.soundex.FuzzyStr;
 import org.dcm4chee.arc.conf.*;
-import org.dcm4chee.arc.entity.CodeEntity;
+import org.dcm4chee.arc.entity.Patient;
 
 
 /**
@@ -63,12 +63,11 @@ public class QueryParam {
     private boolean withoutStudies = true;
     private boolean incomplete;
     private boolean retrieveFailed;
-    private CodeEntity[] showInstancesRejectedByCode = {};
-    private CodeEntity[] hideRejectionNotesWithCode = {};
-    private String sendingApplicationEntityTitleOfSeries;
-    private String studyReceiveDateTime;
+    private boolean storageVerificationFailed;
+    private boolean compressionfailed;
     private String externalRetrieveAET;
     private String externalRetrieveAETNot;
+    private Patient.VerificationStatus patientVerificationStatus;
 
     public QueryParam(ApplicationEntity ae) {
         this.arcAE = ae.getAEExtensionNotNull(ArchiveAEExtension.class);
@@ -94,22 +93,6 @@ public class QueryParam {
 
     public boolean isPersonNameComponentOrderInsensitiveMatching() {
         return arcAE.personNameComponentOrderInsensitiveMatching();
-    }
-
-    public CodeEntity[] getShowInstancesRejectedByCode() {
-        return showInstancesRejectedByCode;
-    }
-
-    public void setShowInstancesRejectedByCode(CodeEntity[] showInstancesRejectedByCode) {
-        this.showInstancesRejectedByCode = showInstancesRejectedByCode;
-    }
-
-    public CodeEntity[] getHideRejectionNotesWithCode() {
-        return hideRejectionNotesWithCode;
-    }
-
-    public void setHideRejectionNotesWithCode(CodeEntity[] hideRejectionNotesWithCode) {
-        this.hideRejectionNotesWithCode = hideRejectionNotesWithCode;
     }
 
     public boolean isHideNotRejectedInstances() {
@@ -188,20 +171,20 @@ public class QueryParam {
         this.retrieveFailed = retrieveFailed;
     }
 
-    public String getSendingApplicationEntityTitleOfSeries() {
-        return sendingApplicationEntityTitleOfSeries;
+    public boolean isStorageVerificationFailed() {
+        return storageVerificationFailed;
     }
 
-    public void setSendingApplicationEntityTitleOfSeries(String sendingApplicationEntityTitleOfSeries) {
-        this.sendingApplicationEntityTitleOfSeries = sendingApplicationEntityTitleOfSeries;
+    public void setStorageVerificationFailed(boolean storageVerificationFailed) {
+        this.storageVerificationFailed = storageVerificationFailed;
     }
 
-    public String getStudyReceiveDateTime() {
-        return studyReceiveDateTime;
+    public boolean isCompressionFailed() {
+        return compressionfailed;
     }
 
-    public void setStudyReceiveDateTime(String studyReceiveDateTime) {
-        this.studyReceiveDateTime = studyReceiveDateTime;
+    public void setCompressionFailed(boolean compressionfailed) {
+        this.compressionfailed = compressionfailed;
     }
 
     public String getExternalRetrieveAET() {
@@ -218,5 +201,13 @@ public class QueryParam {
 
     public void setExternalRetrieveAETNot(String externalRetrieveAETNot) {
         this.externalRetrieveAETNot = externalRetrieveAETNot;
+    }
+
+    public Patient.VerificationStatus getPatientVerificationStatus() {
+        return patientVerificationStatus;
+    }
+
+    public void setPatientVerificationStatus(Patient.VerificationStatus patientVerificationStatus) {
+        this.patientVerificationStatus = patientVerificationStatus;
     }
 }

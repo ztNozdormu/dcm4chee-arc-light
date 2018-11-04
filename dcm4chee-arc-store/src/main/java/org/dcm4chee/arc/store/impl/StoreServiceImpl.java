@@ -41,10 +41,10 @@
 package org.dcm4chee.arc.store.impl;
 
 
+import org.dcm4che3.conf.api.ConfigurationChanges;
 import org.dcm4che3.conf.api.ConfigurationException;
 import org.dcm4che3.conf.api.DicomConfiguration;
 import org.dcm4che3.data.*;
-import org.dcm4che3.hl7.HL7Segment;
 import org.dcm4che3.imageio.codec.ImageDescriptor;
 import org.dcm4che3.imageio.codec.Transcoder;
 import org.dcm4che3.imageio.codec.TransferSyntaxType;
@@ -52,6 +52,7 @@ import org.dcm4che3.io.*;
 import org.dcm4che3.json.JSONWriter;
 import org.dcm4che3.net.*;
 import org.dcm4che3.net.hl7.HL7Application;
+import org.dcm4che3.net.hl7.UnparsedHL7Message;
 import org.dcm4che3.net.service.DicomServiceException;
 import org.dcm4che3.util.StringUtils;
 import org.dcm4che3.util.UIDUtils;
@@ -60,10 +61,9 @@ import org.dcm4chee.arc.MergeMWLQueryParam;
 import org.dcm4chee.arc.MergeMWLCache;
 import org.dcm4chee.arc.conf.*;
 import org.dcm4chee.arc.entity.*;
+import org.dcm4chee.arc.event.SoftwareConfiguration;
 import org.dcm4chee.arc.mima.SupplementAssigningAuthorities;
-import org.dcm4chee.arc.retrieve.InstanceLocations;
-import org.dcm4chee.arc.retrieve.RetrieveContext;
-import org.dcm4chee.arc.retrieve.RetrieveService;
+import org.dcm4chee.arc.store.InstanceLocations;
 import org.dcm4chee.arc.storage.*;
 import org.dcm4chee.arc.store.StoreContext;
 import org.dcm4chee.arc.store.StoreService;
@@ -115,7 +115,7 @@ class StoreServiceImpl implements StoreService {
     private Event<StoreContext> storeEvent;
 
     @Inject
-    private RetrieveService retrieveService;
+    private Event<SoftwareConfiguration> softwareConfigurationEvent;
 
     @Inject
     private MergeMWLCache mergeMWLCache;
@@ -128,11 +128,11 @@ class StoreServiceImpl implements StoreService {
     }
 
     @Override
-    public StoreSession newStoreSession(HttpServletRequest httpRequest, String aet, ApplicationEntity ae) {
+    public StoreSession newStoreSession(HttpServletRequest httpRequest, ApplicationEntity ae, String sourceAET) {
         StoreSessionImpl session = new StoreSessionImpl(this);
         session.setHttpRequest(httpRequest);
         session.setApplicationEntity(ae);
-        session.setCalledAET(aet);
+        session.setCallingAET(sourceAET);
         return session;
     }
 
@@ -144,11 +144,11 @@ class StoreServiceImpl implements StoreService {
     }
 
     @Override
-    public StoreSession newStoreSession(HL7Application hl7App, Socket socket, HL7Segment msh, ApplicationEntity ae) {
+    public StoreSession newStoreSession(HL7Application hl7App, Socket socket, UnparsedHL7Message msg, ApplicationEntity ae) {
         StoreSessionImpl session = new StoreSessionImpl(this);
         session.setApplicationEntity(ae);
         session.setSocket(socket);
-        session.setMSH(msh);
+        session.setMsg(msg);
         session.setHL7Application(hl7App);
         return session;
     }
@@ -161,29 +161,8 @@ class StoreServiceImpl implements StoreService {
     @Override
     public void store(StoreContext ctx, InputStream data) throws IOException {
         UpdateDBResult result = null;
-        List<File> bulkDataFiles = Collections.emptyList();
         try {
-            String receiveTranferSyntax = ctx.getReceiveTranferSyntax();
-            try (Transcoder transcoder = receiveTranferSyntax != null
-                    ? new Transcoder(data, receiveTranferSyntax)
-                    : new Transcoder(data)) {
-                ctx.setReceiveTransferSyntax(transcoder.getSourceTransferSyntax());
-                transcoder.setIncludeBulkData(DicomInputStream.IncludeBulkData.URI);
-                transcoder.setPixelDataBulkDataURI("");
-                transcoder.setConcatenateBulkDataFiles(true);
-                transcoder.setBulkDataDirectory(
-                        ctx.getStoreSession().getArchiveAEExtension().getBulkDataSpoolDirectoryFile());
-                transcoder.setIncludeFileMetaInformation(true);
-                transcoder.setDeleteBulkDataFiles(false);
-                transcoder.transcode(new TranscoderHandler(ctx));
-                bulkDataFiles = transcoder.getBulkDataFiles();
-            } catch (StorageException e) {
-                LOG.warn("{}: Failed to store received object:\n", ctx.getStoreSession(), e);
-                throw new DicomServiceException(Status.OutOfResources, e);
-            } catch (Throwable e) {
-                LOG.warn("{}: Failed to parse received object:\n", ctx.getStoreSession(), e);
-                throw new DicomServiceException(Status.ProcessingFailure, e);
-            }
+            writeToStorage(ctx, data);
             if (ctx.getAcceptedStudyInstanceUID() != null
                     && !ctx.getAcceptedStudyInstanceUID().equals(ctx.getStudyInstanceUID())) {
                 LOG.info("{}: Received Instance[studyUID={},seriesUID={},objectUID={}]" +
@@ -204,10 +183,36 @@ class StoreServiceImpl implements StoreService {
             ctx.setException(dse);
             throw dse;
         } finally {
-            for (File tmpFile : bulkDataFiles)
-                tmpFile.delete();
             revokeStorage(ctx, result);
             storeEvent.fire(ctx);
+        }
+    }
+
+    private void writeToStorage(StoreContext ctx, InputStream data) throws DicomServiceException {
+        List<File> bulkDataFiles = Collections.emptyList();
+        String receiveTranferSyntax = ctx.getReceiveTranferSyntax();
+        try (Transcoder transcoder = receiveTranferSyntax != null
+                ? new Transcoder(data, receiveTranferSyntax)
+                : new Transcoder(data)) {
+            ctx.setReceiveTransferSyntax(transcoder.getSourceTransferSyntax());
+            transcoder.setIncludeBulkData(DicomInputStream.IncludeBulkData.URI);
+            transcoder.setPixelDataBulkDataURI("");
+            transcoder.setConcatenateBulkDataFiles(true);
+            transcoder.setBulkDataDirectory(
+                    ctx.getStoreSession().getArchiveAEExtension().getBulkDataSpoolDirectoryFile());
+            transcoder.setIncludeFileMetaInformation(true);
+            transcoder.setDeleteBulkDataFiles(false);
+            transcoder.transcode(new TranscoderHandler(ctx));
+            bulkDataFiles = transcoder.getBulkDataFiles();
+        } catch (StorageException e) {
+            LOG.warn("{}: Failed to store received object:\n", ctx.getStoreSession(), e);
+            throw new DicomServiceException(Status.OutOfResources, e);
+        } catch (Throwable e) {
+            LOG.warn("{}: Failed to store received object:\n", ctx.getStoreSession(), e);
+            throw new DicomServiceException(Status.ProcessingFailure, e);
+        } finally {
+            for (File tmpFile : bulkDataFiles)
+                tmpFile.delete();
         }
     }
 
@@ -219,7 +224,9 @@ class StoreServiceImpl implements StoreService {
         for (;;) {
             try {
                 UpdateDBResult result = new UpdateDBResult();
+                long start = System.currentTimeMillis();
                 ejb.updateDB(ctx, result);
+                LOG.info("{}: Updated DB in {} ms", session, System.currentTimeMillis() - start);
                 return result;
             } catch (EJBException e) {
                 if (retries-- > 0) {
@@ -275,6 +282,28 @@ class StoreServiceImpl implements StoreService {
     }
 
     @Override
+    public void addLocation(StoreSession session, Long instancePk, Location location) {
+        ejb.addLocation(session, instancePk, location);
+    }
+
+    @Override
+    public void compress(StoreContext ctx, InstanceLocations inst, InputStream data)
+            throws IOException {
+        writeToStorage(ctx, data);
+        ejb.replaceLocation(ctx, inst);
+    }
+
+    @Override
+    public void addStorageID(String studyIUID, String storageID) {
+        ejb.addStorageID(studyIUID, storageID);
+    }
+
+    @Override
+    public void scheduleMetadataUpdate(String studyIUID, String seriesIUID) {
+        ejb.scheduleMetadataUpdate(studyIUID, seriesIUID);
+    }
+
+    @Override
     public void store(StoreContext ctx, Attributes attrs) throws IOException {
         ctx.setAttributes(attrs);
         List<Location> locations = ctx.getLocations();
@@ -324,6 +353,8 @@ class StoreServiceImpl implements StoreService {
                 StoreContext ctx = newStoreContext(session);
                 for (Location location : il.getLocations()) {
                     ctx.getLocations().add(location);
+                    if (location.getObjectType() == Location.ObjectType.DICOM_FILE)
+                        ctx.setStoreTranferSyntax(location.getTransferSyntaxUID());
                 }
                 ctx.setRetrieveAETs(il.getRetrieveAETs());
                 ctx.setAvailability(il.getAvailability());
@@ -345,46 +376,6 @@ class StoreServiceImpl implements StoreService {
         refSOP.setString(Tag.ReferencedSOPClassUID, VR.UI, ilAttr.getString(Tag.SOPClassUID));
         refSOP.setString(Tag.ReferencedSOPInstanceUID, VR.UI, ilAttr.getString(Tag.SOPInstanceUID));
         refSOPSeq.add(refSOP);
-    }
-
-    @Override
-    public Collection<InstanceLocations> queryInstances(
-            StoreSession session, Attributes instanceRefs, String targetStudyIUID)
-            throws IOException {
-        Map<String, String> uidMap = session.getUIDMap();
-        String sourceStudyUID = instanceRefs.getString(Tag.StudyInstanceUID);
-        uidMap.put(sourceStudyUID, targetStudyIUID);
-        Sequence refSeriesSeq = instanceRefs.getSequence(Tag.ReferencedSeriesSequence);
-        Map<String, Set<String>> refIUIDsBySeriesIUID = new HashMap<>();
-        RetrieveContext ctx;
-        if (refSeriesSeq == null) {
-            ctx = retrieveService.newRetrieveContextIOCM(session.getHttpRequest(), session.getCalledAET(),
-                    sourceStudyUID);
-        } else {
-            for (Attributes item : refSeriesSeq) {
-                String seriesIUID = item.getString(Tag.SeriesInstanceUID);
-                uidMap.put(seriesIUID, UIDUtils.createUID());
-                refIUIDsBySeriesIUID.put(seriesIUID, refIUIDs(item.getSequence(Tag.ReferencedSOPSequence)));
-            }
-            ctx = retrieveService.newRetrieveContextIOCM(session.getHttpRequest(), session.getCalledAET(),
-                    sourceStudyUID, refIUIDsBySeriesIUID.keySet().toArray(new String[refIUIDsBySeriesIUID.size()]));
-        }
-        ctx.setObjectType(null);
-        if (!retrieveService.calculateMatches(ctx))
-            return null;
-        Collection<InstanceLocations> matches = ctx.getMatches();
-        Iterator<InstanceLocations> matchesIter = matches.iterator();
-        while (matchesIter.hasNext()) {
-            InstanceLocations il = matchesIter.next();
-            if (contains(refIUIDsBySeriesIUID, il)) {
-                uidMap.put(il.getSopInstanceUID(), UIDUtils.createUID());
-                if (refSeriesSeq == null)
-                    if (!uidMap.containsKey(il.getAttributes().getString(Tag.SeriesInstanceUID)))
-                        uidMap.put(il.getAttributes().getString(Tag.SeriesInstanceUID), UIDUtils.createUID());
-            } else
-                matchesIter.remove();
-        }
-        return matches;
     }
 
     private void checkCharacterSet(StoreContext ctx) {
@@ -409,20 +400,6 @@ class StoreServiceImpl implements StoreService {
                 jsonWriter.write(ctx.getAttributes());
             }
         }
-    }
-
-    private Set<String> refIUIDs(Sequence refSOPSeq) {
-        if (refSOPSeq == null)
-            return null;
-        Set<String> iuids = new HashSet<>(refSOPSeq.size() * 4 / 3 + 1);
-        for (Attributes refSOP : refSOPSeq)
-            iuids.add(refSOP.getString(Tag.ReferencedSOPInstanceUID));
-        return iuids;
-    }
-
-    private boolean contains(Map<String, Set<String>> refIUIDsBySeriesIUID, InstanceLocations il) {
-        Set<String> iuids = refIUIDsBySeriesIUID.get(il.getAttributes().getString(Tag.SeriesInstanceUID));
-        return iuids == null || iuids.contains(il.getSopInstanceUID());
     }
 
     private static void revokeStorage(StoreContext ctx, UpdateDBResult result) {
@@ -454,6 +431,8 @@ class StoreServiceImpl implements StoreService {
         coercion = coerceAttributesByXSL(ctx, rule, coercion);
         coercion = mergeAttributesFromMWL(ctx, rule, coercion);
         coercion = SupplementAssigningAuthorities.forInstance(rule.getSupplementFromDevice(), coercion);
+        coercion = rule.nullifyIssuerOfPatientID(ctx.getAttributes(), coercion);
+        coercion = NullifyAttributesCoercion.valueOf(rule.getNullifyTags(), coercion);
         if (coercion != null)
             coercion.coerce(ctx.getAttributes(), ctx.getCoercedAttributes());
     }
@@ -464,11 +443,24 @@ class StoreServiceImpl implements StoreService {
         if (xsltStylesheetURI != null)
             try {
                 Templates tpls = TemplatesCache.getDefault().get(StringUtils.replaceSystemProperties(xsltStylesheetURI));
-                return new XSLTAttributesCoercion(tpls, null).includeKeyword(!rule.isNoKeywords());
+                LOG.info("Coerce Attributes from rule: {}", rule);
+                return new XSLTAttributesCoercion(tpls, null)
+                        .includeKeyword(!rule.isNoKeywords())
+                        .setupTransformer(setupTransformer(ctx.getStoreSession()));
             } catch (TransformerConfigurationException e) {
                 LOG.error("{}: Failed to compile XSL: {}", ctx.getStoreSession(), xsltStylesheetURI, e);
             }
         return next;
+    }
+
+    private SAXTransformer.SetupTransformer setupTransformer(StoreSession session) {
+        return t -> {
+            t.setParameter("LocalAET", session.getCalledAET());
+            if (session.getCallingAET() != null)
+                t.setParameter("RemoteAET", session.getCallingAET());
+            if (session.getRemoteHostName() != null)
+                t.setParameter("RemoteHost", session.getRemoteHostName());
+        };
     }
 
     private AttributesCoercion mergeAttributesFromMWL(
@@ -477,7 +469,7 @@ class StoreServiceImpl implements StoreService {
         if (requestAttrs == null)
             return next;
 
-        LOG.info("{}: Coerce Request Attributes from matching MWL item(s)", ctx.getStoreSession());
+        LOG.info("{}: Coerce Request Attributes from matching MWL item(s) using rule: {}", ctx.getStoreSession(), rule);
         return new MergeAttributesCoercion(requestAttrs, next);
     }
 
@@ -535,15 +527,6 @@ class StoreServiceImpl implements StoreService {
         attrs.update(Attributes.UpdatePolicy.OVERWRITE, seriesAttrs, modified);
     }
 
-    private Storage getStorage(StoreSession session, StorageDescriptor descriptor) {
-        Storage storage = session.getStorage(descriptor.getStorageID());
-        if (storage == null) {
-            storage = storageFactory.getStorage(descriptor);
-            session.putStorage(descriptor.getStorageID(), storage);
-        }
-        return storage;
-    }
-
     private final class TranscoderHandler implements Transcoder.Handler {
         private final StoreContext storeContext;
 
@@ -554,15 +537,17 @@ class StoreServiceImpl implements StoreService {
         @Override
         public OutputStream newOutputStream(Transcoder transcoder, Attributes dataset) throws IOException {
             storeContext.setAttributes(dataset);
-            ArchiveCompressionRule compressionRule = selectCompressionRule(transcoder, storeContext);
-            if (compressionRule != null) {
+            ArchiveCompressionRule compressionRule = storeContext.getCompressionRule();
+            if (compressionRule == null) {
+                storeContext.setCompressionRule(compressionRule = selectCompressionRule(transcoder, storeContext));
+            }
+            if (compressionRule != null && compressionRule.getDelay() == null) {
                 transcoder.setDestinationTransferSyntax(compressionRule.getTransferSyntax());
                 transcoder.setCompressParams(compressionRule.getImageWriteParams());
                 storeContext.setStoreTranferSyntax(compressionRule.getTransferSyntax());
             }
             return openOutputStream(storeContext, Location.ObjectType.DICOM_FILE);
         }
-
     }
 
     private OutputStream openOutputStream(StoreContext storeContext, Location.ObjectType objectType)
@@ -582,7 +567,7 @@ class StoreServiceImpl implements StoreService {
 
     private Storage selectObjectStorage(StoreSession session) throws IOException {
         if (session.getObjectStorageID() != null)
-            return session.getStorage(session.getObjectStorageID());
+            return session.getStorage(session.getObjectStorageID(), storageFactory);
 
         ArchiveAEExtension arcAE = session.getArchiveAEExtension();
         ArchiveDeviceExtension arcDev = arcAE.getArchiveDeviceExtension();
@@ -596,20 +581,25 @@ class StoreServiceImpl implements StoreService {
         Storage storage = storageFactory.getUsableStorage(descriptors);
         String storageID = storage.getStorageDescriptor().getStorageID();
         session.putStorage(storageID, storage);
-        session.setObjectStorageID(storageID);
+        session.withObjectStorageID(storageID);
         if (descriptors.size() < storageIDs.length) {
             arcAE.setObjectStorageIDs(StorageDescriptor.storageIDsOf(descriptors));
-            updateDeviceConfiguration(arcDev.getDevice());
+            updateDeviceConfiguration(arcDev);
         }
         return storage;
     }
 
-    private void updateDeviceConfiguration(Device device) {
+    private void updateDeviceConfiguration(ArchiveDeviceExtension arcDev) {
+        Device device = arcDev.getDevice();
         try {
             LOG.info("Update Storage configuration of Device: {}:\n", device.getDeviceName());
-            conf.merge(device, EnumSet.of(
+            ConfigurationChanges diffs = conf.merge(device, EnumSet.of(
                     DicomConfiguration.Option.PRESERVE_VENDOR_DATA,
-                    DicomConfiguration.Option.PRESERVE_CERTIFICATE));
+                    DicomConfiguration.Option.PRESERVE_CERTIFICATE,
+                    arcDev.isAuditSoftwareConfigurationVerbose()
+                            ? DicomConfiguration.Option.CONFIGURATION_CHANGES_VERBOSE
+                            : DicomConfiguration.Option.CONFIGURATION_CHANGES));
+            softwareConfigurationEvent.fire(new SoftwareConfiguration(null, device.getDeviceName(), diffs));
         } catch (ConfigurationException e) {
             LOG.warn("Failed to update Storage configuration of Device: {}:\n", device.getDeviceName(), e);
         }
@@ -617,7 +607,7 @@ class StoreServiceImpl implements StoreService {
 
     private Storage selectMetadataStorage(StoreSession session) throws IOException {
         if (session.getMetadataStorageID() != null)
-            return session.getStorage(session.getMetadataStorageID());
+            return session.getStorage(session.getMetadataStorageID(), storageFactory);
 
         ArchiveAEExtension arcAE = session.getArchiveAEExtension();
         ArchiveDeviceExtension arcDev = arcAE.getArchiveDeviceExtension();
@@ -629,7 +619,7 @@ class StoreServiceImpl implements StoreService {
         session.setMetadataStorageID(storageID);
         if (descriptors.size() < storageIDs.length) {
             arcAE.setMetadataStorageIDs(StorageDescriptor.storageIDsOf(descriptors));
-            updateDeviceConfiguration(arcDev.getDevice());
+            updateDeviceConfiguration(arcDev);
         }
         return storage;
     }
@@ -640,8 +630,7 @@ class StoreServiceImpl implements StoreService {
     public ZipInputStream openZipInputStream(
             StoreSession session, String storageID, String storagePath, String studyUID)
             throws IOException {
-        ArchiveDeviceExtension arcDev = session.getArchiveAEExtension().getArchiveDeviceExtension();
-        Storage storage = getStorage(session,  arcDev.getStorageDescriptor(storageID));
+        Storage storage = session.getStorage(storageID, storageFactory);
         ReadContext readContext = storage.createReadContext();
         readContext.setStoragePath(storagePath);
         readContext.setStudyInstanceUID(studyUID);
@@ -649,8 +638,9 @@ class StoreServiceImpl implements StoreService {
     }
 
     @Override
-    public void restoreInstances(StoreSession session, String studyUID, String seriesUID) throws IOException {
-        ejb.restoreInstances(session, studyUID, seriesUID);
+    public List<Instance> restoreInstances(StoreSession session, String studyUID, String seriesUID, Duration duration)
+            throws IOException {
+        return ejb.restoreInstances(session, studyUID, seriesUID, duration);
     }
 
     private ArchiveCompressionRule selectCompressionRule(Transcoder transcoder, StoreContext storeContext) {

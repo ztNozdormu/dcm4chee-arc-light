@@ -1,20 +1,37 @@
-import { Component } from '@angular/core';
-import {MdDialogRef} from '@angular/material';
+import {Component, OnInit} from '@angular/core';
+import {MatDialogRef} from '@angular/material';
 import * as _ from 'lodash';
 import {AppService} from '../../../app.service';
 import {Http} from '@angular/http';
-import {SlimLoadingBarService} from 'ng2-slim-loading-bar';
 import {WindowRefService} from "../../../helpers/window-ref.service";
 import {HttpErrorHandler} from "../../../helpers/http-error-handler";
+import {J4careHttpService} from "../../../helpers/j4care-http.service";
+import {LoadingBarService} from '@ngx-loading-bar/core';
+import {AeListService} from "../../../configuration/ae-list/ae-list.service";
 
 @Component({
-  selector: 'app-create-ae',
-  templateUrl: './create-ae.component.html'
+    selector: 'app-create-ae',
+    templateUrl: './create-ae.component.html',
+    styles: [`
+        .test_button button{
+            background:rgba(6, 29, 47, 0.84);
+            color: white;
+            width: 130px;
+            height: 26px;
+            border: none;
+            margin-top: 4px;
+            margin-left: 5px;
+        }
+        .test_button button:hover{
+            background: #061d2f;
+        }
+  `],
 })
-export class CreateAeComponent {
+export class CreateAeComponent implements OnInit{
     private _dicomconn;
     private _newAetModel;
     private _netAEModel;
+    showTestBlock = true;
     showdevice= false;
     showconn= true;
     showselectdevice= true;
@@ -24,15 +41,20 @@ export class CreateAeComponent {
     selctedDeviceObject;
     selectedDevice;
     netConnModelDevice;
+    private _aes;
+    selectedCallingAet;
     private _devices;
     _ = _;
     constructor(
-        public $http: Http,
-        public dialogRef: MdDialogRef<CreateAeComponent>,
+        public $http:J4careHttpService,
+        public dialogRef: MatDialogRef<CreateAeComponent>,
         public mainservice: AppService,
-        public cfpLoadingBar: SlimLoadingBarService,
-        public httpErrorHandler:HttpErrorHandler
+        public cfpLoadingBar: LoadingBarService,
+        public httpErrorHandler:HttpErrorHandler,
+        private aeListService:AeListService
     ) {
+    }
+    ngOnInit(){
         this.cfpLoadingBar.complete();
     }
 
@@ -71,6 +93,14 @@ export class CreateAeComponent {
         this._devices = value;
     };
 
+    get aes() {
+        return this._aes;
+    }
+
+    set aes(value) {
+        this._aes = value;
+    }
+
     checkClick(e){
         console.log('e', e);
         let code = (e.keyCode ? e.keyCode : e.which);
@@ -91,7 +121,7 @@ export class CreateAeComponent {
                         // $scope.selctedDeviceObject.dicomNetworkConnection.push($scope.netConnModelDevice);
                         console.log('this.selctedDeviceObject', $this.selctedDeviceObject);
                         $this.setReferencesFromDevice();
-                        $this.cfpLoadingBar.stop();
+                        $this.cfpLoadingBar.complete();
                     }, (err) => {
                         $this.httpErrorHandler.handleError(err);
                         $this.cfpLoadingBar.complete();
@@ -236,6 +266,32 @@ export class CreateAeComponent {
             });
         }
         console.log('this.selctedDeviceObject=', this.selctedDeviceObject);
+    }
+    testConnection(){
+        if(this.selectedCallingAet && this.newAetModel.dicomNetworkAE[0].dicomAETitle && this.newAetModel.dicomNetworkConnection[0].dicomHostname && this.newAetModel.dicomNetworkConnection[0].dicomPort){
+            this.cfpLoadingBar.start();
+            this.aeListService.echoAe(this.selectedCallingAet, this.newAetModel.dicomNetworkAE[0].dicomAETitle,{
+                host:this.newAetModel.dicomNetworkConnection[0].dicomHostname,
+                port:this.newAetModel.dicomNetworkConnection[0].dicomPort
+            }).subscribe((response) => {
+                this.cfpLoadingBar.complete();
+                let msg = this.aeListService.generateEchoResponseText(response);
+                this.mainservice.setMessage({
+                    'title': msg.title,
+                    'text': msg.text,
+                    'status': msg.status
+                });
+            }, err => {
+                this.cfpLoadingBar.complete();
+                this.httpErrorHandler.handleError(err);
+            });
+        }else{
+            this.mainservice.setMessage({
+                title:"Error",
+                text:"Parameter is missing, check the parameters Host, port, AE Title and Calling AET!",
+                status:"error"
+            })
+        }
     }
     validAeForm(){
         if (!_.hasIn(this.newAetModel, 'dicomNetworkAE[0].dicomAETitle') || this.newAetModel.dicomNetworkAE[0].dicomAETitle === ''){

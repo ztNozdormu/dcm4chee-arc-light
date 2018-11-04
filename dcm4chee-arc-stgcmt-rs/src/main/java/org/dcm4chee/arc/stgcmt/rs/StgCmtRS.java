@@ -40,6 +40,7 @@
 
 package org.dcm4chee.arc.stgcmt.rs;
 
+import org.dcm4che3.conf.json.JsonWriter;
 import org.dcm4chee.arc.entity.StgCmtResult;
 import org.dcm4chee.arc.stgcmt.StgCmtManager;
 import org.jboss.resteasy.annotations.cache.NoCache;
@@ -56,8 +57,6 @@ import javax.ws.rs.*;
 import javax.ws.rs.core.Context;
 import javax.ws.rs.core.Response;
 import javax.ws.rs.core.StreamingOutput;
-import java.io.IOException;
-import java.io.OutputStream;
 import java.text.ParseException;
 import java.text.SimpleDateFormat;
 import java.util.Date;
@@ -104,32 +103,31 @@ public class StgCmtRS {
     @GET
     @NoCache
     @Produces("application/json")
-    public StreamingOutput listStgCmts() throws Exception {
+    public StreamingOutput listStgCmts() {
+        logRequest();
         final List<StgCmtResult> stgCmtResults = mgr.listStgCmts(
                 statusOf(status), studyUID, exporterID, parseInt(offset), parseInt(limit));
-        return new StreamingOutput() {
-            @Override
-            public void write(OutputStream out) throws IOException {
+        return out -> {
                 JsonGenerator gen = Json.createGenerator(out);
                 gen.writeStartArray();
                 for (StgCmtResult stgCmtResult : stgCmtResults) {
+                    JsonWriter writer = new JsonWriter(gen);
                     gen.writeStartObject();
-                    gen.write("dicomDeviceName", stgCmtResult.getDeviceName());
-                    gen.write("transactionUID", stgCmtResult.getTransactionUID());
-                    gen.write("status", stgCmtResult.getStatus().toString());
-                    gen.write("studyUID", stgCmtResult.getStudyInstanceUID());
-                    gen.write("seriesUID", stgCmtResult.getSeriesInstanceUID());
-                    gen.write("objectUID", stgCmtResult.getSopInstanceUID());
-                    gen.write("exporterID", stgCmtResult.getExporterID());
-                    gen.write("requested", stgCmtResult.getNumberOfInstances());
-                    gen.write("failures", stgCmtResult.getNumberOfFailures());
-                    gen.write("createdTime", stgCmtResult.getCreatedTime().toString());
-                    gen.write("updatedTime", stgCmtResult.getUpdatedTime().toString());
+                    writer.writeNotNullOrDef("dicomDeviceName", stgCmtResult.getDeviceName(), null);
+                    writer.writeNotNullOrDef("transactionUID", stgCmtResult.getTransactionUID(), null);
+                    writer.writeNotNullOrDef("status", stgCmtResult.getStatus().name(), null);
+                    writer.writeNotNullOrDef("studyUID", stgCmtResult.getStudyInstanceUID(), null);
+                    writer.writeNotNullOrDef("seriesUID", stgCmtResult.getSeriesInstanceUID(), null);
+                    writer.writeNotNullOrDef("objectUID", stgCmtResult.getSopInstanceUID(), null);
+                    writer.writeNotNullOrDef("exporterID", stgCmtResult.getExporterID(), null);
+                    writer.writeNotNullOrDef("requested", stgCmtResult.getNumberOfInstances(), 0);
+                    writer.writeNotNullOrDef("failures", stgCmtResult.getNumberOfFailures(), 0);
+                    writer.writeNotNullOrDef("createdTime", stgCmtResult.getCreatedTime().toString(), null);
+                    writer.writeNotNullOrDef("updatedTime", stgCmtResult.getUpdatedTime().toString(), null);
                     gen.writeEnd();
                 }
                 gen.writeEnd();
                 gen.flush();
-            }
         };
     }
 

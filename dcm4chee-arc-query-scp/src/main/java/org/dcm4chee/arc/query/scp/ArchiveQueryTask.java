@@ -163,7 +163,7 @@ public class ArchiveQueryTask extends BasicQueryTask {
         setOptionalKeysNotSupported(query.isOptionalKeysNotSupported());
         query.initQuery();
         if (queryMaxNumberOfResults > 0 && !ctx.containsUniqueKey()
-                && query.count() > queryMaxNumberOfResults) {
+                && query.fetchCount() > queryMaxNumberOfResults) {
             throw new DicomServiceException(Status.UnableToProcess, "Request entity too large");
         }
         transaction = query.beginTransaction();
@@ -178,7 +178,7 @@ public class ArchiveQueryTask extends BasicQueryTask {
                 spanningCFindSCP,
                 ctx.getSOPClassUID(),
                 as.getQueryOptionsFor(ctx.getSOPClassUID()));
-        spanningCFindRSP = cfindscu.query(spanningAssoc, Priority.NORMAL, spanningQueryKeys(), 0);
+        spanningCFindRSP = cfindscu.query(spanningAssoc, Priority.NORMAL, spanningQueryKeys(), 0, 1, null);
         spanningCFindRSP.next();
         nextSpanningMatch();
     }

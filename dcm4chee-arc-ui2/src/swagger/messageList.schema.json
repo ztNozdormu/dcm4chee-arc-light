@@ -3,8 +3,9 @@
   "type": "array",
   "items": {
     "required": [
-      "id",
+      "JMSMessageID",
       "queue",
+      "priority",
       "status",
       "failures",
       "createdTime",
@@ -12,15 +13,20 @@
       "scheduledTime"
     ],
     "properties": {
-      "id": {
-        "title": "Message ID",
-        "description": "id of message",
+      "JMSMessageID": {
+        "title": "JMS Message ID",
+        "description": "id of JMS message",
         "type": "string"
       },
       "queue": {
         "title": "Queue Name",
         "description": "name of queue",
         "type": "string"
+      },
+      "priority": {
+        "title": "Priority",
+        "description": "priority of message from 0 (lowest) to 9 (highest)",
+        "type": "integer"
       },
       "status": {
         "title": "Message Status",
@@ -83,6 +89,11 @@
       "messagePropertyXX": {
         "title": "Message Property XX",
         "description": "other JMS property of this message",
+        "type": "string"
+      },
+      "batchID": {
+        "title": "Batch ID",
+        "description": "Batch ID of this task",
         "type": "string"
       }
     }

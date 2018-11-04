@@ -17,7 +17,7 @@
  *
  * The Initial Developer of the Original Code is
  * J4Care.
- * Portions created by the Initial Developer are Copyright (C) 2013
+ * Portions created by the Initial Developer are Copyright (C) 2017
  * the Initial Developer. All Rights Reserved.
  *
  * Contributor(s):
@@ -40,18 +40,24 @@
 
 package org.dcm4chee.arc.hl7.impl;
 
+import org.dcm4che3.audit.AuditMessages;
+import org.dcm4che3.conf.api.ConfigurationNotFoundException;
 import org.dcm4che3.hl7.HL7Exception;
 import org.dcm4che3.hl7.HL7Message;
 import org.dcm4che3.hl7.HL7Segment;
+import org.dcm4che3.net.Device;
+import org.dcm4che3.net.hl7.HL7Application;
+import org.dcm4che3.net.hl7.HL7DeviceExtension;
+import org.dcm4che3.net.hl7.UnparsedHL7Message;
 import org.dcm4chee.arc.entity.QueueMessage;
+import org.dcm4chee.arc.hl7.ArchiveHL7Message;
 import org.dcm4chee.arc.hl7.HL7Sender;
+import org.dcm4chee.arc.qmgt.HttpServletRequestInfo;
 import org.dcm4chee.arc.qmgt.Outcome;
 import org.dcm4chee.arc.qmgt.QueueManager;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
-import javax.ejb.ActivationConfigProperty;
-import javax.ejb.MessageDriven;
 import javax.ejb.TransactionAttribute;
 import javax.ejb.TransactionAttributeType;
 import javax.inject.Inject;
@@ -62,17 +68,16 @@ import javax.jms.ObjectMessage;
 
 /**
  * @author Gunter Zeilinger <gunterze@gmail.com>
+ * @author Vrinda Nayak <vrinda.nayak@j4care.com>
  * @since Jul 2016
  */
-@MessageDriven(activationConfig = {
-        @ActivationConfigProperty(propertyName = "destinationType", propertyValue = "javax.jms.Queue"),
-        @ActivationConfigProperty(propertyName = "destination", propertyValue = HL7Sender.JNDI_NAME),
-        @ActivationConfigProperty(propertyName = "maxSession", propertyValue = "1")
-})
 @TransactionAttribute(TransactionAttributeType.NOT_SUPPORTED)
 public class HL7SenderMDB implements MessageListener {
 
     private static final Logger LOG = LoggerFactory.getLogger(HL7SenderMDB.class);
+
+    @Inject
+    private Device device;
 
     @Inject
     private HL7Sender hl7Sender;
@@ -91,24 +96,36 @@ public class HL7SenderMDB implements MessageListener {
         if (queueManager.onProcessingStart(msgID) == null)
             return;
         try {
-            byte[] hl7msg = (byte[]) ((ObjectMessage) msg).getObject();
-            HL7Message ack = hl7Sender.sendMessage(
-                    msg.getStringProperty("SendingApplication"),
-                    msg.getStringProperty("SendingFacility"),
+            ArchiveHL7Message hl7Msg = new ArchiveHL7Message((byte[]) ((ObjectMessage) msg).getObject());
+            String messageType = msg.getStringProperty("MessageType");
+            HL7Application sender = getSendingHl7Application(msg.getStringProperty("SendingApplication"),
+                    msg.getStringProperty("SendingFacility"));
+            hl7Msg.setHttpServletRequestInfo(HttpServletRequestInfo.valueOf(msg));
+            UnparsedHL7Message rsp = hl7Sender.sendMessage(
+                    sender,
                     msg.getStringProperty("ReceivingApplication"),
                     msg.getStringProperty("ReceivingFacility"),
-                    msg.getStringProperty("MessageType"),
+                    messageType,
                     msg.getStringProperty("MessageControlID"),
-                    hl7msg);;
-            queueManager.onProcessingSuccessful(msgID, toOutcome(ack));
+                    hl7Msg);
+            queueManager.onProcessingSuccessful(msgID, toOutcome(rsp.data(), sender));
         } catch (Throwable e) {
             LOG.warn("Failed to process {}", msg, e);
             queueManager.onProcessingFailed(msgID, e);
         }
     }
 
-    private Outcome toOutcome(HL7Message ack) {
-        HL7Segment msa = ack.getSegment("MSA");
+    private HL7Application getSendingHl7Application(String sendingApplication, String sendingFacility) throws ConfigurationNotFoundException {
+        HL7DeviceExtension hl7Dev = device.getDeviceExtension(HL7DeviceExtension.class);
+        String sendingAppWithFacility = sendingApplication + '|' + sendingFacility;
+        HL7Application sender = hl7Dev.getHL7Application(sendingAppWithFacility, true);
+        if (sender == null)
+            throw new ConfigurationNotFoundException("Sending HL7 Application not configured : " + sendingAppWithFacility);
+        return sender;
+    }
+
+    private Outcome toOutcome(byte[] rsp, HL7Application sender) {
+        HL7Segment msa = HL7Message.parse(rsp, sender.getHL7DefaultCharacterSet()).getSegment("MSA");
         if (msa == null)
             return new Outcome(QueueMessage.Status.WARNING, "Missing MSA segment in response message");
 

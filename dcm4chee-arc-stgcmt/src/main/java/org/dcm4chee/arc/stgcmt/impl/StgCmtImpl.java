@@ -60,6 +60,7 @@ import org.dcm4chee.arc.entity.StgCmtResult;
 import org.dcm4chee.arc.exporter.ExportContext;
 import org.dcm4chee.arc.qmgt.Outcome;
 import org.dcm4chee.arc.qmgt.QueueManager;
+import org.dcm4chee.arc.qmgt.QueueSizeLimitExceededException;
 import org.dcm4chee.arc.query.QueryService;
 import org.dcm4chee.arc.stgcmt.StgCmtManager;
 import org.dcm4chee.arc.stgcmt.StgCmtSCP;
@@ -72,6 +73,7 @@ import javax.enterprise.event.Observes;
 import javax.enterprise.inject.Typed;
 import javax.inject.Inject;
 import javax.jms.JMSException;
+import javax.jms.Message;
 import javax.jms.ObjectMessage;
 import java.io.IOException;
 
@@ -122,15 +124,24 @@ class StgCmtImpl extends AbstractDicomService implements StgCmtSCP, StgCmtSCU {
     public void onExport(@Observes ExportContext ctx) {
         ExporterDescriptor descriptor = ctx.getExporter().getExporterDescriptor();
         String stgCmtSCPAETitle = descriptor.getStgCmtSCPAETitle();
-        if (stgCmtSCPAETitle != null)
-            if (ctx.isOnlyStgCmt()
-                    || !ctx.isOnlyIAN() && ctx.getOutcome().getStatus() == QueueMessage.Status.COMPLETED)
-                triggerStorageCommit(ctx, descriptor, stgCmtSCPAETitle);
+        if (stgCmtSCPAETitle != null && ctx.getOutcome().getStatus() == QueueMessage.Status.COMPLETED)
+            try {
+                scheduleStorageCommit(ctx, descriptor);
+            } catch (QueueSizeLimitExceededException e) {
+                LOG.warn(e.getMessage()
+                        + " - no Storage Commitment triggered for Export to "
+                        + descriptor.getExporterID());
+            }
     }
 
-    private void triggerStorageCommit(ExportContext ctx, ExporterDescriptor descriptor, String stgCmtSCPAETitle) {
-        Attributes actionInfo = createActionInfo(ctx);
-        scheduleNAction(ctx.getAETitle(), stgCmtSCPAETitle, actionInfo, ctx, descriptor.getExporterID());
+    @Override
+    public void scheduleStorageCommit(ExportContext ctx, ExporterDescriptor descriptor)
+            throws QueueSizeLimitExceededException {
+        String stgCmtSCPAETitle = descriptor.getStgCmtSCPAETitle();
+        if (stgCmtSCPAETitle != null) {
+            Attributes actionInfo = createActionInfo(ctx);
+            scheduleNAction(ctx.getAETitle(), stgCmtSCPAETitle, actionInfo, ctx, descriptor.getExporterID());
+        }
     }
 
     private Attributes createActionInfo(ExportContext ctx) {
@@ -149,10 +160,13 @@ class StgCmtImpl extends AbstractDicomService implements StgCmtSCP, StgCmtSCU {
         String localAET = as.getLocalAET();
         String remoteAET = as.getRemoteAET();
         try {
-            as.getApplicationEntity().findCompatibelConnection(aeCache.findApplicationEntity(remoteAET));
+            as.getApplicationEntity().findCompatibleConnection(aeCache.findApplicationEntity(remoteAET));
             scheduleNEventReport(localAET, remoteAET, actionInfo);
         } catch (ConfigurationNotFoundException e) {
             throw new DicomServiceException(Status.ProcessingFailure, "Unknown Calling AET: " + remoteAET);
+        } catch (QueueSizeLimitExceededException e) {
+            throw new DicomServiceException(Status.ResourceLimitation,
+                    "Maximum number of pending Storage Commitment requests reached");
         } catch (Exception e) {
             throw new DicomServiceException(Status.ProcessingFailure, e.getMessage());
         }
@@ -173,7 +187,8 @@ class StgCmtImpl extends AbstractDicomService implements StgCmtSCP, StgCmtSCU {
     }
 
     private void scheduleNAction(String localAET, String remoteAET, Attributes actionInfo,
-                                 ExportContext ctx, String exporterID) {
+                                 ExportContext ctx, String exporterID)
+            throws QueueSizeLimitExceededException {
         try {
             ObjectMessage msg = queueManager.createObjectMessage(actionInfo);
             msg.setStringProperty("LocalAET", localAET);
@@ -182,18 +197,19 @@ class StgCmtImpl extends AbstractDicomService implements StgCmtSCP, StgCmtSCU {
             msg.setStringProperty("SeriesInstanceUID", ctx.getSeriesInstanceUID());
             msg.setStringProperty("SopInstanceUID", ctx.getSopInstanceUID());
             msg.setStringProperty("ExporterID", exporterID);
-            queueManager.scheduleMessage(StgCmtSCU.QUEUE_NAME, msg);
+            queueManager.scheduleMessage(StgCmtSCU.QUEUE_NAME, msg, Message.DEFAULT_PRIORITY, null);
         } catch (JMSException e) {
             throw QueueMessage.toJMSRuntimeException(e);
         }
     }
 
-    private void scheduleNEventReport(String localAET, String remoteAET, Attributes eventInfo) {
+    private void scheduleNEventReport(String localAET, String remoteAET, Attributes eventInfo)
+            throws QueueSizeLimitExceededException {
         try {
             ObjectMessage msg = queueManager.createObjectMessage(eventInfo);
             msg.setStringProperty("LocalAET", localAET);
             msg.setStringProperty("RemoteAET", remoteAET);
-            queueManager.scheduleMessage(StgCmtSCP.QUEUE_NAME, msg);
+            queueManager.scheduleMessage(StgCmtSCP.QUEUE_NAME, msg, Message.DEFAULT_PRIORITY, null);
         } catch (JMSException e) {
             throw QueueMessage.toJMSRuntimeException(e);
         }
@@ -244,10 +260,9 @@ class StgCmtImpl extends AbstractDicomService implements StgCmtSCP, StgCmtSCU {
     }
 
     @Override
-    public Outcome sendNEventReport(String localAET, String remoteAET, Attributes eventInfo)
+    public Outcome sendNEventReport(String localAET, ApplicationEntity remoteAE, Attributes eventInfo)
             throws Exception  {
             ApplicationEntity localAE = device.getApplicationEntity(localAET, true);
-            ApplicationEntity remoteAE = aeCache.findApplicationEntity(remoteAET);
             AAssociateRQ aarq = mkAAssociateRQ(localAE, localAET, TransferCapability.Role.SCP);
             Association as = localAE.connect(remoteAE, aarq);
             try {
@@ -260,12 +275,12 @@ class StgCmtImpl extends AbstractDicomService implements StgCmtSCP, StgCmtSCU {
                 neventReport.next();
                 return new Outcome(failed > 0 ? QueueMessage.Status.WARNING : QueueMessage.Status.COMPLETED,
                         "Return Storage Commitment Result[successful: " + successful + ", failed: " + failed
-                                + "] to AE: " + remoteAET);
+                                + "] to AE: " + remoteAE.getAETitle());
             } finally {
                 try {
                     as.release();
                 } catch (IOException e) {
-                    LOG.info("{}: Failed to release association to {}", as, remoteAET);
+                    LOG.info("{}: Failed to release association to {}", as, remoteAE.getAETitle());
                 }
             }
     }

@@ -7,7 +7,7 @@
                 <li role="presentation" [ngClass]="{'active':activetab==='createdevice'}" (click)="changeTabAERegister('createdevice')"><a>Create new device</a></li>
                 <li role="presentation" [ngClass]="{'active':activetab==='selectdevice'}" (click)="changeTabAERegister('selectdevice')"><a>Select existing device</a></li>
             </ul>
-            <div md-dialog-content>
+            <div mat-dialog-content>
                 <div class="createdevice tabcontain">
                     <div class="tab_body" [hidden]="!(activetab === 'createdevice')">
                         <h4 (click)="showdevice=!showdevice;showconn=false">New Device <span *ngIf="newAetModel.dicomDeviceName && !showdevice"> <b>{{newAetModel.dicomDeviceName}}</b></span></h4>
@@ -140,6 +140,24 @@
                                 <label class="title">AE Description</label>
                                 <textarea name="dicomDescription" [(ngModel)]="newAetModel.dicomNetworkAE[0].dicomDescription"></textarea>
                                 <span class="description">Unconstrained text description of the application entity</span>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="test">
+                        <h4 (click)="showTestBlock=!showTestBlock">Test Connection</h4>
+                        <div class="content" *ngIf="showTestBlock && newAetModel.dicomNetworkAE[0].dicomAETitle && newAetModel.dicomNetworkConnection[0].dicomHostname && newAetModel.dicomNetworkConnection[0].dicomPort">
+                            <div class="block">
+                                <div class="label_part">
+                                    Calling AET:
+                                </div>
+                                <div class="input_part">
+                                    <select [ngModel]="selectedCallingAet" (ngModelChange)="selectedCallingAet = $event" name="dicomDeviceName">
+                                        <option [value]="obj.dicomAETitle" *ngFor="let obj of aes">{{obj.dicomAETitle}}</option>
+                                    </select>
+                                </div>
+                                <div class="test_button">
+                                    <button (click)="testConnection()" title="Verify AET, host and port before saving" [disabled]="!selectedCallingAet">TEST CONNECTION</button>
+                                </div>
                             </div>
                         </div>
                     </div>

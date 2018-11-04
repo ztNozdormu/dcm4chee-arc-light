@@ -17,7 +17,7 @@
  *
  * The Initial Developer of the Original Code is
  * J4Care.
- * Portions created by the Initial Developer are Copyright (C) 2015
+ * Portions created by the Initial Developer are Copyright (C) 2015-2017
  * the Initial Developer. All Rights Reserved.
  *
  * Contributor(s):
@@ -42,13 +42,12 @@ package org.dcm4chee.arc.patient;
 
 import org.dcm4che3.data.Attributes;
 import org.dcm4che3.data.IDWithIssuer;
-import org.dcm4che3.hl7.HL7Segment;
 import org.dcm4che3.net.Association;
+import org.dcm4che3.net.hl7.UnparsedHL7Message;
 import org.dcm4che3.soundex.FuzzyStr;
 import org.dcm4chee.arc.conf.AttributeFilter;
 import org.dcm4chee.arc.entity.Patient;
-
-import javax.servlet.http.HttpServletRequest;
+import org.dcm4chee.arc.qmgt.HttpServletRequestInfo;
 
 /**
  * @author Gunter Zeilinger <gunterze@gmail.com>
@@ -62,9 +61,9 @@ public interface PatientMgtContext {
 
     Association getAssociation();
 
-    HttpServletRequest getHttpRequest();
+    UnparsedHL7Message getUnparsedHL7Message();
 
-    HL7Segment getHL7MessageHeader();
+    void setUnparsedHL7Message(UnparsedHL7Message msg);
 
     String getRemoteHostName();
 
@@ -99,4 +98,12 @@ public interface PatientMgtContext {
     Patient getPatient();
 
     void setPatient(Patient patient);
+
+    HttpServletRequestInfo getHttpServletRequestInfo();
+
+    void setHttpServletRequestInfo(HttpServletRequestInfo httpServletRequestInfo);
+
+    Patient.VerificationStatus getPatientVerificationStatus();
+
+    void setPatientVerificationStatus(Patient.VerificationStatus patientVerificationStatus);
 }

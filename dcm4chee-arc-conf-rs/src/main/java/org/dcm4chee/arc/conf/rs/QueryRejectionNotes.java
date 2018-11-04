@@ -44,19 +44,22 @@ import org.dcm4che3.net.Device;
 import org.dcm4chee.arc.conf.ArchiveDeviceExtension;
 import org.dcm4chee.arc.conf.RejectionNote;
 import org.jboss.resteasy.annotations.cache.NoCache;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 import javax.enterprise.context.RequestScoped;
 import javax.inject.Inject;
 import javax.json.Json;
 import javax.json.stream.JsonGenerator;
+import javax.servlet.http.HttpServletRequest;
 import javax.validation.constraints.Pattern;
 import javax.ws.rs.GET;
 import javax.ws.rs.Path;
 import javax.ws.rs.Produces;
 import javax.ws.rs.QueryParam;
+import javax.ws.rs.core.Context;
 import javax.ws.rs.core.StreamingOutput;
-import java.io.IOException;
-import java.io.OutputStream;
+import java.util.Comparator;
 
 /**
  * @author Gunter Zeilinger <gunterze@gmail.com>
@@ -67,8 +70,13 @@ import java.io.OutputStream;
 @RequestScoped
 public class QueryRejectionNotes {
 
+    private static final Logger LOG = LoggerFactory.getLogger(QueryRejectionNotes.class);
+
     @Inject
     private Device device;
+
+    @Context
+    private HttpServletRequest request;
 
     @QueryParam("dcmRevokeRejection")
     @Pattern(regexp = "true|false")
@@ -77,16 +85,12 @@ public class QueryRejectionNotes {
     @GET
     @NoCache
     @Produces("application/json")
-    public StreamingOutput query() throws Exception {
-        return new StreamingOutput() {
-            @Override
-            public void write(OutputStream out) throws IOException {
+    public StreamingOutput query() {
+        LOG.info("Process GET {} from {}@{}", request.getRequestURI(), request.getRemoteUser(), request.getRemoteHost());
+        return out -> {
                 JsonGenerator gen = Json.createGenerator(out);
                 gen.writeStartArray();
-                for (RejectionNote rjNote : device.getDeviceExtension(ArchiveDeviceExtension.class).getRejectionNotes()) {
-                    if (rjNote.isRevokeRejection() != Boolean.parseBoolean(revokeRejection))
-                        continue;
-
+                for (RejectionNote rjNote : sortedRejectionNotes()) {
                     Code code = rjNote.getRejectionNoteCode();
                     JsonWriter writer = new JsonWriter(gen);
                     gen.writeStartObject();
@@ -99,8 +103,15 @@ public class QueryRejectionNotes {
                 }
                 gen.writeEnd();
                 gen.flush();
-            }
         };
+    }
+
+    private RejectionNote[] sortedRejectionNotes() {
+        return device.getDeviceExtension(ArchiveDeviceExtension.class)
+                .getRejectionNotes().stream()
+                .sorted(Comparator.comparing(RejectionNote::getRejectionNoteLabel))
+                .filter(rjNote -> rjNote.isRevokeRejection() == Boolean.parseBoolean(revokeRejection))
+                .toArray(RejectionNote[]::new);
     }
 
 }

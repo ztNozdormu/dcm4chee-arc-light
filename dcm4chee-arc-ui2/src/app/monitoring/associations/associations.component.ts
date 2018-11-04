@@ -1,18 +1,21 @@
-import { Component } from '@angular/core';
+///<reference path="../../../../node_modules/@angular/core/src/metadata/lifecycle_hooks.d.ts"/>
+import { Component, OnDestroy } from '@angular/core';
 import {Http} from '@angular/http';
 import 'rxjs/add/operator/map';
 import 'rxjs/add/operator/catch';
 import * as FileSaver from 'file-saver';
-import {SlimLoadingBarService} from 'ng2-slim-loading-bar';
 import {MessagingComponent} from '../../widgets/messaging/messaging.component';
 import {AppService} from '../../app.service';
 import {WindowRefService} from "../../helpers/window-ref.service";
+import {J4careHttpService} from "../../helpers/j4care-http.service";
+import {HttpErrorHandler} from "../../helpers/http-error-handler";
+import {LoadingBarService} from "@ngx-loading-bar/core";
 
 @Component({
   selector: 'app-associations',
   templateUrl: './associations.component.html'
 })
-export class AssociationsComponent{
+export class AssociationsComponent implements OnDestroy{
     updaterate: any = 3;
     // logoutUrl = myApp.logoutUrl();
     // status:any;
@@ -20,9 +23,9 @@ export class AssociationsComponent{
     message = '';
     others   = false;
     associationStatus;
+    pause = false;
     // myValue = 10;
-    constructor(public $http: Http, public appservices: AppService, private cfpLoadingBar: SlimLoadingBarService, public messaging: MessagingComponent) {
-        this.cfpLoadingBar.interval = 200;
+    constructor(public $http:J4careHttpService, public appservices: AppService, private cfpLoadingBar: LoadingBarService, public messaging: MessagingComponent, public httpErrorHandler:HttpErrorHandler) {
     }
 
 
@@ -128,7 +131,11 @@ export class AssociationsComponent{
     abort(serialnr){
         this.cfpLoadingBar.start();
         this.$http.delete('/dcm4chee-arc/monitor/associations/' + serialnr).subscribe(res => {
+            this.cfpLoadingBar.complete();
             this.refresh();
+        },(err)=>{
+            this.cfpLoadingBar.complete();
+            this.httpErrorHandler.handleError(err);
         });
     }
 
@@ -156,14 +163,19 @@ export class AssociationsComponent{
                 }else{
                     this.associationStatus = null;
                 }
-                this.cfpLoadingBar.progress = this.cfpLoadingBar.progress + 10;
                 this.cfpLoadingBar.complete();
                 // },1000);
             }, (err) => {
+                this.httpErrorHandler.handleError(err);
                 this.cfpLoadingBar.complete();
             });
     }
-
+    mauseEnter(){
+        this.pause = true;
+    }
+    mauseLeave(){
+        this.pause = false;
+    }
     monitor(){
         // cfpLoadingBar.start();
         this.stopLoop = false;
@@ -183,32 +195,34 @@ export class AssociationsComponent{
             this.updaterate = this.updaterate.replace(',', '.');
         }
         let $that: any = this;
-        let associationLoop = setInterval(function () {
+        let associationLoop = setInterval(() => {
             if ($that.stopLoop){
                 clearInterval(associationLoop);
             }else{
-
-                $that.$http.get('/dcm4chee-arc/monitor/associations')
-                    .map((res) => res.json())
-                    .subscribe(
-                        (res) => {
-                            let data = res;
-                            if (data && data[0] && data[0] != ''){
-                                data = $that.modifyObject(data);
-                                data = $that.timeCalculator(data);
-                                $that.associationStatus = data;
-                            }else{
-                                $that.associationStatus = null;
+                if(!this.pause){
+                    $that.$http.get('/dcm4chee-arc/monitor/associations')
+                        .map((res) => res.json())
+                        .subscribe(
+                            (res) => {
+                                let data = res;
+                                if (data && data[0] && data[0] != ''){
+                                    data = $that.modifyObject(data);
+                                    data = $that.timeCalculator(data);
+                                    $that.associationStatus = data;
+                                }else{
+                                    $that.associationStatus = null;
+                                }
+                            },
+                            (err) => {
+                                this.httpErrorHandler.handleError(err);
+                                //     // DeviceService.msg($scope, {
+                                //     //     "title": "Error",
+                                //     //     "text": "Connection error!",
+                                //     //     "status": "error"
+                                //     // });
                             }
-                        },
-                        (res) => {
-                            //     // DeviceService.msg($scope, {
-                            //     //     "title": "Error",
-                            //     //     "text": "Connection error!",
-                            //     //     "status": "error"
-                            //     // });
-                        }
-                    );
+                        );
+                }
             }
         }, $that.updaterate * 1000);
     };
@@ -266,5 +280,7 @@ export class AssociationsComponent{
         let file = new File([csv], 'associacions.csv', {type: 'text/csv;charset=utf-8'});
         FileSaver.saveAs(file);
     };
-
+    ngOnDestroy(){
+      this.stopLoop = true;
+    }
 }

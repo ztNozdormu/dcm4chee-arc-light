@@ -79,18 +79,21 @@ import java.util.*;
                         "join fetch p.attributesBlob " +
                         "where st.studyInstanceUID = ?1"),
         @NamedQuery(
-                name=Study.FIND_PK_BY_STORAGE_ID_ORDER_BY_ACCESS_TIME,
-                query="select st.pk from Study st " +
-                        "where st.storageIDs = ?1 " +
+                name=Study.FIND_PK_BY_STORAGE_IDS_ORDER_BY_ACCESS_TIME,
+                query="select new org.dcm4chee.arc.entity.Study$PKUID(st.pk, st.studyInstanceUID) from Study st " +
+                        "where st.storageIDs in ?1 " +
                         "order by st.accessTime"),
         @NamedQuery(
-                name=Study.FIND_PK_BY_STORAGE_ID_AND_EXT_RETR_AET,
-                query="select st.pk from Study st " +
-                        "where st.storageIDs = ?1 and st.externalRetrieveAET = ?2 " +
+                name=Study.FIND_PK_BY_STORAGE_IDS_AND_EXT_RETR_AET,
+                query="select new org.dcm4chee.arc.entity.Study$PKUID(st.pk, st.studyInstanceUID) from Study st " +
+                        "where st.storageIDs in ?1 and st.externalRetrieveAET = ?2 " +
                         "order by st.accessTime"),
         @NamedQuery(
                 name=Study.UPDATE_ACCESS_TIME,
                 query="update Study st set st.accessTime = CURRENT_TIMESTAMP where st.pk = ?1"),
+        @NamedQuery(
+                name=Study.SET_STUDY_SIZE,
+                query="update Study st set st.size = ?2 where st.pk = ?1"),
         @NamedQuery(
                 name=Study.SET_COMPLETENESS,
                 query="update Study st set st.completeness = ?2 " +
@@ -112,12 +115,23 @@ import java.util.*;
                 query = "select st.studyInstanceUID from Study st " +
                         "where st.accessionNumber = ?1"),
         @NamedQuery(
+                name=Study.FIND_PK_BY_STUDY_UID,
+                query = "select st.pk from Study st " +
+                        "where st.studyInstanceUID = ?1"),
+        @NamedQuery(
                 name = Study.FIND_PATIENT_ATTRS_BY_STUDY_UIDS,
                 query = "select st.patient.attributesBlob from Study st " +
                         "join st.patient p " +
                         "join p.attributesBlob " +
-                        "where st.studyInstanceUID in ?1")
-
+                        "where st.studyInstanceUID in ?1"),
+        @NamedQuery(
+                name = Study.STORAGE_IDS_BY_STUDY_UID,
+                query = "select st.pk, st.storageIDs from Study st " +
+                        "where st.studyInstanceUID in ?1"),
+        @NamedQuery(
+                name = Study.SET_STORAGE_IDS,
+                query = "update Study st set st.storageIDs = ?2 " +
+                        "where st.pk = ?1")
 })
 @Entity
 @Table(name = "study",
@@ -138,22 +152,44 @@ import java.util.*;
                 @Index(columnList = "expiration_date"),
                 @Index(columnList = "failed_retrieves"),
                 @Index(columnList = "completeness"),
-                @Index(columnList = "ext_retrieve_aet")
+                @Index(columnList = "ext_retrieve_aet"),
+                @Index(columnList = "study_size")
         })
 public class Study {
 
     public static final String FIND_BY_PATIENT = "Study.findByPatient";
     public static final String FIND_BY_STUDY_IUID = "Study.findByStudyIUID";
     public static final String FIND_BY_STUDY_IUID_EAGER = "Study.findByStudyIUIDEager";
-    public static final String FIND_PK_BY_STORAGE_ID_ORDER_BY_ACCESS_TIME = "Study.findPkByStorageIDOrderByAccessTime";
-    public static final String FIND_PK_BY_STORAGE_ID_AND_EXT_RETR_AET = "Study.findPkByStorageIDAndExtRetrAET";
+    public static final String FIND_PK_BY_STORAGE_IDS_ORDER_BY_ACCESS_TIME = "Study.findPkByStorageIDsOrderByAccessTime";
+    public static final String FIND_PK_BY_STORAGE_IDS_AND_EXT_RETR_AET = "Study.findPkByStorageIDsAndExtRetrAET";
     public static final String UPDATE_ACCESS_TIME = "Study.UpdateAccessTime";
-    public static final String SET_COMPLETENESS = "Study.SetCompleteness";
-    public static final String INCREMENT_FAILED_RETRIEVES = "Study.IncrementFailedRetrieves";
-    public static final String COUNT_STUDIES_OF_PATIENT = "Study.CountStudiesOfPatient";
-    public static final String GET_EXPIRED_STUDIES = "Study.GetExpiredStudies";
-    public static final String STUDY_IUIDS_BY_ACCESSION_NUMBER = "Study.StudyIUIDsByAccessionNumber";
+    public static final String SET_STUDY_SIZE = "Study.setStudySize";
+    public static final String SET_COMPLETENESS = "Study.setCompleteness";
+    public static final String INCREMENT_FAILED_RETRIEVES = "Study.incrementFailedRetrieves";
+    public static final String COUNT_STUDIES_OF_PATIENT = "Study.countStudiesOfPatient";
+    public static final String GET_EXPIRED_STUDIES = "Study.getExpiredStudies";
+    public static final String STUDY_IUIDS_BY_ACCESSION_NUMBER = "Study.studyIUIDsByAccessionNumber";
     public static final String FIND_PATIENT_ATTRS_BY_STUDY_UIDS = "Study.findPatientAttrsByStudyUIDs";
+    public static final String FIND_PK_BY_STUDY_UID = "Study.findPkByStudyUID";
+    public static final String STORAGE_IDS_BY_STUDY_UID = "Study.storageIDsByStudyUID";
+    public static final String SET_STORAGE_IDS = "Study.setStorageIDs";
+
+    public static class PKUID {
+        public final Long pk;
+        public final String uid;
+
+        public PKUID(Long pk, String uid) {
+            this.pk = pk;
+            this.uid = uid;
+        }
+
+        @Override
+        public String toString() {
+            return "Study[pk=" + pk
+                    + ", uid=" + uid
+                    + "]";
+        }
+    }
 
     @Id
     @GeneratedValue(strategy=GenerationType.IDENTITY)
@@ -248,6 +284,10 @@ public class Study {
     @Column(name = "ext_retrieve_aet")
     private String externalRetrieveAET;
 
+    @Basic(optional = false)
+    @Column(name = "study_size")
+    private long size = -1L;
+
     @OneToOne(cascade = CascadeType.ALL, orphanRemoval = true, optional = false)
     @JoinColumn(name = "dicomattrs_fk")
     private AttributesBlob attributesBlob;
@@ -272,6 +312,13 @@ public class Study {
     @ManyToOne(optional = false)
     @JoinColumn(name = "patient_fk")
     private Patient patient;
+
+    public Study() {}
+
+    public Study(long pk, String studyInstanceUID) {
+        this.pk = pk;
+        this.studyInstanceUID = studyInstanceUID;
+    }
 
     @Override
     public String toString() {
@@ -333,23 +380,55 @@ public class Study {
         return false;
     }
 
+    public String getEncodedStorageIDs() {
+        return storageIDs;
+    }
+
     public String[] getStorageIDs() {
         return StringUtils.split(storageIDs, '\\');
     }
 
+    public void setStorageIDs(String... storageIDs) {
+        Arrays.sort(storageIDs);
+        this.storageIDs = StringUtils.concat(storageIDs, '\\');
+    }
+
     public boolean addStorageID(String storageID) {
-        if (storageID.equals(storageIDs))
+        String newStorageIDs = addStorageID(storageIDs, storageID);
+        if (newStorageIDs.equals(storageIDs)) {
+            return false;
+        }
+        this.storageIDs = newStorageIDs;
+        return true;
+    }
+
+    public static String addStorageID(String storageIDs, String storageID) {
+        if (storageID.equals(storageIDs) || storageIDs == null) {
+            return storageID;
+        }
+
+        TreeSet<String> set = new TreeSet<>(Arrays.asList(StringUtils.split(storageIDs, '\\')));
+        if (!set.add(storageID)) {
+            return storageIDs;
+        }
+
+        return StringUtils.concat(set.toArray(StringUtils.EMPTY_STRING), '\\');
+    }
+
+    public boolean removeStorageID(String storageID) {
+        if (storageIDs == null)
             return false;
 
-        if (storageIDs == null) {
-            storageIDs = storageID;
+        if (storageID.equals(storageIDs)) {
+            storageIDs = null;
             return true;
         }
+
         TreeSet<String> set = new TreeSet<>(Arrays.asList(getStorageIDs()));
-        if (!set.add(storageID))
+        if (!set.remove(storageID))
             return false;
 
-        this.storageIDs = StringUtils.concat(set.toArray(new String[set.size()]), '\\');
+        this.storageIDs = StringUtils.concat(set.toArray(StringUtils.EMPTY_STRING), '\\');
         return true;
     }
 
@@ -458,6 +537,10 @@ public class Study {
 
     public void setExternalRetrieveAET(String externalRetrieveAET) {
         this.externalRetrieveAET = externalRetrieveAET;
+    }
+
+    public void resetSize() {
+        this.size = -1L;
     }
 
     public Collection<CodeEntity> getProcedureCodes() {

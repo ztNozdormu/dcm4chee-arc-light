@@ -1,13 +1,19 @@
-import {Component, ViewContainerRef} from '@angular/core';
-import {MdDialog, MdDialogRef, MdDialogConfig} from '@angular/material';
+import {Component, OnInit, ViewContainerRef} from '@angular/core';
+import {MatDialog, MatDialogRef, MatDialogConfig} from '@angular/material';
 import {MessagingComponent} from './widgets/messaging/messaging.component';
 import {AppService} from './app.service';
 import {ViewChild} from '@angular/core';
 import 'rxjs/add/operator/catch';
+import 'rxjs/add/operator/share';
+
 import {Http} from '@angular/http';
 import {ProductLabellingComponent} from './widgets/dialogs/product-labelling/product-labelling.component';
 import {HostListener} from '@angular/core';
 import {WindowRefService} from "./helpers/window-ref.service";
+import * as _ from 'lodash';
+import {J4careHttpService} from "./helpers/j4care-http.service";
+import {j4care} from "./helpers/j4care.service";
+import {PermissionService} from "./helpers/permissions/permission.service";
 // import {DCM4CHE} from "./constants/dcm4-che";
 // declare var $:JQueryStatic;
 // import * as vex from "vex-js";
@@ -18,11 +24,11 @@ declare var DCM4CHE: any;
   selector: 'app-root',
   templateUrl: './app.component.html'
 })
-export class AppComponent {
+export class AppComponent implements OnInit {
     progressValue = 30;
     //Detect witch header should be shown.
     user: any = {};
-    dialogRef: MdDialogRef<any>;
+    dialogRef: MatDialogRef<any>;
     showUserMenu = false;
     url = '/auth';
     logoutUrl = '';
@@ -32,39 +38,94 @@ export class AppComponent {
     authServerUrl;
     showMenu = false;
     showScrollButton = false;
+    currentServerTime;
+    currentClockTime;
+    clockInterval;
+    j4care = j4care;
     @ViewChild(MessagingComponent) msg;
+    clockUnExtended = true;
+    myDeviceName = '';
+    timeZone;
     // vex["defaultOptions"]["className"] = 'vex-theme-os';
+    constructor(
+        public viewContainerRef: ViewContainerRef,
+        public dialog: MatDialog,
+        public config: MatDialogConfig,
+        public mainservice: AppService,
+        public $http:J4careHttpService,
+        private permissionService:PermissionService
+    ){}
 
-    constructor( public viewContainerRef: ViewContainerRef, public dialog: MdDialog, public config: MdDialogConfig, public messaging: MessagingComponent, public mainservice: AppService, public $http: Http){
+    ngOnInit(){
+        Date.prototype.toDateString = function() {
+            return `${this.getFullYear()}${j4care.getSingleDateTimeValueFromInt(this.getMonth()+1)}${j4care.getSingleDateTimeValueFromInt(this.getDate())}${j4care.getSingleDateTimeValueFromInt(this.getHours())}${j4care.getSingleDateTimeValueFromInt(this.getMinutes())}${j4care.getSingleDateTimeValueFromInt(this.getSeconds())}`;
+        };
         let $this = this;
-        if (!this.mainservice.user){
+/*        if (!this.mainservice.user){
             this.mainservice.user = this.mainservice.getUserInfo().share();
             this.mainservice.user
                 .subscribe(
                     (response) => {
-                        console.log('in userauth response', response);
-                        $this.mainservice.user.user = response.user;
-                        $this.mainservice.user.roles = response.roles;
-                        $this.mainservice.user.realm = response.realm;
-                        $this.mainservice.user.authServerUrl = response['auth-server-url'];
-                        $this.mainservice.isRole = function(role){
-                            if (response.user === null && response.roles.length === 0){
-                                return true;
+                        if(_.hasIn(response,"token") && response.token === null){
+                            if ($this.mainservice.global && !$this.mainservice.global.notSecure){
+                                let global = _.cloneDeep($this.mainservice.global);
+                                global.notSecure = true;
+                                $this.mainservice.setGlobal(global);
                             }else{
-                                if (response.roles && response.roles.indexOf(role) > -1){
-                                    return true;
+                                if ($this.mainservice.global && $this.mainservice.global.notSecure){
+                                    $this.mainservice.global.notSecure = true;
                                 }else{
-                                    return false;
+                                    $this.mainservice.setGlobal({notSecure: true});
                                 }
                             }
-                        };
-                        $this.user = $this.mainservice.user;
-                        $this.isRole = $this.mainservice.isRole;
-                        $this.realm = response.realm;
-                        $this.authServerUrl = response['auth-server-url'];
-                        let host    = location.protocol + '//' + location.host;
-                        $this.logoutUrl = response['auth-server-url'] + `/realms/${response.realm}/protocol/openid-connect/logout?redirect_uri=`
-                            + encodeURIComponent(host + location.pathname);
+                            $this.mainservice.user.user = 'admin';
+                            $this.mainservice.user.roles = ['user', 'admin'];
+                            $this.mainservice.isRole = (role) => {
+                                return true;
+                            };
+                            $this.isRole = $this.mainservice.isRole;
+                            $this.initGetDevicename(2);
+                        }else{
+                            let browserTime = Math.floor(Date.now() / 1000);
+                            if(response.systemCurrentTime != browserTime){
+                                let diffTime = browserTime - response.systemCurrentTime;
+                                response.expiration = response.expiration + diffTime;
+                            }
+                            if ($this.mainservice.global && !$this.mainservice.global.authentication){
+                                let global = _.cloneDeep($this.mainservice.global);
+                                global.authentication = response;
+                                $this.mainservice.setGlobal(global);
+                            }else{
+                                if ($this.mainservice.global && $this.mainservice.global.authentication){
+                                    $this.mainservice.global.authentication = response;
+                                }else{
+                                    $this.mainservice.setGlobal({authentication: response});
+                                }
+                            }
+                            $this.mainservice.user.user = response.user;
+                            $this.mainservice.user.roles = response.roles;
+                            $this.mainservice.user.realm = response.realm;
+                            $this.mainservice.user.authServerUrl = response['auth-server-url'];
+                            $this.mainservice.isRole = function(role){
+                                if (response.user === null && response.roles.length === 0){
+                                    return true;
+                                }else{
+                                    if (response.roles && response.roles.indexOf(role) > -1){
+                                        return true;
+                                    }else{
+                                        return false;
+                                    }
+                                }
+                            };
+                            $this.user = $this.mainservice.user;
+                            $this.isRole = $this.mainservice.isRole;
+                            $this.realm = response.realm;
+                            $this.authServerUrl = response['auth-server-url'];
+                            let host    = location.protocol + '//' + location.host;
+                            $this.logoutUrl = response['auth-server-url'] + `/realms/${response.realm}/protocol/openid-connect/logout?redirect_uri=`
+                                + encodeURIComponent(host + location.pathname);
+                            $this.initGetDevicename(2);
+                        }
                     },
                     (response) => {
                         // this.user = this.user || {};
@@ -79,28 +140,70 @@ export class AppComponent {
                             }
                         };
                         $this.isRole = $this.mainservice.isRole;
+                        $this.initGetDevicename(2);
                     }
                 );
-        }
-
+        }*/
         this.initGetDevicename(2);
-        // this.initGetAuth(2)
+        let currentBrowserTime = new Date().getTime();
+        this.$http.get('../monitor/serverTime')
+            .map(res => j4care.redirectOnAuthResponse(res))
+            .subscribe(res=>{
+                if(_.hasIn(res,"serverTimeWithTimezone") && res.serverTimeWithTimezone){
+                    console.log("server clock res",res);
+                    let serverTimeObject = j4care.splitTimeAndTimezone(res.serverTimeWithTimezone);
+                    this.timeZone = serverTimeObject.timeZone;
+                    this.startClock(new Date(serverTimeObject.time).getTime()+((new Date().getTime()-currentBrowserTime)/2));
+                    // this.startClock(new Date(serverTimeObject.time));
+                }
+                this.setLogutUrl();
+            });
     }
-
+    setLogutUrl(){
+        try{
+            this.mainservice.user = this.mainservice.user || this.mainservice.global.authentication
+            this.user = this.mainservice.user;
+            this.realm = this.mainservice.user.realm;
+            this.authServerUrl = this.mainservice.user['auth-server-url'];
+            let host    = location.protocol + '//' + location.host;
+            this.logoutUrl = this.mainservice.user['auth-server-url'] + `/realms/${this.mainservice.user.realm}/protocol/openid-connect/logout?redirect_uri=`
+                + encodeURIComponent(host + location.pathname);
+        }catch(e){
+            console.warn("Authentication not found",e);
+        }
+    }
+    closeFromOutside(){
+        if(this.showMenu)
+            this.showMenu = false;
+    }
+    startClock(serverTime){
+        this.currentServerTime = new Date(serverTime);
+        this.mainservice.serverTime = this.currentServerTime;
+        this.clockInterval = setInterval(() => {
+            // this.currentClockTime = new Date(this.currentServerTime);
+            // this.currentServerTime += 1000;
+            this.currentServerTime.setMilliseconds(this.currentServerTime.getMilliseconds()+1000);
+            this.mainservice.serverTime = this.currentServerTime;
+        }, 1000);
+        this.hideExtendedClock();
+    }
+    hideExtendedClock(){
+        setTimeout(()=>{
+            this.clockUnExtended = false;
+        },2000);
+    }
+    synchronizeClock(serverTime){
+        clearInterval(this.clockInterval);
+        this.startClock(serverTime);
+    }
+    logout(){
+        window.location.href = this.logoutUrl;
+    }
     progress(){
         let changeTo = function (t) {
-            console.log('t', t);
             this.progressValue = t;
         };
-        // let getValue = function(){
-        //   return this.value;
-        // }
-        // let changeTo =  function(d){
-        //     this.value = d;
-        // }
-        // let getVal = function () {
-        //     return this.value;
-        // }
+
         return{
             getValue: this.progressValue,
             setValue: (v) => {
@@ -109,7 +212,7 @@ export class AppComponent {
         };
     };
     @HostListener('window:scroll', ['$event'])
-    onScroll(event) {
+    onScroll(event){
         if (window.pageYOffset > 150 && !this.showScrollButton){
             this.showScrollButton = true;
         }
@@ -151,7 +254,10 @@ export class AppComponent {
     productLabelling(){
         // this.scrollToDialog();
         this.config.viewContainerRef = this.viewContainerRef;
-        this.dialogRef = this.dialog.open(ProductLabellingComponent, this.config);
+        this.dialogRef = this.dialog.open(ProductLabellingComponent, {
+            height: 'auto',
+            width: 'auto'
+        });
 
         this.dialogRef.componentInstance.archive = this.archive;
         /*        this.dialogRef.afterClosed().subscribe(result => {
@@ -198,13 +304,20 @@ export class AppComponent {
             .map(res => {let resjson; try{ let pattern = new RegExp("[^:]*:\/\/[^\/]*\/auth\/"); if(pattern.exec(res.url)){ WindowRefService.nativeWindow.location = "/dcm4chee-arc/ui2/";} resjson = res.json(); }catch (e){ resjson = [];} return resjson;})
             .subscribe(
                 (res) => {
-                    $this.mainservice["deviceName"] = res.dicomDeviceName;
+
+                    // $this.mainservice["deviceName"] = res.dicomDeviceName;
+                    $this.mainservice["xRoad"] = res.xRoad || false;
                     $this.$http.get('../devices?dicomDeviceName=' + res.dicomDeviceName)
                         .map(res => {let resjson; try{ let pattern = new RegExp("[^:]*:\/\/[^\/]*\/auth\/"); if(pattern.exec(res.url)){ WindowRefService.nativeWindow.location = "/dcm4chee-arc/ui2/";} resjson = res.json(); }catch (e){ resjson = [];} return resjson;})
                         .subscribe(
                             arc => {
                                 $this.mainservice["archiveDevice"] = arc[0];
                                 $this.archive = arc[0];
+                                try{
+                                    this.myDeviceName = arc[0].dicomDeviceName;
+                                }catch (e){
+
+                                }
                             },
                             (err2)=>{
                                 if (retries)

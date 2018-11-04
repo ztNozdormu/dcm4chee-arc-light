@@ -49,6 +49,7 @@ import org.dcm4che3.net.pdu.AAssociateRQ;
 import org.dcm4che3.net.pdu.PresentationContext;
 import org.dcm4chee.arc.entity.QueueMessage;
 import org.dcm4chee.arc.ian.scu.IANSCU;
+import org.dcm4chee.arc.ian.scu.IANScheduler;
 import org.dcm4chee.arc.qmgt.Outcome;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -102,7 +103,7 @@ public class IANSCUImpl implements IANSCU {
         TransferCapability tc = localAE.getTransferCapabilityFor(UID.InstanceAvailabilityNotificationSOPClass,
                 TransferCapability.Role.SCU);
         if (tc == null)
-            LOG.warn("No Transfer Capability for Instance Availability Notification SOP Class as SCU configured for {}",
+            LOG.warn("No Transfer ServiceClass for Instance Availability Notification SOP Class as SCU configured for {}",
                     localAE.getAETitle());
         aarq.addPresentationContext(new PresentationContext(1, UID.InstanceAvailabilityNotificationSOPClass,
                 tc != null ? tc.getTransferSyntaxes() : new String[] { UID.ImplicitVRLittleEndian }));

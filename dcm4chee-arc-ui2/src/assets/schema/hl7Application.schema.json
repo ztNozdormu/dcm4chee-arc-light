@@ -5,7 +5,8 @@
   "required": [
     "hl7ApplicationName",
     "dicomNetworkConnectionReference",
-    "hl7DefaultCharacterSet"
+    "hl7DefaultCharacterSet",
+    "hl7SendingCharacterSet"
   ],
   "properties": {
     "hl7ApplicationName": {
@@ -49,7 +50,15 @@
       "title": "Default Character Set",
       "description": "Character Set used to decode received messages if not specified by MSH-18.",
       "type": "string",
-      "default": "ASCII"
+      "default": "ASCII",
+      "format": "hl7Charset"
+    },
+    "hl7SendingCharacterSet": {
+      "title": "Sending Character Set",
+      "description": "Character Set used to encode HL7 messages sent from archive.",
+      "type": "string",
+      "default": "ASCII",
+      "format": "hl7Charset"
     },
     "dicomDescription": {
       "title": "HL7 Description",

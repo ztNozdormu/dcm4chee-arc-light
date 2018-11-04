@@ -1,24 +1,26 @@
-import {Component, ViewContainerRef} from '@angular/core';
+import {Component, OnInit, ViewContainerRef} from '@angular/core';
 import {Http, Headers} from '@angular/http';
-import {SlimLoadingBarService} from 'ng2-slim-loading-bar';
 import * as _ from 'lodash';
 import {ConfirmComponent} from '../widgets/dialogs/confirm/confirm.component';
 import {AppService} from '../app.service';
-import {MdDialog, MdDialogConfig, MdDialogRef} from '@angular/material';
+import {MatDialog, MatDialogConfig, MatDialogRef} from '@angular/material';
 import {DevicesService} from './devices.service';
 import {HostListener} from '@angular/core';
 import {CreateExporterComponent} from '../widgets/dialogs/create-exporter/create-exporter.component';
 import {Router} from '@angular/router';
 import {WindowRefService} from "../helpers/window-ref.service";
-import {Hl7ApplicationsService} from "../hl7-applications/hl7-applications.service";
+import {Hl7ApplicationsService} from "../configuration/hl7-applications/hl7-applications.service";
 import {HttpErrorHandler} from "../helpers/http-error-handler";
+import {J4careHttpService} from "../helpers/j4care-http.service";
+import {DeviceConfiguratorService} from "../configuration/device-configurator/device-configurator.service";
+import {LoadingBarService} from "@ngx-loading-bar/core";
 
 @Component({
   selector: 'app-devices',
   templateUrl: './devices.component.html',
   styleUrls: ['./devices.component.css']
 })
-export class DevicesComponent {
+export class DevicesComponent implements OnInit{
     debugpre = false;
     _ = _;
     devices;
@@ -43,25 +45,53 @@ export class DevicesComponent {
         loaderActive: false
     };
     aes;
-    dialogRef: MdDialogRef<any>;
+    dialogRef: MatDialogRef<any>;
 
     constructor(
-        public $http: Http,
-        public cfpLoadingBar: SlimLoadingBarService,
+        public $http:J4careHttpService,
+        public cfpLoadingBar: LoadingBarService,
         public mainservice: AppService,
         public viewContainerRef: ViewContainerRef ,
-        public dialog: MdDialog,
-        public config: MdDialogConfig,
+        public dialog: MatDialog,
+        public config: MatDialogConfig,
         public service: DevicesService,
         private router: Router,
         private hl7service:Hl7ApplicationsService,
-        public httpErrorHandler:HttpErrorHandler
-    ) {
+        public httpErrorHandler:HttpErrorHandler,
+        private deviceConfigurator:DeviceConfiguratorService
+    ) {}
+    ngOnInit(){
+        this.initCheck(10);
+    }
+    initCheck(retries){
+        let $this = this;
+        if(_.hasIn(this.mainservice,"global.authentication") || (_.hasIn(this.mainservice,"global.notSecure") && this.mainservice.global.notSecure)){
+            this.init();
+        }else{
+            if (retries){
+                setTimeout(()=>{
+                    $this.initCheck(retries-1);
+                },20);
+            }else{
+                this.init();
+            }
+        }
+    }
+    init(){
         this.getDevices();
         this.getAes();
         this.getHl7ApplicationsList(2);
+        console.log("deviceconfiguratorservice paginantion",this.deviceConfigurator.pagination)
+        if(this.deviceConfigurator.pagination){
+            this.deviceConfigurator.pagination = [
+                {
+                    url: '/device/devicelist',
+                    title: 'devicelist',
+                    devicereff: undefined
+                }
+            ];
+        }
     }
-
 
     @HostListener('window:scroll', ['$event'])
     loadMoreDeviceOnScroll(event) {
@@ -132,7 +162,10 @@ export class DevicesComponent {
     confirm(confirmparameters){
         this.scrollToDialog();
         this.config.viewContainerRef = this.viewContainerRef;
-        this.dialogRef = this.dialog.open(ConfirmComponent, this.config);
+        this.dialogRef = this.dialog.open(ConfirmComponent, {
+            height: 'auto',
+            width: '500px'
+        });
         this.dialogRef.componentInstance.parameters = confirmparameters;
         return this.dialogRef.afterClosed();
     };
@@ -203,7 +236,8 @@ export class DevicesComponent {
                             $this.service.changeHl7ApplicationNameOnClone(device, $this.mainservice.global.hl7);
                             console.log('device afterchange', device);
                             device.dicomDeviceName = parameters.result.input;
-                            $this.$http.post('../devices/' + parameters.result.input, device, headers)
+                            this.service.createDevice(parameters.result.input, device)
+                            // $this.$http.post('../devices/' + parameters.result.input, device, headers)
                                 .subscribe(res => {
                                         console.log('res succes', res);
                                         $this.cfpLoadingBar.complete();

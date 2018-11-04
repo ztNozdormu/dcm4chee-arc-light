@@ -22,8 +22,8 @@
       "format": "hl7ApplicationName"
     },
     "dcmProperty": {
-      "title": "Property",
-      "description": "Property in format <name>=<value>",
+      "title": "Conditions",
+      "description": "Conditions in format {SEG}-{Seq#}[.{Comp#}[.{SubComp#}]][!]={regEx}. Examples: MSH-4=FORWARD or MSH-9=ADT\\^A28\\^ADT_A05",
       "type": "array",
       "items": {
         "type": "string"

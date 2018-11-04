@@ -60,17 +60,27 @@ class AuditInfo {
     static final int STUDY_DATE = 9;
     static final int Q_POID = 10;
     static final int Q_STRING = 11;
-    static final int DEST_AET = 12;
+    static final int DEST_USER_ID = 12;
     static final int DEST_NAP_ID = 13;
-    static final int MOVEAET = 14;
+    static final int MOVE_USER_ID = 14;
     static final int WARNING = 15;
     static final int FAILED_IUID_SHOW = 16;
     static final int SOP_CUID = 17;
     static final int SOP_IUID = 18;
     static final int MPPS_UID = 19;
-    static final int HL7_MESSAGE_TYPE = 20;
-    static final int SUBMISSION_SET_UID = 21;
-    static final int IS_EXPORT = 22;
+    static final int SUBMISSION_SET_UID = 20;
+    static final int IS_EXPORT = 21;
+    static final int IS_OUTGOING_HL7 = 22;
+    static final int OUTGOING_HL7_SENDER = 23;
+    static final int OUTGOING_HL7_RECEIVER = 24;
+    static final int FILTERS = 25;
+    static final int COUNT = 26;
+    static final int QUEUE_MSG = 27;
+    static final int TASK_POID = 28;
+    static final int ERROR_CODE = 29;
+    static final int PAT_MISMATCH_CODE = 30;
+    static final int CONN_TYPE = 31;
+    static final int PAT_VERIFICATION_STATUS = 32;
 
     private final String[] fields;
 
@@ -88,17 +98,27 @@ class AuditInfo {
                 i.studyDate,
                 i.queryPOID,
                 i.queryString,
-                i.destAET,
+                i.destUserID,
                 i.destNapID,
-                i.moveAET,
+                i.moveUserID,
                 i.warning,
                 i.failedIUIDShow ? String.valueOf(true) : null,
                 i.sopCUID,
                 i.sopIUID,
                 i.mppsUID,
-                i.hl7MessageType,
                 i.submissionSetUID,
-                i.isExport ? String.valueOf(true) : null
+                i.isExport ? String.valueOf(true) : null,
+                i.isOutgoingHL7 ? String.valueOf(true) : null,
+                i.outgoingHL7Sender,
+                i.outgoingHL7Receiver,
+                i.filters,
+                String.valueOf(i.count),
+                i.queueMsg,
+                i.taskPOID,
+                i.errorCode,
+                i.patMismatchCode,
+                i.connType != null ? i.connType.name() : null,
+                i.patVerificationStatus != null ? i.patVerificationStatus.name() : null
         };
     }
 

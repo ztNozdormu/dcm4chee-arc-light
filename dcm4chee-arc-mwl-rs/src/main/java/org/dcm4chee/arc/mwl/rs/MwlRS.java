@@ -56,7 +56,6 @@ import org.dcm4chee.arc.conf.RSOperation;
 import org.dcm4chee.arc.conf.SPSStatus;
 import org.dcm4chee.arc.entity.Patient;
 import org.dcm4chee.arc.id.IDService;
-import org.dcm4chee.arc.keycloak.KeycloakContext;
 import org.dcm4chee.arc.patient.PatientService;
 import org.dcm4chee.arc.procedure.ProcedureContext;
 import org.dcm4chee.arc.procedure.ProcedureService;
@@ -75,9 +74,6 @@ import javax.ws.rs.core.Context;
 import javax.ws.rs.core.Response;
 import javax.ws.rs.core.StreamingOutput;
 import java.io.*;
-import java.util.Arrays;
-import java.util.Date;
-import java.util.Set;
 
 /**
  * @author Gunter Zeilinger <gunterze@gmail.com>
@@ -89,7 +85,6 @@ import java.util.Set;
 public class MwlRS {
 
     private static final Logger LOG = LoggerFactory.getLogger(MwlRS.class);
-    private static final String ORG_KEYCLOAK_KEYCLOAK_SECURITY_CONTEXT = "org.keycloak.KeycloakSecurityContext";
 
     @Inject
     private Device device;
@@ -116,7 +111,7 @@ public class MwlRS {
     @Path("/mwlitems")
     @Consumes("application/dicom+json,application/json")
     @Produces("application/dicom+json,application/json")
-    public StreamingOutput updateSPS(InputStream in) throws Exception {
+    public StreamingOutput updateSPS(InputStream in) {
         logRequest();
         try {
             ArchiveAEExtension arcAE = getArchiveAE();
@@ -124,16 +119,16 @@ public class MwlRS {
             final Attributes attrs = reader.readDataset(null);
             IDWithIssuer patientID = IDWithIssuer.pidOf(attrs);
             if (patientID == null)
-                throw new WebApplicationException(getResponse("missing Patient ID in message body", Response.Status.BAD_REQUEST));
+                throw new WebApplicationException(errResponse("missing Patient ID in message body", Response.Status.BAD_REQUEST));
 
             Attributes spsItem = attrs.getNestedDataset(Tag.ScheduledProcedureStepSequence);
             if (spsItem == null)
-                throw new WebApplicationException(getResponse(
+                throw new WebApplicationException(errResponse(
                         "Missing or empty (0040,0100) Scheduled Procedure Step Sequence", Response.Status.BAD_REQUEST));
 
             Patient patient = patientService.findPatient(patientID);
             if (patient == null)
-                throw new WebApplicationException(getResponse("Patient[id=" + patientID + "] does not exists",
+                throw new WebApplicationException(errResponse("Patient[id=" + patientID + "] does not exists",
                         Response.Status.NOT_FOUND));
 
             if (!attrs.containsValue(Tag.AccessionNumber))
@@ -144,8 +139,6 @@ public class MwlRS {
                 idService.newScheduledProcedureStepID(spsItem);
             if (!attrs.containsValue(Tag.StudyInstanceUID))
                 attrs.setString(Tag.StudyInstanceUID, VR.UI, UIDUtils.createUID());
-            if (!spsItem.containsValue(Tag.ScheduledProcedureStepStartDate) && !spsItem.containsValue(Tag.ScheduledProcedureStepStartTime))
-                spsItem.setDate(Tag.ScheduledProcedureStepStartDateAndTime, new Date());
             if (!spsItem.containsValue(Tag.ScheduledProcedureStepStatus))
                 spsItem.setString(Tag.ScheduledProcedureStepStatus, VR.CS, SPSStatus.SCHEDULED.toString());
             ProcedureContext ctx = procedureService.createProcedureContextWEB(request);
@@ -155,24 +148,22 @@ public class MwlRS {
             RSOperation rsOp = ctx.getEventActionCode().equals(AuditMessages.EventActionCode.Create)
                                 ? RSOperation.CreateMWL : RSOperation.UpdateMWL;
             rsForward.forward(rsOp, arcAE, attrs, request);
-            return new StreamingOutput() {
-                @Override
-                public void write(OutputStream out) throws IOException {
+            return out -> {
                     try (JsonGenerator gen = Json.createGenerator(out)) {
                         new JSONWriter(gen).write(attrs);
                     }
-                }
             };
         } catch (JsonParsingException e) {
             throw new WebApplicationException(
-                    getResponse(e.getMessage() + " at location : " + e.getLocation(), Response.Status.BAD_REQUEST));
+                    errResponse(e.getMessage() + " at location : " + e.getLocation(), Response.Status.BAD_REQUEST));
+        } catch (Exception e) {
+            throw new WebApplicationException(errResponseAsTextPlain(e));
         }
     }
 
     @DELETE
     @Path("/mwlitems/{studyIUID}/{spsID}")
-    public void deleteSPS(@PathParam("studyIUID") String studyIUID, @PathParam("spsID") String spsID)
-            throws Exception {
+    public void deleteSPS(@PathParam("studyIUID") String studyIUID, @PathParam("spsID") String spsID) {
         logRequest();
         ArchiveAEExtension arcAE = getArchiveAE();
         ProcedureContext ctx = procedureService.createProcedureContextWEB(request);
@@ -180,14 +171,13 @@ public class MwlRS {
         ctx.setSpsID(spsID);
         procedureService.deleteProcedure(ctx);
         if (ctx.getEventActionCode() == null)
-            throw new WebApplicationException(getResponse("MWLItem with study instance UID : " + studyIUID +
+            throw new WebApplicationException(errResponse("MWLItem with study instance UID : " + studyIUID +
                     " and SPS ID : " + spsID + " not found.", Response.Status.NOT_FOUND));
         rsForward.forward(RSOperation.DeleteMWL, arcAE, null, request);
     }
 
-    private Response getResponse(String errorMessage, Response.Status status) {
-        Object entity = "{\"errorMessage\":\"" + errorMessage + "\"}";
-        return Response.status(status).entity(entity).build();
+    private Response errResponse(String errorMessage, Response.Status status) {
+        return Response.status(status).entity("{\"errorMessage\":\"" + errorMessage + "\"}").build();
     }
 
     private void logRequest() {
@@ -198,20 +188,16 @@ public class MwlRS {
     private ArchiveAEExtension getArchiveAE() {
         ApplicationEntity ae = device.getApplicationEntity(aet, true);
         if (ae == null || !ae.isInstalled())
-            throw new WebApplicationException(getResponse(
+            throw new WebApplicationException(errResponse(
                     "No such Application Entity: " + aet,
-                    Response.Status.SERVICE_UNAVAILABLE));
-        ArchiveAEExtension arcAE = ae.getAEExtension(ArchiveAEExtension.class);
-        if (request.getAttribute(ORG_KEYCLOAK_KEYCLOAK_SECURITY_CONTEXT) != null)
-            if(!authenticatedUser(arcAE.getAcceptedUserRoles()))
-                throw new WebApplicationException(getResponse("User not allowed to perform this service.", Response.Status.FORBIDDEN));
-        return arcAE;
+                    Response.Status.NOT_FOUND));
+        return ae.getAEExtension(ArchiveAEExtension.class);
     }
 
-    private boolean authenticatedUser(String[] acceptedUserRoles) {
-        for (String s : KeycloakContext.valueOf(request).getUserRoles())
-            if (Arrays.asList(acceptedUserRoles).contains(s))
-                return true;
-        return false;
+    private Response errResponseAsTextPlain(Exception e) {
+        StringWriter sw = new StringWriter();
+        e.printStackTrace(new PrintWriter(sw));
+        String exceptionAsString = sw.toString();
+        return Response.status(Response.Status.INTERNAL_SERVER_ERROR).entity(exceptionAsString).type("text/plain").build();
     }
 }

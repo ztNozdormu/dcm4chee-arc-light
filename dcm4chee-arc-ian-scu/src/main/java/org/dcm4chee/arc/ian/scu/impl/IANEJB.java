@@ -49,11 +49,13 @@ import org.dcm4chee.arc.entity.IanTask;
 import org.dcm4chee.arc.entity.MPPS;
 import org.dcm4chee.arc.ian.scu.IANSCU;
 import org.dcm4chee.arc.qmgt.QueueManager;
+import org.dcm4chee.arc.qmgt.QueueSizeLimitExceededException;
 
 import javax.ejb.Stateless;
 import javax.inject.Inject;
 import javax.jms.JMSException;
 import javax.jms.JMSRuntimeException;
+import javax.jms.Message;
 import javax.jms.ObjectMessage;
 import javax.persistence.EntityManager;
 import javax.persistence.NoResultException;
@@ -135,19 +137,20 @@ public class IANEJB {
                 .getResultList();
     }
 
-    public void scheduleIANTask(IanTask task, Attributes attrs) {
+    public void scheduleIANTask(IanTask task, Attributes attrs) throws QueueSizeLimitExceededException {
         for (String remoteAET : task.getIanDestinations())
             scheduleMessage(task.getCallingAET(), attrs, remoteAET);
         removeIANTask(task);
     }
 
-    public void scheduleMessage(String callingAET, Attributes attrs, String remoteAET) {
+    public void scheduleMessage(String callingAET, Attributes attrs, String remoteAET)
+            throws QueueSizeLimitExceededException {
         try {
             ObjectMessage msg = queueManager.createObjectMessage(attrs);
             msg.setStringProperty("LocalAET", callingAET);
             msg.setStringProperty("RemoteAET", remoteAET);
             msg.setStringProperty("SOPInstanceUID", UIDUtils.createUID());
-            queueManager.scheduleMessage(IANSCU.QUEUE_NAME, msg);
+            queueManager.scheduleMessage(IANSCU.QUEUE_NAME, msg, Message.DEFAULT_PRIORITY, null);
         } catch (JMSException e) {
             throw new JMSRuntimeException(e.getMessage(), e.getErrorCode(), e.getCause());
         }

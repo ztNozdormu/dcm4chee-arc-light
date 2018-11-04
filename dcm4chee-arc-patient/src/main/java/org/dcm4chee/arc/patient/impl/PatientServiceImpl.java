@@ -17,7 +17,7 @@
  *
  * The Initial Developer of the Original Code is
  * J4Care.
- * Portions created by the Initial Developer are Copyright (C) 2015
+ * Portions created by the Initial Developer are Copyright (C) 2015-2017
  * the Initial Developer. All Rights Reserved.
  *
  * Contributor(s):
@@ -41,13 +41,14 @@
 package org.dcm4chee.arc.patient.impl;
 
 import org.dcm4che3.data.IDWithIssuer;
-import org.dcm4che3.hl7.HL7Segment;
 import org.dcm4che3.net.Association;
 import org.dcm4che3.net.Device;
 import org.dcm4che3.net.hl7.HL7Application;
+import org.dcm4che3.net.hl7.UnparsedHL7Message;
 import org.dcm4chee.arc.conf.ArchiveDeviceExtension;
 import org.dcm4chee.arc.entity.Patient;
 import org.dcm4chee.arc.patient.*;
+import org.dcm4chee.arc.qmgt.HttpServletRequestInfo;
 
 import javax.enterprise.context.ApplicationScoped;
 import javax.enterprise.event.Event;
@@ -83,15 +84,15 @@ public class PatientServiceImpl implements PatientService {
     @Override
     public PatientMgtContext createPatientMgtContextWEB(HttpServletRequest httpRequest) {
         PatientMgtContextImpl ctx = new PatientMgtContextImpl(device);
-        ctx.setHttpRequest(httpRequest);
+        ctx.setHttpServletRequestInfo(HttpServletRequestInfo.valueOf(httpRequest));
         return ctx;
     }
 
     @Override
-    public PatientMgtContext createPatientMgtContextHL7(HL7Application hl7App, Socket socket, HL7Segment msh) {
+    public PatientMgtContext createPatientMgtContextHL7(HL7Application hl7App, Socket socket, UnparsedHL7Message msg) {
         PatientMgtContextImpl ctx = new PatientMgtContextImpl(device);
         ctx.setSocket(socket);
-        ctx.setMSH(msh);
+        ctx.setUnparsedHL7Message(msg);
         ctx.setHL7Application(hl7App);
         return ctx;
     }
@@ -140,7 +141,10 @@ public class PatientServiceImpl implements PatientService {
 
     @Override
     public Patient mergePatient(PatientMgtContext ctx)
-            throws NonUniquePatientException, PatientMergedException {
+            throws NonUniquePatientException, PatientMergedException, CircularPatientMergeException {
+        if (ctx.getPatientID().matches(ctx.getPreviousPatientID()))
+            throw new CircularPatientMergeException();
+
         try {
             return ejb.mergePatient(ctx);
         } catch (RuntimeException e) {
@@ -159,6 +163,8 @@ public class PatientServiceImpl implements PatientService {
             if (isEitherHavingNoIssuer(ctx))
                 throw new PatientTrackingNotAllowedException(
                         "Either previous or new Patient ID has missing issuer and change patient id tracking is enabled. Disable change patient id tracking feature and retry update");
+            if (ctx.getPatientID().equals(ctx.getPreviousPatientID()))
+                throw new CircularPatientMergeException();
             createPatient(ctx);
             return mergePatient(ctx);
         }
@@ -196,5 +202,14 @@ public class PatientServiceImpl implements PatientService {
         boolean patientDeleted = ejb.deletePatientIfHasNoMergedWith(ctx.getPatient());
         if (patientDeleted)
             patientMgtEvent.fire(ctx);
+    }
+
+    @Override
+    public Patient updatePatientStatus(PatientMgtContext ctx) {
+        try {
+            return ejb.updatePatientStatus(ctx);
+        } finally {
+            patientMgtEvent.fire(ctx);
+        }
     }
 }

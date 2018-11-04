@@ -45,7 +45,6 @@ import org.dcm4che3.data.AttributesCoercion;
 import org.dcm4che3.data.Code;
 import org.dcm4che3.net.ApplicationEntity;
 import org.dcm4che3.net.Association;
-import org.dcm4che3.net.DimseRSP;
 import org.dcm4che3.net.QueryOption;
 import org.dcm4chee.arc.conf.Availability;
 import org.dcm4chee.arc.conf.QueryRetrieveView;
@@ -74,6 +73,8 @@ public interface QueryService {
     QueryContext newQueryContextQIDO(
             HttpServletRequest httpRequest, String searchMethod, ApplicationEntity ae, QueryParam queryParam);
 
+    QueryContext newQueryContext(ApplicationEntity ae, QueryParam queryParam);
+
     Query createQuery(QueryContext ctx);
 
     Query createPatientQuery(QueryContext ctx);
@@ -86,11 +87,15 @@ public interface QueryService {
 
     Query createMWLQuery(QueryContext ctx);
 
-    Attributes getSeriesAttributes(Long seriesPk, QueryParam queryParam);
+    Attributes getSeriesAttributes(QueryContext context, Long seriesPk);
 
-    StudyQueryAttributes calculateStudyQueryAttributes(Long studyPk, QueryParam queryParam);
+    void addLocationAttributes(Attributes attrs, Long instancePk);
 
-    SeriesQueryAttributes calculateSeriesQueryAttributesIfNotExists(Long seriesPk, QueryParam queryParam);
+    long calculateStudySize(Long studyPk);
+
+    StudyQueryAttributes calculateStudyQueryAttributes(Long studyPk, QueryRetrieveView qrView);
+
+    SeriesQueryAttributes calculateSeriesQueryAttributesIfNotExists(Long seriesPk, QueryRetrieveView qrView);
 
     SeriesQueryAttributes calculateSeriesQueryAttributes(Long seriesPk, QueryRetrieveView qrView);
 
@@ -114,6 +119,8 @@ public interface QueryService {
     Attributes queryExportTaskInfo(
             String studyUID, String seriesUID, String sopIUID, ApplicationEntity ae);
 
+    Attributes getStudyAttributes(String studyUID);
+
     List<Object[]> getSeriesInstanceUIDs(String studyUID);
 
     List<Object[]> getSOPInstanceUIDs(String studyUID);
@@ -125,4 +132,6 @@ public interface QueryService {
     AttributesCoercion getAttributesCoercion(QueryContext ctx);
 
     CFindSCU cfindSCU();
+
+    List<String> getDistinctModalities();
 }

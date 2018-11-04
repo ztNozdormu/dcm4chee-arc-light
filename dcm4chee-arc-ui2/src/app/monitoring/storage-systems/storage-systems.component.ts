@@ -1,14 +1,16 @@
 import {Component, OnInit, ViewContainerRef} from '@angular/core';
 import {User} from '../../models/user';
-import {MdDialogRef, MdDialog, MdDialogConfig} from '@angular/material';
+import {MatDialogRef, MatDialog, MatDialogConfig} from '@angular/material';
 import {Http} from '@angular/http';
-import {SlimLoadingBarService} from 'ng2-slim-loading-bar';
 import {AppService} from '../../app.service';
 import * as _ from 'lodash';
 import {ConfirmComponent} from '../../widgets/dialogs/confirm/confirm.component';
 import {StorageSystemsService} from './storage-systems.service';
 import {WindowRefService} from "../../helpers/window-ref.service";
 import {HttpErrorHandler} from "../../helpers/http-error-handler";
+import {J4careHttpService} from "../../helpers/j4care-http.service";
+import {j4care} from "../../helpers/j4care.service";
+import {LoadingBarService} from "@ngx-loading-bar/core";
 
 @Component({
   selector: 'app-storage-systems',
@@ -27,22 +29,40 @@ export class StorageSystemsComponent implements OnInit {
         usableSpaceBelow: undefined
     };
     isRole: any;
-    dialogRef: MdDialogRef<any>;
+    dialogRef: MatDialogRef<any>;
     _ = _;
     aets;
     usableSpaceBelow;
     usableSpaceBelowMode = "GB";
 
     constructor(
-        public $http: Http,
-        public cfpLoadingBar: SlimLoadingBarService,
+        public $http:J4careHttpService,
+        public cfpLoadingBar: LoadingBarService,
         public mainservice: AppService,
         public  service: StorageSystemsService,
         public viewContainerRef: ViewContainerRef,
-        public dialog: MdDialog,
-        public config: MdDialogConfig,
+        public dialog: MatDialog,
+        public config: MatDialogConfig,
         public httpErrorHandler:HttpErrorHandler
-    ) {
+    ){}
+    ngOnInit(){
+        this.initCheck(10);
+    }
+    initCheck(retries){
+        let $this = this;
+        if(_.hasIn(this.mainservice,"global.authentication") || (_.hasIn(this.mainservice,"global.notSecure") && this.mainservice.global.notSecure)){
+            this.init();
+        }else{
+            if (retries){
+                setTimeout(()=>{
+                    $this.initCheck(retries-1);
+                },20);
+            }else{
+                this.init();
+            }
+        }
+    }
+    init(){
         // this.initExporters(1);
         // this.init();
         this.getAets();
@@ -99,7 +119,10 @@ export class StorageSystemsComponent implements OnInit {
     };
     confirm(confirmparameters){
         this.config.viewContainerRef = this.viewContainerRef;
-        this.dialogRef = this.dialog.open(ConfirmComponent, this.config);
+        this.dialogRef = this.dialog.open(ConfirmComponent, {
+            height: 'auto',
+            width: '500px'
+        });
         this.dialogRef.componentInstance.parameters = confirmparameters;
         return this.dialogRef.afterClosed();
     };
@@ -178,11 +201,7 @@ export class StorageSystemsComponent implements OnInit {
             });
     };
     convertBtoGBorMB(value){
-        if (value > 2000000000){
-            return (Math.round((value / 1000 / 1000 / 1000) * 1000) / 1000 ) + ' GB';
-        }else{
-            return (Math.round((value / 1000 / 1000) * 1000) / 1000 ) + ' MB';
-        }
+        return j4care.convertBtoHumanReadable(value);
     }
     getDifferenceTime(starttime, endtime){
         let start = new Date(starttime).getTime();
@@ -321,8 +340,6 @@ export class StorageSystemsComponent implements OnInit {
             }
         });
     }
-    ngOnInit() {
-    }
     getAets(){
 
         let $this = this;
@@ -330,7 +347,7 @@ export class StorageSystemsComponent implements OnInit {
             '../aets'
         ).map(res => {let resjson; try{ let pattern = new RegExp("[^:]*:\/\/[^\/]*\/auth\/"); if(pattern.exec(res.url)){ WindowRefService.nativeWindow.location = "/dcm4chee-arc/ui2/";} resjson = res.json(); }catch (e){ resjson = [];} return resjson;})
             .subscribe((response) => {
-                $this.aets = response;
+                $this.aets = j4care.extendAetObjectWithAlias(response);
 
             }, (err) => {
                 console.log('error getting aets', err);

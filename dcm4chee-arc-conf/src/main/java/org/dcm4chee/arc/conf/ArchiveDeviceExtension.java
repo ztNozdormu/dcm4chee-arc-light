@@ -43,8 +43,6 @@ package org.dcm4chee.arc.conf;
 import org.dcm4che3.data.Attributes;
 import org.dcm4che3.data.Code;
 
-import java.net.URI;
-import java.net.URISyntaxException;
 import java.time.LocalTime;
 
 import org.dcm4che3.net.DeviceExtension;
@@ -53,8 +51,10 @@ import org.dcm4che3.util.ByteUtils;
 import org.dcm4che3.util.StringUtils;
 
 import javax.servlet.http.HttpServletRequest;
+import java.time.Period;
 import java.util.*;
 import java.util.regex.Pattern;
+import java.util.stream.Stream;
 
 /**
  * @author Gunter Zeilinger <gunterze@gmail.com>
@@ -66,122 +66,160 @@ public class ArchiveDeviceExtension extends DeviceExtension {
     public static final String AUDIT_UNKNOWN_STUDY_INSTANCE_UID = "1.2.40.0.13.1.15.110.3.165.1";
     public static final String AUDIT_UNKNOWN_PATIENT_ID = "<none>";
     public static final String JBOSS_SERVER_TEMP_DIR = "${jboss.server.temp.dir}";
+    public static final String DEFAULT_WADO_ZIP_ENTRY_NAME_FORMAT =
+            "DICOM/{0020000D,hash}/{0020000E,hash}/{00080018,hash}";
 
-    private String defaultCharacterSet;
-    private String fuzzyAlgorithmClass;
-    private String[] seriesMetadataStorageIDs = {};
-    private Duration seriesMetadataDelay;
-    private Duration seriesMetadataPollingInterval;
-    private int seriesMetadataFetchSize = 100;
-    private Duration purgeInstanceRecordsDelay;
-    private Duration purgeInstanceRecordsPollingInterval;
-    private int purgeInstanceRecordsFetchSize = 100;
-    private OverwritePolicy overwritePolicy = OverwritePolicy.NEVER;
-    private ShowPatientInfo showPatientInfoInSystemLog = ShowPatientInfo.PLAIN_TEXT;
-    private ShowPatientInfo showPatientInfoInAuditLog = ShowPatientInfo.PLAIN_TEXT;
-    private String bulkDataSpoolDirectory = JBOSS_SERVER_TEMP_DIR;
-    private String queryRetrieveViewID;
-    private boolean validateCallingAEHostname = false;
-    private boolean sendPendingCGet = false;
-    private Duration sendPendingCMoveInterval;
-    private boolean personNameComponentOrderInsensitiveMatching = false;
-    private int queryFetchSize = 100;
-    private int queryMaxNumberOfResults = 0;
-    private int qidoMaxNumberOfResults = 0;
-    private String wadoSR2HtmlTemplateURI;
-    private String wadoSR2TextTemplateURI;
-    private String patientUpdateTemplateURI;
-    private String importReportTemplateURI;
-    private String scheduleProcedureTemplateURI;
-    private String unzipVendorDataToURI;
-    private String[] mppsForwardDestinations = {};
-    private String[] ianDestinations = {};
-    private Duration ianDelay;
-    private Duration ianTimeout;
-    private boolean ianOnTimeout;
-    private Duration ianTaskPollingInterval;
-    private int ianTaskFetchSize = 100;
-    private String spanningCFindSCP;
-    private String[] spanningCFindSCPRetrieveAETitles = {};
-    private SpanningCFindSCPPolicy spanningCFindSCPPolicy = SpanningCFindSCPPolicy.REPLACE;
-    private String fallbackCMoveSCP;
-    private String fallbackCMoveSCPDestination;
-    private String fallbackCMoveSCPLeadingCFindSCP;
-    private int fallbackCMoveSCPRetries;
-    private String externalRetrieveAEDestination;
-    private String xdsiImagingDocumentSourceAETitle;
-    private String alternativeCMoveSCP;
-    private Duration exportTaskPollingInterval;
-    private int exportTaskFetchSize = 5;
-    private Duration deleteRejectedPollingInterval;
-    private int deleteRejectedFetchSize = 100;
-    private Duration purgeStoragePollingInterval;
-    private int purgeStorageFetchSize = 100;
-    private int deleteStudyBatchSize = 10;
-    private boolean deletePatientOnDeleteLastStudy = false;
-    private Duration maxAccessTimeStaleness;
-    private Duration aeCacheStaleTimeout;
-    private Duration leadingCFindSCPQueryCacheStaleTimeout;
-    private int leadingCFindSCPQueryCacheSize = 10;
-    private String auditSpoolDirectory = JBOSS_SERVER_TEMP_DIR;
-    private Duration auditPollingInterval;
-    private Duration auditAggregateDuration;
-    private String stowSpoolDirectory = JBOSS_SERVER_TEMP_DIR;
-    private String wadoSpoolDirectory = JBOSS_SERVER_TEMP_DIR;
-    private Duration purgeQueueMessagePollingInterval;
-    private Duration purgeStgCmtPollingInterval;
-    private Duration purgeStgCmtCompletedDelay;
-    private SPSStatus[] hideSPSWithStatusFrom = {};
-    private String hl7LogFilePattern;
-    private String hl7ErrorLogFilePattern;
-    private Duration rejectExpiredStudiesPollingInterval;
-    private LocalTime rejectExpiredStudiesPollingStartTime;
-    private int rejectExpiredStudiesFetchSize = 0;
-    private int rejectExpiredSeriesFetchSize = 0;
-    private String rejectExpiredStudiesAETitle;
-    private String fallbackCMoveSCPStudyOlderThan;
-    private String storePermissionServiceURL;
-    private Pattern storePermissionServiceResponsePattern;
-    private Pattern storePermissionServiceExpirationDatePattern;
-    private Pattern storePermissionServiceErrorCommentPattern;
-    private Pattern storePermissionServiceErrorCodePattern;
-    private Duration storePermissionCacheStaleTimeout;
-    private int storePermissionCacheSize = 10;
-    private Duration mergeMWLCacheStaleTimeout;
-    private int mergeMWLCacheSize = 10;
-    private int storeUpdateDBMaxRetries = 1;
-    private int storeUpdateDBMaxRetryDelay = 1000;
-    private AllowRejectionForDataRetentionPolicyExpired allowRejectionForDataRetentionPolicyExpired =
-            AllowRejectionForDataRetentionPolicyExpired.STUDY_RETENTION_POLICY;
-    private AcceptMissingPatientID acceptMissingPatientID = AcceptMissingPatientID.CREATE;
-    private AllowDeleteStudyPermanently allowDeleteStudyPermanently = AllowDeleteStudyPermanently.REJECTED;
-    private AcceptConflictingPatientID acceptConflictingPatientID = AcceptConflictingPatientID.MERGED;
-    private String[] retrieveAETitles = {};
-    private String remapRetrieveURL;
-    private String remapRetrieveURLClientHost;
-    private String hl7PSUSendingApplication;
-    private String[] hl7PSUReceivingApplications = {};
-    private Duration hl7PSUDelay;
-    private Duration hl7PSUTimeout;
-    private boolean hl7PSUOnTimeout;
-    private int hl7PSUTaskFetchSize = 100;
-    private Duration hl7PSUTaskPollingInterval;
-    private boolean hl7PSUMWL = false;
-    private String auditRecordRepositoryURL;
-    private String elasticSearchURL;
-    private String atna2JsonFhirTemplateURI;
-    private String atna2XmlFhirTemplateURI;
-    private Attributes.UpdatePolicy copyMoveUpdatePolicy;
-    private Attributes.UpdatePolicy linkMWLEntryUpdatePolicy;
-    private boolean hl7TrackChangedPatientID = true;
-    private String invokeImageDisplayPatientURL;
-    private String invokeImageDisplayStudyURL;
-    private String[] hl7ADTReceivingApplication = {};
-    private String hl7ADTSendingApplication;
-    private ScheduledProtocolCodeInOrder hl7ScheduledProtocolCodeInOrder = ScheduledProtocolCodeInOrder.OBR_4_4;
-    private ScheduledStationAETInOrder hl7ScheduledStationAETInOrder;
-    private String auditUnknownStudyInstanceUID = AUDIT_UNKNOWN_STUDY_INSTANCE_UID;
-    private String auditUnknownPatientID = AUDIT_UNKNOWN_PATIENT_ID;
+    private volatile String defaultCharacterSet;
+    private volatile String fuzzyAlgorithmClass;
+    private volatile String[] seriesMetadataStorageIDs = {};
+    private volatile Duration seriesMetadataDelay;
+    private volatile Duration seriesMetadataPollingInterval;
+    private volatile int seriesMetadataFetchSize = 100;
+    private volatile int seriesMetadataThreads = 1;
+    private volatile boolean purgeInstanceRecords;
+    private volatile Duration purgeInstanceRecordsDelay;
+    private volatile Duration purgeInstanceRecordsPollingInterval;
+    private volatile int purgeInstanceRecordsFetchSize = 100;
+    private volatile OverwritePolicy overwritePolicy = OverwritePolicy.NEVER;
+    private volatile ShowPatientInfo showPatientInfoInSystemLog = ShowPatientInfo.PLAIN_TEXT;
+    private volatile ShowPatientInfo showPatientInfoInAuditLog = ShowPatientInfo.PLAIN_TEXT;
+    private volatile String bulkDataSpoolDirectory = JBOSS_SERVER_TEMP_DIR;
+    private volatile boolean validateCallingAEHostname = false;
+    private volatile boolean sendPendingCGet = false;
+    private volatile Duration sendPendingCMoveInterval;
+    private volatile boolean personNameComponentOrderInsensitiveMatching = false;
+    private volatile int queryFetchSize = 100;
+    private volatile int queryMaxNumberOfResults = 0;
+    private volatile int qidoMaxNumberOfResults = 0;
+    private volatile String wadoZIPEntryNameFormat = DEFAULT_WADO_ZIP_ENTRY_NAME_FORMAT;
+    private volatile String wadoSR2HtmlTemplateURI;
+    private volatile String wadoSR2TextTemplateURI;
+    private volatile String wadoCDA2HtmlTemplateURI;
+    private volatile String patientUpdateTemplateURI;
+    private volatile String importReportTemplateURI;
+    private volatile String scheduleProcedureTemplateURI;
+    private volatile String unzipVendorDataToURI;
+    private volatile String outgoingPatientUpdateTemplateURI;
+    private volatile String[] mppsForwardDestinations = {};
+    private volatile String[] ianDestinations = {};
+    private volatile Duration ianDelay;
+    private volatile Duration ianTimeout;
+    private volatile boolean ianOnTimeout;
+    private volatile Duration ianTaskPollingInterval;
+    private volatile int ianTaskFetchSize = 100;
+    private volatile String spanningCFindSCP;
+    private volatile String[] spanningCFindSCPRetrieveAETitles = {};
+    private volatile SpanningCFindSCPPolicy spanningCFindSCPPolicy = SpanningCFindSCPPolicy.REPLACE;
+    private volatile String fallbackCMoveSCP;
+    private volatile String fallbackCMoveSCPDestination;
+    private volatile String fallbackCMoveSCPLeadingCFindSCP;
+    private volatile int fallbackCMoveSCPRetries;
+    private volatile String externalRetrieveAEDestination;
+    private volatile String xdsiImagingDocumentSourceAETitle;
+    private volatile String alternativeCMoveSCP;
+    private volatile Duration exportTaskPollingInterval;
+    private volatile int exportTaskFetchSize = 5;
+    private volatile Duration deleteRejectedPollingInterval;
+    private volatile int deleteRejectedFetchSize = 100;
+    private volatile Duration purgeStoragePollingInterval;
+    private volatile int purgeStorageFetchSize = 100;
+    private volatile int deleteStudyBatchSize = 10;
+    private volatile boolean deletePatientOnDeleteLastStudy = false;
+    private volatile Duration maxAccessTimeStaleness;
+    private volatile Duration aeCacheStaleTimeout;
+    private volatile Duration leadingCFindSCPQueryCacheStaleTimeout;
+    private volatile int leadingCFindSCPQueryCacheSize = 10;
+    private volatile String auditSpoolDirectory = JBOSS_SERVER_TEMP_DIR;
+    private volatile Duration auditPollingInterval;
+    private volatile Duration auditAggregateDuration;
+    private volatile String stowSpoolDirectory = JBOSS_SERVER_TEMP_DIR;
+    private volatile String wadoSpoolDirectory = JBOSS_SERVER_TEMP_DIR;
+    private volatile Duration purgeQueueMessagePollingInterval;
+    private volatile Duration purgeStgCmtPollingInterval;
+    private volatile Duration purgeStgCmtCompletedDelay;
+    private volatile SPSStatus[] hideSPSWithStatusFrom = {};
+    private volatile String hl7LogFilePattern;
+    private volatile String hl7ErrorLogFilePattern;
+    private volatile Duration rejectExpiredStudiesPollingInterval;
+    private volatile LocalTime rejectExpiredStudiesPollingStartTime;
+    private volatile int rejectExpiredStudiesFetchSize = 0;
+    private volatile int rejectExpiredSeriesFetchSize = 0;
+    private volatile String rejectExpiredStudiesAETitle;
+    private volatile String fallbackCMoveSCPStudyOlderThan;
+    private volatile String storePermissionServiceURL;
+    private volatile Pattern storePermissionServiceResponsePattern;
+    private volatile Pattern storePermissionServiceExpirationDatePattern;
+    private volatile Pattern storePermissionServiceErrorCommentPattern;
+    private volatile Pattern storePermissionServiceErrorCodePattern;
+    private volatile Duration storePermissionCacheStaleTimeout;
+    private volatile int storePermissionCacheSize = 10;
+    private volatile Duration mergeMWLCacheStaleTimeout;
+    private volatile int mergeMWLCacheSize = 10;
+    private volatile int storeUpdateDBMaxRetries = 1;
+    private volatile int storeUpdateDBMaxRetryDelay = 1000;
+    private volatile AllowRejectionForDataRetentionPolicyExpired allowRejectionForDataRetentionPolicyExpired =
+            AllowRejectionForDataRetentionPolicyExpired.EXPIRED_UNSET;
+    private volatile AcceptMissingPatientID acceptMissingPatientID = AcceptMissingPatientID.CREATE;
+    private volatile AllowDeletePatient allowDeletePatient = AllowDeletePatient.WITHOUT_STUDIES;
+    private volatile AllowDeleteStudyPermanently allowDeleteStudyPermanently = AllowDeleteStudyPermanently.REJECTED;
+    private volatile AcceptConflictingPatientID acceptConflictingPatientID = AcceptConflictingPatientID.MERGED;
+    private volatile String[] retrieveAETitles = {};
+    private volatile String remapRetrieveURL;
+    private volatile String remapRetrieveURLClientHost;
+    private volatile String hl7PSUSendingApplication;
+    private volatile String[] hl7PSUReceivingApplications = {};
+    private volatile Duration hl7PSUDelay;
+    private volatile Duration hl7PSUTimeout;
+    private volatile boolean hl7PSUOnTimeout;
+    private volatile int hl7PSUTaskFetchSize = 100;
+    private volatile Duration hl7PSUTaskPollingInterval;
+    private volatile boolean hl7PSUMWL = false;
+    private volatile String auditRecordRepositoryURL;
+    private volatile String atna2JsonFhirTemplateURI;
+    private volatile String atna2XmlFhirTemplateURI;
+    private volatile Attributes.UpdatePolicy copyMoveUpdatePolicy;
+    private volatile Attributes.UpdatePolicy linkMWLEntryUpdatePolicy;
+    private volatile boolean hl7TrackChangedPatientID = true;
+    private volatile boolean auditSoftwareConfigurationVerbose = false;
+    private volatile boolean hl7UseNullValue = false;
+    private volatile String invokeImageDisplayPatientURL;
+    private volatile String invokeImageDisplayStudyURL;
+    private volatile String[] hl7ADTReceivingApplication = {};
+    private volatile String hl7ADTSendingApplication;
+    private volatile int queueTasksFetchSize = 100;
+    private volatile ScheduledProtocolCodeInOrder hl7ScheduledProtocolCodeInOrder =
+            ScheduledProtocolCodeInOrder.OBR_4_4;
+    private volatile ScheduledStationAETInOrder hl7ScheduledStationAETInOrder;
+    private volatile String auditUnknownStudyInstanceUID = AUDIT_UNKNOWN_STUDY_INSTANCE_UID;
+    private volatile String auditUnknownPatientID = AUDIT_UNKNOWN_PATIENT_ID;
+    private volatile String rejectionNoteStorageAET;
+    private volatile String uiConfigurationDeviceName;
+    private volatile StorageVerificationPolicy storageVerificationPolicy = StorageVerificationPolicy.OBJECT_CHECKSUM;
+    private volatile boolean storageVerificationUpdateLocationStatus;
+    private volatile String[] storageVerificationStorageIDs = {};
+    private volatile String storageVerificationAETitle;
+    private volatile String storageVerificationBatchID;
+    private volatile Period storageVerificationInitialDelay;
+    private volatile Period storageVerificationPeriod;
+    private volatile int storageVerificationMaxScheduled;
+    private volatile Duration storageVerificationPollingInterval;
+    private volatile ScheduleExpression[] storageVerificationSchedules = {};
+    private volatile int storageVerificationFetchSize = 100;
+    private volatile String compressionAETitle;
+    private volatile Duration compressionPollingInterval;
+    private volatile int compressionFetchSize = 100;
+    private volatile int compressionThreads = 1;
+    private volatile ScheduleExpression[] compressionSchedules = {};
+    private volatile Duration diffTaskProgressUpdateInterval;
+    private volatile String patientVerificationPDQServiceID;
+    private volatile Duration patientVerificationPollingInterval;
+    private volatile int patientVerificationFetchSize = 100;
+    private volatile Duration patientVerificationMaxStaleness;
+    private volatile Period patientVerificationPeriod;
+    private volatile Period patientVerificationPeriodOnNotFound;
+    private volatile Duration patientVerificationRetryInterval;
+    private volatile int patientVerificationMaxRetries;
+    private volatile boolean patientVerificationAdjustIssuerOfPatientID;
 
     private final HashSet<String> wadoSupportedSRClasses = new HashSet<>();
     private final EnumMap<Entity,AttributeFilter> attributeFilters = new EnumMap<>(Entity.class);
@@ -191,17 +229,24 @@ public class ArchiveDeviceExtension extends DeviceExtension {
     private final Map<String, StorageDescriptor> storageDescriptorMap = new HashMap<>();
     private final Map<String, QueueDescriptor> queueDescriptorMap = new HashMap<>();
     private final Map<String, ExporterDescriptor> exporterDescriptorMap = new HashMap<>();
+    private final Map<String, PDQServiceDescriptor> pdqServiceDescriptorMap = new HashMap<>();
     private final Map<String, RejectionNote> rejectionNoteMap = new HashMap<>();
+    private final Map<String, KeycloakServer> keycloakServerMap = new HashMap<>();
     private final ArrayList<ExportRule> exportRules = new ArrayList<>();
+    private final ArrayList<PrefetchRule> prefetchRules = new ArrayList<>();
+    private final ArrayList<HL7PrefetchRule> hl7PrefetchRules = new ArrayList<>();
     private final ArrayList<RSForwardRule> rsForwardRules = new ArrayList<>();
     private final ArrayList<HL7ForwardRule> hl7ForwardRules = new ArrayList<>();
     private final ArrayList<HL7OrderScheduledStation> hl7OrderScheduledStations = new ArrayList<>();
     private final EnumMap<SPSStatus,HL7OrderSPSStatus> hl7OrderSPSStatuses = new EnumMap<>(SPSStatus.class);
     private final ArrayList<ArchiveCompressionRule> compressionRules = new ArrayList<>();
     private final ArrayList<StudyRetentionPolicy> studyRetentionPolicies = new ArrayList<>();
+    private final ArrayList<HL7StudyRetentionPolicy> hl7StudyRetentionPolicies = new ArrayList<>();
     private final ArrayList<ArchiveAttributeCoercion> attributeCoercions = new ArrayList<>();
     private final ArrayList<StoreAccessControlIDRule> storeAccessControlIDRules = new ArrayList<>();
     private final LinkedHashSet<String> hl7NoPatientCreateMessageTypes = new LinkedHashSet<>();
+    private final Map<String,String> xRoadProperties = new HashMap<>();
+    private final Map<String,String> impaxReportProperties = new HashMap<>();
 
     private transient FuzzyStr fuzzyStr;
 
@@ -321,6 +366,22 @@ public class ArchiveDeviceExtension extends DeviceExtension {
         this.seriesMetadataFetchSize =  greaterZero(seriesMetadataFetchSize, "seriesMetadataFetchSize");
     }
 
+    public int getSeriesMetadataThreads() {
+        return seriesMetadataThreads;
+    }
+
+    public void setSeriesMetadataThreads(int seriesMetadataThreads) {
+        this.seriesMetadataThreads = seriesMetadataThreads;
+    }
+
+    public boolean isPurgeInstanceRecords() {
+        return purgeInstanceRecords;
+    }
+
+    public void setPurgeInstanceRecords(boolean purgeInstanceRecords) {
+        this.purgeInstanceRecords = purgeInstanceRecords;
+    }
+
     public Duration getPurgeInstanceRecordsDelay() {
         return purgeInstanceRecordsDelay;
     }
@@ -343,14 +404,6 @@ public class ArchiveDeviceExtension extends DeviceExtension {
 
     public void setPurgeInstanceRecordsFetchSize(int purgeInstanceRecordsFetchSize) {
         this.purgeInstanceRecordsFetchSize =  greaterZero(purgeInstanceRecordsFetchSize, "purgeInstanceRecordsFetchSize");
-    }
-
-    public String getQueryRetrieveViewID() {
-        return queryRetrieveViewID;
-    }
-
-    public void setQueryRetrieveViewID(String queryRetrieveViewID) {
-        this.queryRetrieveViewID = queryRetrieveViewID;
     }
 
     public boolean isPersonNameComponentOrderInsensitiveMatching() {
@@ -398,6 +451,14 @@ public class ArchiveDeviceExtension extends DeviceExtension {
         return wadoSupportedSRClasses.contains(cuid);
     }
 
+    public String getWadoZIPEntryNameFormat() {
+        return wadoZIPEntryNameFormat;
+    }
+
+    public void setWadoZIPEntryNameFormat(String wadoZIPEntryNameFormat) {
+        this.wadoZIPEntryNameFormat = wadoZIPEntryNameFormat;
+    }
+
     public String getWadoSR2HtmlTemplateURI() {
         return wadoSR2HtmlTemplateURI;
     }
@@ -412,6 +473,14 @@ public class ArchiveDeviceExtension extends DeviceExtension {
 
     public void setWadoSR2TextTemplateURI(String wadoSR2TextTemplateURI) {
         this.wadoSR2TextTemplateURI = wadoSR2TextTemplateURI;
+    }
+
+    public String getWadoCDA2HtmlTemplateURI() {
+        return wadoCDA2HtmlTemplateURI;
+    }
+
+    public void setWadoCDA2HtmlTemplateURI(String wadoCDA2HtmlTemplateURI) {
+        this.wadoCDA2HtmlTemplateURI = wadoCDA2HtmlTemplateURI;
     }
 
     public String getPatientUpdateTemplateURI() {
@@ -444,6 +513,14 @@ public class ArchiveDeviceExtension extends DeviceExtension {
 
     public void setUnzipVendorDataToURI(String unzipVendorDataToURI) {
         this.unzipVendorDataToURI = unzipVendorDataToURI;
+    }
+
+    public String getOutgoingPatientUpdateTemplateURI() {
+        return outgoingPatientUpdateTemplateURI;
+    }
+
+    public void setOutgoingPatientUpdateTemplateURI(String outgoingPatientUpdateTemplateURI) {
+        this.outgoingPatientUpdateTemplateURI = outgoingPatientUpdateTemplateURI;
     }
 
     public String[] getMppsForwardDestinations() {
@@ -790,7 +867,7 @@ public class ArchiveDeviceExtension extends DeviceExtension {
 
     public void setRejectExpiredSeriesFetchSize(int rejectExpiredSeriesFetchSize) {
         this.rejectExpiredSeriesFetchSize =
-                greaterOrEqualsZero(rejectExpiredSeriesFetchSize, "rejectExpiredSeriesFetchSize");;
+                greaterOrEqualsZero(rejectExpiredSeriesFetchSize, "rejectExpiredSeriesFetchSize");
     }
 
     public Duration getRejectExpiredStudiesPollingInterval() {
@@ -1078,6 +1155,50 @@ public class ArchiveDeviceExtension extends DeviceExtension {
         return hl7NoPatientCreateMessageTypes.contains(messageType);
     }
 
+    public Map<String, String> getXRoadProperties() {
+        return xRoadProperties;
+    }
+
+    public void setXRoadProperty(String name, String value) {
+        xRoadProperties.put(name, value);
+    }
+
+    public void setXRoadProperties(String[] ss) {
+        xRoadProperties.clear();
+        for (String s : ss) {
+            int index = s.indexOf('=');
+            if (index < 0)
+                throw new IllegalArgumentException("Property in incorrect format : " + s);
+            setXRoadProperty(s.substring(0, index), s.substring(index+1));
+        }
+    }
+
+    public boolean hasXRoadProperties() {
+        return xRoadProperties.containsKey("endpoint");
+    }
+
+    public Map<String, String> getImpaxReportProperties() {
+        return impaxReportProperties;
+    }
+
+    public void setImpaxReportProperty(String name, String value) {
+        impaxReportProperties.put(name, value);
+    }
+
+    public void setImpaxReportProperties(String[] ss) {
+        impaxReportProperties.clear();
+        for (String s : ss) {
+            int index = s.indexOf('=');
+            if (index < 0)
+                throw new IllegalArgumentException("Property in incorrect format : " + s);
+            setImpaxReportProperty(s.substring(0, index), s.substring(index+1));
+        }
+    }
+
+    public boolean hasImpaxReportProperties() {
+        return impaxReportProperties.containsKey("endpoint");
+    }
+
     public AttributeFilter getAttributeFilter(Entity entity) {
         AttributeFilter filter = attributeFilters.get(entity);
         if (filter == null)
@@ -1218,6 +1339,12 @@ public class ArchiveDeviceExtension extends DeviceExtension {
         return list;
     }
 
+    public Stream<String> getStorageIDsOfCluster(String clusterID) {
+        return storageDescriptorMap.values().stream()
+                .filter(desc -> clusterID.equals(desc.getStorageClusterID()))
+                .map(StorageDescriptor::getStorageID);
+    }
+
     public QueueDescriptor getQueueDescriptor(String queueName) {
         return queueDescriptorMap.get(queueName);
     }
@@ -1260,6 +1387,29 @@ public class ArchiveDeviceExtension extends DeviceExtension {
         exporterDescriptorMap.put(destination.getExporterID(), destination);
     }
 
+    public PDQServiceDescriptor getPDQServiceDescriptor(String pdqServiceID) {
+        return pdqServiceDescriptorMap.get(pdqServiceID);
+    }
+
+    public PDQServiceDescriptor getPDQServiceDescriptorNotNull(String pdqServiceID) {
+        PDQServiceDescriptor descriptor = getPDQServiceDescriptor(pdqServiceID);
+        if (descriptor == null)
+            throw new IllegalArgumentException("No PDQService configured with ID:" + pdqServiceID);
+        return descriptor;
+    }
+
+    public PDQServiceDescriptor removePDQServiceDescriptor(String pDQServiceID) {
+        return pdqServiceDescriptorMap.remove(pDQServiceID);
+    }
+
+    public void addPDQServiceDescriptor(PDQServiceDescriptor destination) {
+        pdqServiceDescriptorMap.put(destination.getPDQServiceID(), destination);
+    }
+
+    public Collection<PDQServiceDescriptor> getPDQServiceDescriptors() {
+        return pdqServiceDescriptorMap.values();
+    }
+
     private int greaterZero(int i, String prompt) {
         if (i <= 0)
             throw new IllegalArgumentException(prompt + ": " + i);
@@ -1290,6 +1440,38 @@ public class ArchiveDeviceExtension extends DeviceExtension {
 
     public Collection<ExportRule> getExportRules() {
         return exportRules;
+    }
+
+    public void removePrefetchRule(PrefetchRule rule) {
+        prefetchRules.remove(rule);
+    }
+
+    public void clearPrefetchRules() {
+        prefetchRules.clear();
+    }
+
+    public void addPrefetchRule(PrefetchRule rule) {
+        prefetchRules.add(rule);
+    }
+
+    public Collection<PrefetchRule> getPrefetchRules() {
+        return prefetchRules;
+    }
+
+    public void removeHL7PrefetchRule(PrefetchRule rule) {
+        hl7PrefetchRules.remove(rule);
+    }
+
+    public void clearHL7PrefetchRules() {
+        hl7PrefetchRules.clear();
+    }
+
+    public void addHL7PrefetchRule(HL7PrefetchRule rule) {
+        hl7PrefetchRules.add(rule);
+    }
+
+    public Collection<HL7PrefetchRule> getHL7PrefetchRules() {
+        return hl7PrefetchRules;
     }
 
     public void removeRSForwardRule(RSForwardRule rule) {
@@ -1388,6 +1570,22 @@ public class ArchiveDeviceExtension extends DeviceExtension {
         return studyRetentionPolicies;
     }
 
+    public void removeHL7StudyRetentionPolicy(HL7StudyRetentionPolicy policy) {
+        hl7StudyRetentionPolicies.remove(policy);
+    }
+
+    public void clearHL7StudyRetentionPolicies() {
+        hl7StudyRetentionPolicies.clear();
+    }
+
+    public void addHL7StudyRetentionPolicy(HL7StudyRetentionPolicy policy) {
+        hl7StudyRetentionPolicies.add(policy);
+    }
+
+    public Collection<HL7StudyRetentionPolicy> getHL7StudyRetentionPolicies() {
+        return hl7StudyRetentionPolicies;
+    }
+
     public void removeAttributeCoercion(ArchiveAttributeCoercion coercion) {
         attributeCoercions.remove(coercion);
     }
@@ -1461,6 +1659,14 @@ public class ArchiveDeviceExtension extends DeviceExtension {
         this.allowDeleteStudyPermanently = allowDeleteStudyPermanently;
     }
 
+    public AllowDeletePatient getAllowDeletePatient() {
+        return allowDeletePatient;
+    }
+
+    public void setAllowDeletePatient(AllowDeletePatient allowDeletePatient) {
+        this.allowDeletePatient = allowDeletePatient;
+    }
+
     public AcceptConflictingPatientID getAcceptConflictingPatientID() {
         return acceptConflictingPatientID;
     }
@@ -1483,14 +1689,6 @@ public class ArchiveDeviceExtension extends DeviceExtension {
 
     public void setAuditRecordRepositoryURL(String auditRecordRepositoryURL) {
         this.auditRecordRepositoryURL = auditRecordRepositoryURL;
-    }
-
-    public String getElasticSearchURL() {
-        return elasticSearchURL;
-    }
-
-    public void setElasticSearchURL(String elasticSearchURL) {
-        this.elasticSearchURL = elasticSearchURL;
     }
 
     public String getAudit2JsonFhirTemplateURI() {
@@ -1531,6 +1729,14 @@ public class ArchiveDeviceExtension extends DeviceExtension {
 
     public void setHl7TrackChangedPatientID(boolean hl7TrackChangedPatientID) {
         this.hl7TrackChangedPatientID = hl7TrackChangedPatientID;
+    }
+
+    public boolean isAuditSoftwareConfigurationVerbose() {
+        return auditSoftwareConfigurationVerbose;
+    }
+
+    public void setAuditSoftwareConfigurationVerbose(boolean auditSoftwareConfigurationVerbose) {
+        this.auditSoftwareConfigurationVerbose = auditSoftwareConfigurationVerbose;
     }
 
     public String getInvokeImageDisplayPatientURL() {
@@ -1605,6 +1811,269 @@ public class ArchiveDeviceExtension extends DeviceExtension {
         return StringUtils.maskNull(auditUnknownPatientID, "<none>");
     }
 
+    public boolean isHl7UseNullValue() {
+        return hl7UseNullValue;
+    }
+
+    public void setHl7UseNullValue(boolean hl7UseNullValue) {
+        this.hl7UseNullValue = hl7UseNullValue;
+    }
+
+    public int getQueueTasksFetchSize() {
+        return queueTasksFetchSize;
+    }
+
+    public void setQueueTasksFetchSize(int queueTasksFetchSize) {
+        this.queueTasksFetchSize = queueTasksFetchSize;
+    }
+
+    public String getRejectionNoteStorageAET() {
+        return rejectionNoteStorageAET;
+    }
+
+    public void setRejectionNoteStorageAET(String rejectionNoteStorageAET) {
+        this.rejectionNoteStorageAET = rejectionNoteStorageAET;
+    }
+
+    public String getUiConfigurationDeviceName() {
+        return uiConfigurationDeviceName;
+    }
+
+    public void setUiConfigurationDeviceName(String uiConfigurationDeviceName) {
+        this.uiConfigurationDeviceName = uiConfigurationDeviceName;
+    }
+
+    public StorageVerificationPolicy getStorageVerificationPolicy() {
+        return storageVerificationPolicy;
+    }
+
+    public void setStorageVerificationPolicy(StorageVerificationPolicy storageVerificationPolicy) {
+        this.storageVerificationPolicy = storageVerificationPolicy;
+    }
+
+    public boolean isStorageVerificationUpdateLocationStatus() {
+        return storageVerificationUpdateLocationStatus;
+    }
+
+    public void setStorageVerificationUpdateLocationStatus(boolean storageVerificationUpdateLocationStatus) {
+        this.storageVerificationUpdateLocationStatus = storageVerificationUpdateLocationStatus;
+    }
+
+    public String[] getStorageVerificationStorageIDs() {
+        return storageVerificationStorageIDs;
+    }
+
+    public void setStorageVerificationStorageIDs(String... storageVerificationStorageIDs) {
+        this.storageVerificationStorageIDs = storageVerificationStorageIDs;
+    }
+
+    public String getStorageVerificationAETitle() {
+        return storageVerificationAETitle;
+    }
+
+    public void setStorageVerificationAETitle(String storageVerificationAETitle) {
+        this.storageVerificationAETitle = storageVerificationAETitle;
+    }
+
+    public String getStorageVerificationBatchID() {
+        return storageVerificationBatchID;
+    }
+
+    public void setStorageVerificationBatchID(String storageVerificationBatchID) {
+        this.storageVerificationBatchID = storageVerificationBatchID;
+    }
+
+    public Period getStorageVerificationInitialDelay() {
+        return storageVerificationInitialDelay;
+    }
+
+    public void setStorageVerificationInitialDelay(Period storageVerificationInitialDelay) {
+        this.storageVerificationInitialDelay = storageVerificationInitialDelay;
+    }
+
+    public Period getStorageVerificationPeriod() {
+        return storageVerificationPeriod;
+    }
+
+    public void setStorageVerificationPeriod(Period storageVerificationPeriod) {
+        this.storageVerificationPeriod = storageVerificationPeriod;
+    }
+
+    public ScheduleExpression[] getStorageVerificationSchedules() {
+        return storageVerificationSchedules;
+    }
+
+    public void setStorageVerificationSchedules(ScheduleExpression[] storageVerificationSchedules) {
+        this.storageVerificationSchedules = storageVerificationSchedules;
+    }
+
+    public int getStorageVerificationMaxScheduled() {
+        return storageVerificationMaxScheduled;
+    }
+
+    public void setStorageVerificationMaxScheduled(int storageVerificationMaxScheduled) {
+        this.storageVerificationMaxScheduled = storageVerificationMaxScheduled;
+    }
+
+    public Duration getStorageVerificationPollingInterval() {
+        return storageVerificationPollingInterval;
+    }
+
+    public void setStorageVerificationPollingInterval(Duration storageVerificationPollingInterval) {
+        this.storageVerificationPollingInterval = storageVerificationPollingInterval;
+    }
+
+    public int getStorageVerificationFetchSize() {
+        return storageVerificationFetchSize;
+    }
+
+    public void setStorageVerificationFetchSize(int storageVerificationFetchSize) {
+        this.storageVerificationFetchSize = storageVerificationFetchSize;
+    }
+
+    public String getCompressionAETitle() {
+        return compressionAETitle;
+    }
+
+    public void setCompressionAETitle(String compressionAETitle) {
+        this.compressionAETitle = compressionAETitle;
+    }
+
+    public Duration getCompressionPollingInterval() {
+        return compressionPollingInterval;
+    }
+
+    public void setCompressionPollingInterval(Duration compressionPollingInterval) {
+        this.compressionPollingInterval = compressionPollingInterval;
+    }
+
+    public int getCompressionFetchSize() {
+        return compressionFetchSize;
+    }
+
+    public void setCompressionFetchSize(int compressionFetchSize) {
+        this.compressionFetchSize = greaterZero(compressionFetchSize, "CompressionFetchSize");
+    }
+
+    public int getCompressionThreads() {
+        return compressionThreads;
+    }
+
+    public void setCompressionThreads(int compressionThreads) {
+        this.compressionThreads = greaterZero(compressionThreads, "CompressionThreads");
+    }
+
+    public ScheduleExpression[] getCompressionSchedules() {
+        return compressionSchedules;
+    }
+
+    public void setCompressionSchedules(ScheduleExpression[] compressionSchedules) {
+        this.compressionSchedules = compressionSchedules;
+    }
+
+    public Duration getDiffTaskProgressUpdateInterval() {
+        return diffTaskProgressUpdateInterval;
+    }
+
+    public void setDiffTaskProgressUpdateInterval(Duration diffTaskProgressUpdateInterval) {
+        this.diffTaskProgressUpdateInterval = diffTaskProgressUpdateInterval;
+    }
+
+    public void setPatientVerificationPDQServiceID(String patientVerificationPDQServiceID) {
+        this.patientVerificationPDQServiceID = patientVerificationPDQServiceID;
+    }
+
+    public Duration getPatientVerificationPollingInterval() {
+        return patientVerificationPollingInterval;
+    }
+
+    public void setPatientVerificationPollingInterval(Duration patientVerificationPollingInterval) {
+        this.patientVerificationPollingInterval = patientVerificationPollingInterval;
+    }
+
+    public int getPatientVerificationFetchSize() {
+        return patientVerificationFetchSize;
+    }
+
+    public void setPatientVerificationFetchSize(int patientVerificationFetchSize) {
+        this.patientVerificationFetchSize = patientVerificationFetchSize;
+    }
+
+    public String getPatientVerificationPDQServiceID() {
+        return patientVerificationPDQServiceID;
+    }
+
+    public Period getPatientVerificationPeriod() {
+        return patientVerificationPeriod;
+    }
+
+    public void setPatientVerificationPeriod(Period patientVerificationPeriod) {
+        this.patientVerificationPeriod = patientVerificationPeriod;
+    }
+
+    public Period getPatientVerificationPeriodOnNotFound() {
+        return patientVerificationPeriodOnNotFound;
+    }
+
+    public void setPatientVerificationPeriodOnNotFound(Period patientVerificationPeriodOnNotFound) {
+        this.patientVerificationPeriodOnNotFound = patientVerificationPeriodOnNotFound;
+    }
+
+    public Duration getPatientVerificationRetryInterval() {
+        return patientVerificationRetryInterval;
+    }
+
+    public void setPatientVerificationRetryInterval(Duration patientVerificationRetryInterval) {
+        this.patientVerificationRetryInterval = patientVerificationRetryInterval;
+    }
+
+    public int getPatientVerificationMaxRetries() {
+        return patientVerificationMaxRetries;
+    }
+
+    public void setPatientVerificationMaxRetries(int patientVerificationMaxRetries) {
+        this.patientVerificationMaxRetries = patientVerificationMaxRetries;
+    }
+
+    public boolean isPatientVerificationAdjustIssuerOfPatientID() {
+        return patientVerificationAdjustIssuerOfPatientID;
+    }
+
+    public void setPatientVerificationAdjustIssuerOfPatientID(boolean patientVerificationAdjustIssuerOfPatientID) {
+        this.patientVerificationAdjustIssuerOfPatientID = patientVerificationAdjustIssuerOfPatientID;
+    }
+
+    public Duration getPatientVerificationMaxStaleness() {
+        return patientVerificationMaxStaleness;
+    }
+
+    public void setPatientVerificationMaxStaleness(Duration patientVerificationMaxStaleness) {
+        this.patientVerificationMaxStaleness = patientVerificationMaxStaleness;
+    }
+
+    public Collection<KeycloakServer> getKeycloakServers() {
+        return keycloakServerMap.values();
+    }
+
+    public KeycloakServer getKeycloakServer(String keycloakServerID) {
+        return keycloakServerMap.get(keycloakServerID);
+    }
+
+    public KeycloakServer getKeycloakServerNotNull(String keycloakServerID) {
+        KeycloakServer keycloakServer = getKeycloakServer(keycloakServerID);
+        if (keycloakServer == null)
+            throw new IllegalArgumentException("No Keycloak Server configured with ID:" + keycloakServerID);
+        return keycloakServer;
+    }
+
+    public KeycloakServer removeKeycloakServer(String keycloakServerID) {
+        return keycloakServerMap.remove(keycloakServerID);
+    }
+
+    public void addKeycloakServer(KeycloakServer keycloakServer) {
+        keycloakServerMap.put(keycloakServer.getKeycloakServerID(), keycloakServer);
+    }
+
     @Override
     public void reconfigure(DeviceExtension from) {
         ArchiveDeviceExtension arcdev = (ArchiveDeviceExtension) from;
@@ -1615,6 +2084,8 @@ public class ArchiveDeviceExtension extends DeviceExtension {
         seriesMetadataDelay = arcdev.seriesMetadataDelay;
         seriesMetadataPollingInterval = arcdev.seriesMetadataPollingInterval;
         seriesMetadataFetchSize = arcdev.seriesMetadataFetchSize;
+        seriesMetadataThreads = arcdev.seriesMetadataThreads;
+        purgeInstanceRecords = arcdev.purgeInstanceRecords;
         purgeInstanceRecordsDelay = arcdev.purgeInstanceRecordsDelay;
         purgeInstanceRecordsPollingInterval = arcdev.purgeInstanceRecordsPollingInterval;
         purgeInstanceRecordsFetchSize = arcdev.purgeInstanceRecordsFetchSize;
@@ -1622,18 +2093,20 @@ public class ArchiveDeviceExtension extends DeviceExtension {
         showPatientInfoInSystemLog = arcdev.showPatientInfoInSystemLog;
         showPatientInfoInAuditLog = arcdev.showPatientInfoInAuditLog;
         bulkDataSpoolDirectory = arcdev.bulkDataSpoolDirectory;
-        queryRetrieveViewID = arcdev.queryRetrieveViewID;
         personNameComponentOrderInsensitiveMatching = arcdev.personNameComponentOrderInsensitiveMatching;
         validateCallingAEHostname = arcdev.validateCallingAEHostname;
         sendPendingCGet = arcdev.sendPendingCGet;
         sendPendingCMoveInterval = arcdev.sendPendingCMoveInterval;
         wadoSupportedSRClasses.clear();
         wadoSupportedSRClasses.addAll(arcdev.wadoSupportedSRClasses);
+        wadoZIPEntryNameFormat = arcdev.wadoZIPEntryNameFormat;
         wadoSR2HtmlTemplateURI = arcdev.wadoSR2HtmlTemplateURI;
         wadoSR2TextTemplateURI = arcdev.wadoSR2TextTemplateURI;
+        wadoCDA2HtmlTemplateURI = arcdev.wadoCDA2HtmlTemplateURI;
         patientUpdateTemplateURI = arcdev.patientUpdateTemplateURI;
         importReportTemplateURI = arcdev.importReportTemplateURI;
         scheduleProcedureTemplateURI = arcdev.scheduleProcedureTemplateURI;
+        outgoingPatientUpdateTemplateURI = arcdev.outgoingPatientUpdateTemplateURI;
         queryFetchSize = arcdev.queryFetchSize;
         queryMaxNumberOfResults = arcdev.queryMaxNumberOfResults;
         qidoMaxNumberOfResults = arcdev.qidoMaxNumberOfResults;
@@ -1699,6 +2172,7 @@ public class ArchiveDeviceExtension extends DeviceExtension {
         allowRejectionForDataRetentionPolicyExpired = arcdev.allowRejectionForDataRetentionPolicyExpired;
         acceptMissingPatientID = arcdev.acceptMissingPatientID;
         allowDeleteStudyPermanently = arcdev.allowDeleteStudyPermanently;
+        allowDeletePatient = arcdev.allowDeletePatient;
         retrieveAETitles = arcdev.retrieveAETitles;
         remapRetrieveURL = arcdev.remapRetrieveURL;
         remapRetrieveURLClientHost = arcdev.remapRetrieveURLClientHost;
@@ -1712,7 +2186,6 @@ public class ArchiveDeviceExtension extends DeviceExtension {
         hl7PSUMWL = arcdev.hl7PSUMWL;
         acceptConflictingPatientID = arcdev.acceptConflictingPatientID;
         auditRecordRepositoryURL = arcdev.auditRecordRepositoryURL;
-        elasticSearchURL = arcdev.elasticSearchURL;
         atna2JsonFhirTemplateURI = arcdev.atna2JsonFhirTemplateURI;
         atna2XmlFhirTemplateURI = arcdev.atna2XmlFhirTemplateURI;
         copyMoveUpdatePolicy = arcdev.copyMoveUpdatePolicy;
@@ -1726,6 +2199,37 @@ public class ArchiveDeviceExtension extends DeviceExtension {
         hl7ScheduledStationAETInOrder = arcdev.hl7ScheduledStationAETInOrder;
         auditUnknownStudyInstanceUID = arcdev.auditUnknownStudyInstanceUID;
         auditUnknownPatientID = arcdev.auditUnknownPatientID;
+        auditSoftwareConfigurationVerbose = arcdev.auditSoftwareConfigurationVerbose;
+        hl7UseNullValue = arcdev.hl7UseNullValue;
+        queueTasksFetchSize = arcdev.queueTasksFetchSize;
+        rejectionNoteStorageAET = arcdev.rejectionNoteStorageAET;
+        uiConfigurationDeviceName = arcdev.uiConfigurationDeviceName;
+        storageVerificationPolicy = arcdev.storageVerificationPolicy;
+        storageVerificationUpdateLocationStatus = arcdev.storageVerificationUpdateLocationStatus;
+        storageVerificationStorageIDs = arcdev.storageVerificationStorageIDs;
+        storageVerificationAETitle = arcdev.storageVerificationAETitle;
+        storageVerificationBatchID = arcdev.storageVerificationBatchID;
+        storageVerificationInitialDelay = arcdev.storageVerificationInitialDelay;
+        storageVerificationPeriod = arcdev.storageVerificationPeriod;
+        storageVerificationSchedules = arcdev.storageVerificationSchedules;
+        storageVerificationMaxScheduled = arcdev.storageVerificationMaxScheduled;
+        storageVerificationPollingInterval = arcdev.storageVerificationPollingInterval;
+        storageVerificationFetchSize = arcdev.storageVerificationFetchSize;
+        compressionAETitle = arcdev.compressionAETitle;
+        compressionPollingInterval = arcdev.compressionPollingInterval;
+        compressionFetchSize = arcdev.compressionFetchSize;
+        compressionSchedules = arcdev.compressionSchedules;
+        compressionThreads = arcdev.compressionThreads;
+        diffTaskProgressUpdateInterval = arcdev.diffTaskProgressUpdateInterval;
+        patientVerificationPDQServiceID = arcdev.patientVerificationPDQServiceID;
+        patientVerificationPollingInterval = arcdev.patientVerificationPollingInterval;
+        patientVerificationFetchSize = arcdev.patientVerificationFetchSize;
+        patientVerificationMaxStaleness = arcdev.patientVerificationMaxStaleness;
+        patientVerificationPeriod = arcdev.patientVerificationPeriod;
+        patientVerificationRetryInterval = arcdev.patientVerificationRetryInterval;
+        patientVerificationPeriodOnNotFound = arcdev.patientVerificationPeriodOnNotFound;
+        patientVerificationMaxRetries = arcdev.patientVerificationMaxRetries;
+        patientVerificationAdjustIssuerOfPatientID = arcdev.patientVerificationAdjustIssuerOfPatientID;
         attributeFilters.clear();
         attributeFilters.putAll(arcdev.attributeFilters);
         attributeSet.clear();
@@ -1736,10 +2240,16 @@ public class ArchiveDeviceExtension extends DeviceExtension {
         storageDescriptorMap.putAll(arcdev.storageDescriptorMap);
         queueDescriptorMap.clear();
         queueDescriptorMap.putAll(arcdev.queueDescriptorMap);
+        pdqServiceDescriptorMap.clear();
+        pdqServiceDescriptorMap.putAll(arcdev.pdqServiceDescriptorMap);
         exporterDescriptorMap.clear();
         exporterDescriptorMap.putAll(arcdev.exporterDescriptorMap);
         exportRules.clear();
         exportRules.addAll(arcdev.exportRules);
+        prefetchRules.clear();
+        prefetchRules.addAll(arcdev.prefetchRules);
+        hl7PrefetchRules.clear();
+        hl7PrefetchRules.addAll(arcdev.hl7PrefetchRules);
         rsForwardRules.clear();
         rsForwardRules.addAll(arcdev.rsForwardRules);
         hl7ForwardRules.clear();
@@ -1754,11 +2264,19 @@ public class ArchiveDeviceExtension extends DeviceExtension {
         compressionRules.addAll(arcdev.compressionRules);
         studyRetentionPolicies.clear();
         studyRetentionPolicies.addAll(arcdev.studyRetentionPolicies);
+        hl7StudyRetentionPolicies.clear();
+        hl7StudyRetentionPolicies.addAll(arcdev.hl7StudyRetentionPolicies);
         attributeCoercions.clear();
         attributeCoercions.addAll(arcdev.attributeCoercions);
         storeAccessControlIDRules.clear();
         storeAccessControlIDRules.addAll(arcdev.storeAccessControlIDRules);
         rejectionNoteMap.clear();
         rejectionNoteMap.putAll(arcdev.rejectionNoteMap);
+        keycloakServerMap.clear();
+        keycloakServerMap.putAll(arcdev.keycloakServerMap);
+        xRoadProperties.clear();
+        xRoadProperties.putAll(arcdev.xRoadProperties);
+        impaxReportProperties.clear();
+        impaxReportProperties.putAll(arcdev.impaxReportProperties);
     }
 }

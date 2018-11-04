@@ -17,7 +17,7 @@
  *
  * The Initial Developer of the Original Code is
  * J4Care.
- * Portions created by the Initial Developer are Copyright (C) 2013
+ * Portions created by the Initial Developer are Copyright (C) 2015-2017
  * the Initial Developer. All Rights Reserved.
  *
  * Contributor(s):
@@ -42,13 +42,17 @@ package org.dcm4chee.arc.delete.impl;
 
 
 import org.dcm4che3.data.Code;
-import org.dcm4che3.net.ApplicationEntity;
+import org.dcm4che3.net.Device;
+import org.dcm4chee.arc.conf.AllowDeletePatient;
 import org.dcm4chee.arc.conf.AllowDeleteStudyPermanently;
 import org.dcm4chee.arc.conf.ArchiveAEExtension;
+import org.dcm4chee.arc.conf.ArchiveDeviceExtension;
 import org.dcm4chee.arc.delete.*;
 import org.dcm4chee.arc.entity.*;
 import org.dcm4chee.arc.patient.PatientMgtContext;
 import org.dcm4chee.arc.patient.PatientService;
+import org.dcm4chee.arc.qmgt.HttpServletRequestInfo;
+import org.dcm4chee.arc.store.StoreService;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -58,7 +62,6 @@ import javax.inject.Inject;
 import javax.persistence.EntityManager;
 import javax.persistence.NoResultException;
 import javax.persistence.PersistenceContext;
-import javax.servlet.http.HttpServletRequest;
 import java.util.Date;
 import java.util.List;
 
@@ -76,10 +79,16 @@ public class DeletionServiceImpl implements DeletionService {
     private EntityManager em;
 
     @Inject
+    private Device device;
+
+    @Inject
     private DeletionServiceEJB ejb;
 
     @Inject
     private PatientService patientService;
+
+    @Inject
+    private StoreService storeService;
 
     @Inject
     private Event<StudyDeleteContext> studyDeletedEvent;
@@ -110,82 +119,87 @@ public class DeletionServiceImpl implements DeletionService {
     }
 
     @Override
-    public StudyDeleteContext createStudyDeleteContext(Long pk, HttpServletRequest request) {
+    public StudyDeleteContext createStudyDeleteContext(Long pk, HttpServletRequestInfo httpServletRequestInfo) {
         StudyDeleteContext ctx = new StudyDeleteContextImpl(pk);
-        ctx.setHttpRequest(request);
+        ctx.setHttpServletRequestInfo(httpServletRequestInfo);
         return ctx;
     }
 
     @Override
-    public void deleteStudy(String studyUID, HttpServletRequest request, ApplicationEntity ae)
-            throws StudyNotFoundException, StudyNotEmptyException {
-        StudyDeleteContext ctx = null;
+    public void deleteStudy(String studyUID, HttpServletRequestInfo httpServletRequestInfo, ArchiveAEExtension arcAE)
+            throws Exception {
         try {
-            Study study = em.createNamedQuery(Study.FIND_BY_STUDY_IUID, Study.class)
-                    .setParameter(1, studyUID).getSingleResult();
-            ArchiveAEExtension arcAE = ae.getAEExtension(ArchiveAEExtension.class);
-            AllowDeleteStudyPermanently allowDeleteStudy = arcAE.allowDeleteStudy();
-            if (study != null) {
-                ctx = createStudyDeleteContext(study.getPk(), request);
-                boolean studyDeleted = studyDeleted(ctx, study, allowDeleteStudy);
-                if (!studyDeleted)
-                    throw new StudyNotEmptyException("Study is not empty. - ");
-                if (allowDeleteStudy == AllowDeleteStudyPermanently.ALWAYS && studyDeleted
-                        && (study.getRejectionState() == RejectionState.NONE || study.getRejectionState() == RejectionState.PARTIAL))
-                    studyDeletedEvent.fire(ctx);
-            }
-            LOG.info("Successfully delete {} from database", ctx.getStudy());
+            deleteStudy(em.createNamedQuery(Study.FIND_BY_STUDY_IUID, Study.class)
+                    .setParameter(1, studyUID).getSingleResult(),
+                httpServletRequestInfo,
+                arcAE,
+            null);
         } catch (NoResultException e) {
             throw new StudyNotFoundException(e.getMessage());
-        } catch (StudyNotEmptyException e) {
-            ctx.setException(e);
-            studyDeletedEvent.fire(ctx);
-            throw e;
+        }
+    }
+
+    private void deleteStudy(Study study, HttpServletRequestInfo httpServletRequestInfo, ArchiveAEExtension arcAE,
+                       PatientMgtContext pCtx) throws Exception {
+        StudyDeleteContext ctx = createStudyDeleteContext(study.getPk(), httpServletRequestInfo);
+        try {
+            studyDeleted(ctx, study, arcAE, pCtx);
+            LOG.info("Successfully delete {} from database", study);
         } catch (Exception e) {
-            LOG.warn("Failed to delete {} on {}", ctx.getStudy(), e);
+            LOG.warn("Failed to delete {} on {}", study, e);
             ctx.setException(e);
+            throw e;
+        } finally {
             studyDeletedEvent.fire(ctx);
         }
     }
 
     @Override
-    public void deletePatient(PatientMgtContext ctx) {
-        ejb.deleteMWLItemsOfPatient(ctx);
+    public void deletePatient(PatientMgtContext ctx, ArchiveAEExtension arcAE) {
         List<Study> sList = em.createNamedQuery(Study.FIND_BY_PATIENT, Study.class)
                 .setParameter(1, ctx.getPatient()).getResultList();
-        StudyDeleteContext sCtx;
-        if (!sList.isEmpty()) {
-            for (Study study : sList) {
-                try {
-                    sCtx = createStudyDeleteContext(study.getPk(), ctx.getHttpRequest());
-                    studyDeleted(sCtx, study, AllowDeleteStudyPermanently.REJECTED);
-                    LOG.info("Successfully delete {} from database", study);
-                } catch (Exception e) {
-                    LOG.warn("Failed to delete {} on {}", study, e);
-                    ctx.setException(e);
-                    patientMgtEvent.fire(ctx);
-                }
+        for (Study study : sList)
+            try {
+                deleteStudy(study, ctx.getHttpServletRequestInfo(), arcAE, ctx);
+            } catch (Exception e) {
+                ctx.setException(e);
             }
-        }
+
         if (ctx.getException() == null) {
             patientService.deletePatientFromUI(ctx);
             LOG.info("Successfully delete {} from database", ctx.getPatient());
         }
+
+        patientMgtEvent.fire(ctx);
     }
 
-    private boolean studyDeleted(StudyDeleteContext ctx, Study study, AllowDeleteStudyPermanently allowDeleteStudy) {
+    private void studyDeleted(StudyDeleteContext ctx, Study study, ArchiveAEExtension arcAE, PatientMgtContext pCtx)
+            throws Exception {
         ctx.setStudy(study);
         ctx.setPatient(study.getPatient());
-        ctx.setDeletePatientOnDeleteLastStudy(false);
-        if (study.getRejectionState() == RejectionState.COMPLETE || allowDeleteStudy == AllowDeleteStudyPermanently.ALWAYS) {
+        ctx.setDeletePatientOnDeleteLastStudy(arcAE.getArchiveDeviceExtension().isDeletePatientOnDeleteLastStudy());
+        AllowDeleteStudyPermanently allowDeleteStudy = pCtx != null && arcAE.allowDeletePatient() == AllowDeletePatient.ALWAYS
+                ? AllowDeleteStudyPermanently.ALWAYS : arcAE.allowDeleteStudy();
+        RejectionState rejectionState = study.getRejectionState();
+        if (rejectionState == RejectionState.NONE && allowDeleteStudy == AllowDeleteStudyPermanently.ALWAYS) {
+            List<Series> seriesWithPurgedInstances = ejb.findSeriesWithPurgedInstances(study.getPk());
+            if (!seriesWithPurgedInstances.isEmpty()) {
+                for (Series series : seriesWithPurgedInstances)
+                    storeService.restoreInstances(
+                            storeService.newStoreSession(device.getApplicationEntities().iterator().next()),
+                            study.getStudyInstanceUID(),
+                            series.getSeriesInstanceUID(),
+                            device.getDeviceExtension(ArchiveDeviceExtension.class).getPurgeInstanceRecordsDelay());
+                ejb.deleteStudy(ctx);
+                return;
+            }
+        }
+        if (rejectionState == RejectionState.COMPLETE
+                || allowDeleteStudy == AllowDeleteStudyPermanently.ALWAYS)
             ejb.deleteStudy(ctx);
-            return true;
-        }
-        else if (study.getRejectionState() == RejectionState.EMPTY) {
+        else if (rejectionState == RejectionState.EMPTY)
             ejb.deleteEmptyStudy(ctx);
-            return true;
-        }
         else
-            return false;
+            throw new StudyNotEmptyException("Study is not empty.");
     }
 }

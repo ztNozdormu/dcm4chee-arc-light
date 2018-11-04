@@ -63,11 +63,16 @@ public class SupplementAssigningAuthorities implements AttributesCoercion {
     }
 
     public static AttributesCoercion forInstance(Device device, AttributesCoercion next) {
-        return device != null ? new SupplementAssigningAuthorities(Entity.Instance, device, next) : null;
+        return device != null ? new SupplementAssigningAuthorities(Entity.Instance, device, next) : next;
     }
 
     public static AttributesCoercion forMPPS(Device device, AttributesCoercion next) {
-        return device != null ? new SupplementAssigningAuthorities(Entity.MPPS, device, next) : null;
+        return device != null ? new SupplementAssigningAuthorities(Entity.MPPS, device, next) : next;
+    }
+
+    @Override
+    public String remapUID(String uid) {
+        return next != null ? next.remapUID(uid) : uid;
     }
 
     @Override
@@ -107,11 +112,13 @@ public class SupplementAssigningAuthorities implements AttributesCoercion {
         supplementIssuers(attrs);
         supplementRequestIssuers(attrs);
         supplementRequestIssuers(attrs.getSequence(Tag.RequestAttributesSequence));
+        LOG.info("Supplement composite object from device: {}", device.getDeviceName());
     }
 
     private void supplementMPPS(Attributes attrs) {
         supplementIssuers(attrs);
         supplementRequestIssuers(attrs.getSequence(Tag.ScheduledStepAttributesSequence));
+        LOG.info("Supplement MPPS from device: {}", device.getDeviceName());
     }
 
     private void supplementValue(Attributes attrs, int tag, VR vr, String... values) {

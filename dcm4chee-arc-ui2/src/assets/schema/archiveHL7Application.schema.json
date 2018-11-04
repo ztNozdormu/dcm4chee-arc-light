@@ -38,7 +38,7 @@
     },
     "hl7ScheduledStationAETInOrder": {
       "title": "HL7 Schedule Station AET in Order",
-      "description": "Specifies location of Scheduled Station AE Title in received HL7 Order message. Not effective for HL7 v2.5.1 OMI^O23 with IPC segment. Overwrites value specified on Device level.",
+      "description": "Specifies location of Scheduled Station AE Title in received HL7 Order message. Should not be configured for HL7 v2.5.1 OMI^O23 with IPC segment. Overwrites value specified on Device level.",
       "type": "string",
       "enum": [
         "ORC_18"
@@ -62,6 +62,11 @@
         "type": "string"
       }
     },
+    "hl7UseNullValue": {
+      "title": "Use HL7 Null Value",
+      "description": "Specifies if HL7 v2 null values (|\"\"|) are used in sent HL7 messages for not present or empty entity attributes. Required to unset entity attributes at the remote HL7 Application. Overwrites value specified on Device level.",
+      "type": "boolean"
+    },
     "hl7ForwardRule": {
       "title": "HL7 Forward Rule",
       "description": "HL7 Forward Rule. Supplements values specified on Device level.",
@@ -69,6 +74,24 @@
       "titleKey":"{cn}",
       "items" : {
         "$ref": "hl7ForwardRule.schema.json"
+      }
+    },
+    "hl7PrefetchRule": {
+      "title": "HL7 Prefetch Rule",
+      "description": "Prefetch Rules applied to HL7 messages received by this HL7 Application. Supplements values specified on Device level.",
+      "type": "array",
+      "titleKey":"{cn}",
+      "items" : {
+        "$ref": "hl7PrefetchRule.schema.json"
+      }
+    },
+    "hl7StudyRetentionPolicy": {
+      "title": "HL7 Study Retention Policy",
+      "description": "HL7 Study Retention Policies triggered by HL7 messages received by this HL7 Application. Supplements values specified on Device level.",
+      "type": "array",
+      "titleKey":"{cn}",
+      "items" : {
+        "$ref": "hl7StudyRetentionPolicy.schema.json"
       }
     },
     "hl7OrderScheduledStation": {

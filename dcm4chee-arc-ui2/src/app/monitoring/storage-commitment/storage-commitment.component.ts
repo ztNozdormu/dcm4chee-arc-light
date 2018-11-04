@@ -1,14 +1,15 @@
 import {Component, OnInit, ViewContainerRef} from '@angular/core';
-import {SlimLoadingBarService} from 'ng2-slim-loading-bar';
 import {User} from '../../models/user';
 import {Http} from '@angular/http';
 import {ConfirmComponent} from '../../widgets/dialogs/confirm/confirm.component';
-import {MdDialogConfig, MdDialog, MdDialogRef} from '@angular/material';
+import {MatDialogConfig, MatDialog, MatDialogRef} from '@angular/material';
 import * as _ from 'lodash';
 import {AppService} from '../../app.service';
 import {StorageCommitmentService} from './storage-commitment.service';
 import {WindowRefService} from "../../helpers/window-ref.service";
 import {HttpErrorHandler} from "../../helpers/http-error-handler";
+import {J4careHttpService} from "../../helpers/j4care-http.service";
+import {LoadingBarService} from "@ngx-loading-bar/core";
 
 @Component({
   selector: 'app-storage-commitment',
@@ -29,20 +30,38 @@ export class StorageCommitmentComponent implements OnInit {
         updatedBefore: undefined,
         dicomDeviceName: undefined
     };
-    isRole: any;
-    dialogRef: MdDialogRef<any>;
+    isRole: any = (user)=>{return false;};
+    dialogRef: MatDialogRef<any>;
     _ = _;
 
     constructor(
-        public $http: Http,
-        public cfpLoadingBar: SlimLoadingBarService,
+        public $http:J4careHttpService,
+        public cfpLoadingBar: LoadingBarService,
         public mainservice: AppService,
         public  service: StorageCommitmentService,
         public viewContainerRef: ViewContainerRef,
-        public dialog: MdDialog,
-        public config: MdDialogConfig,
+        public dialog: MatDialog,
+        public config: MatDialogConfig,
         public httpErrorHandler:HttpErrorHandler
-    ) {
+    ) {}
+    ngOnInit(){
+        this.initCheck(10);
+    }
+    initCheck(retries){
+        let $this = this;
+        if(_.hasIn(this.mainservice,"global.authentication") || (_.hasIn(this.mainservice,"global.notSecure") && this.mainservice.global.notSecure)){
+            this.init();
+        }else{
+            if (retries){
+                setTimeout(()=>{
+                    $this.initCheck(retries-1);
+                },20);
+            }else{
+                this.init();
+            }
+        }
+    }
+    init(){
         this.initExporters(2);
         // this.init();
         let $this = this;
@@ -98,7 +117,10 @@ export class StorageCommitmentComponent implements OnInit {
     };
     confirm(confirmparameters){
         this.config.viewContainerRef = this.viewContainerRef;
-        this.dialogRef = this.dialog.open(ConfirmComponent, this.config);
+        this.dialogRef = this.dialog.open(ConfirmComponent, {
+            height: 'auto',
+            width: '500px'
+        });
         this.dialogRef.componentInstance.parameters = confirmparameters;
         return this.dialogRef.afterClosed();
     };
@@ -274,8 +296,6 @@ export class StorageCommitmentComponent implements OnInit {
                         });
             }
         });
-    }
-    ngOnInit() {
     }
     hasOlder(objs) {
         return objs && (objs.length === this.filters.limit);

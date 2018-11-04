@@ -1,19 +1,14 @@
 import { Component } from '@angular/core';
-import {MdDialogRef} from '@angular/material';
+import {MatDialogRef} from '@angular/material';
 import {AppService} from '../../../app.service';
 import {Http} from '@angular/http';
 import * as _ from 'lodash';
 import {WindowRefService} from "../../../helpers/window-ref.service";
+import {J4careHttpService} from "../../../helpers/j4care-http.service";
 
 @Component({
     selector: 'app-export',
     templateUrl: './export.component.html',
-    styles: [`
-        .vex-theme-os.export{
-            width:500px;
-            
-        }
-    `]
 })
 export class ExportDialogComponent{
 
@@ -25,11 +20,16 @@ export class ExportDialogComponent{
     private _title;
     private _okButtonLabel;
     private _externalAetMode;
+    private _mode;
+    private _count;
+    private _subTitle;
+    private _quantity;
     private _result = {
         exportType: 'dicom',
         selectedAet: undefined,
         selectedExporter: undefined,
         queue:false,
+        externalAET:undefined,
         dicomPrefix: undefined,
         checkboxes: {
             'only-stgcmt': undefined,
@@ -37,10 +37,16 @@ export class ExportDialogComponent{
         }
     };
     private _preselectedAet;
-    constructor(public dialogRef: MdDialogRef<ExportDialogComponent>, private $http: Http, private mainservice: AppService) {
+    constructor(public dialogRef: MatDialogRef<ExportDialogComponent>, private $http:J4careHttpService, private mainservice: AppService) {
         this.getAes();
+    }
 
-        console.log('resultfilter', );
+    get subTitle() {
+        return this._subTitle;
+    }
+
+    set subTitle(value) {
+        this._subTitle = value;
     }
 
     get preselectedAet() {
@@ -50,6 +56,9 @@ export class ExportDialogComponent{
     set preselectedAet(value) {
         this._result.selectedAet = value;
         this._preselectedAet = value;
+    }
+    set preselectedExternalAET(value){
+        this._result.externalAET = value;
     }
     get result(){
         return this._result;
@@ -114,6 +123,21 @@ export class ExportDialogComponent{
     set externalInternalAetMode(value) {
         this._externalAetMode = value;
     }
+    get mode() {
+        return this._mode;
+    }
+
+    set mode(value) {
+        this._mode = value;
+    }
+
+    get count() {
+        return this._count;
+    }
+
+    set count(value) {
+        this._count = value;
+    }
 
     getAes(){
         let $this = this;
@@ -140,7 +164,10 @@ export class ExportDialogComponent{
         });
     }
     validForm(){
-        if (this._result.exportType === 'dicom'){
+        if(this._mode === "reschedule"){
+            return true;
+        }
+        if (this._result && _.hasIn(this._result,"exportType") && this._result.exportType === 'dicom'){
            // if (this._result.dicomPrefix && this._result.selectedAet){
             if (this._result.selectedAet){
                 return true;
@@ -148,7 +175,7 @@ export class ExportDialogComponent{
                 return false;
             }
         }else{
-            if (this._result.selectedExporter){
+            if (this._result && this._result.selectedExporter){
                 return true;
             }else{
                 return false;
@@ -157,7 +184,6 @@ export class ExportDialogComponent{
     }
     dialogKeyHandler(e, dialogRef){
         let code = (e.keyCode ? e.keyCode : e.which);
-        console.log('in modality keyhandler', code);
         if (code === 13){
             dialogRef.close('ok');
         }
@@ -165,4 +191,12 @@ export class ExportDialogComponent{
             dialogRef.close(null);
         }
     };
+
+    get quantity() {
+        return this._quantity;
+    }
+
+    set quantity(value) {
+        this._quantity = value;
+    }
 }

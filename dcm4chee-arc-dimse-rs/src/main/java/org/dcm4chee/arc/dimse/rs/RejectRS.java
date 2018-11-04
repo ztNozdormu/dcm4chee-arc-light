@@ -67,8 +67,6 @@ import javax.ws.rs.*;
 import javax.ws.rs.core.Context;
 import javax.ws.rs.core.Response;
 import javax.ws.rs.core.StreamingOutput;
-import java.io.IOException;
-import java.io.OutputStream;
 import java.util.List;
 
 /**
@@ -160,17 +158,20 @@ public class RejectRS {
 
     private Response reject(String studyUID, String seriesUID, String objectUID,String codeValue, String designator)
             throws Exception {
-        LOG.info("Process POST {} from {}@{}", this, request.getRemoteUser(), request.getRemoteHost());
-        ApplicationEntity localAE = getApplicationEntity();
+        LOG.info("Process POST {} from {}@{}", request.getRequestURI(), request.getRemoteUser(), request.getRemoteHost());
+        ApplicationEntity localAE = checkAE(aet, device.getApplicationEntity(aet, true));
+        ApplicationEntity remoteAE = storescp != null
+                                    ? checkAE(storescp, aeCache.get(storescp))
+                                    : checkAE(externalAET, aeCache.get(externalAET));
         ArchiveDeviceExtension arcDev = localAE.getDevice().getDeviceExtension(ArchiveDeviceExtension.class);
         Code code = new Code(codeValue, designator, null, "?");
         RejectionNote rjNote = arcDev.getRejectionNote(code);
         if (rjNote == null)
             throw new WebApplicationException(Response.Status.NOT_FOUND);
 
-        List<Attributes> matches = null;
+        List<Attributes> matches;
         try {
-            matches = findSCU.find(localAE, externalAET, priority(), QueryRetrieveLevel2.IMAGE,
+            matches = findSCU.findInstance(localAE, externalAET, priority(),
                     studyUID, seriesUID, objectUID,
                     Tag.SOPClassUID,
                     Tag.SOPInstanceUID,
@@ -201,8 +202,6 @@ public class RejectRS {
 
         Attributes kos = builder.getAttributes();
         try {
-            String remoteAET = storescp != null ? storescp : externalAET;
-            ApplicationEntity remoteAE = aeCache.get(remoteAET);
             Attributes cmd = storeSCU.store(localAE, remoteAE, priority(), kos);
             int status = cmd.getInt(Tag.Status, -1);
             String errorComment = cmd.getString(Tag.ErrorComment);
@@ -221,6 +220,18 @@ public class RejectRS {
         } catch (Exception e) {
             return failed(Status.ProcessingFailure, e.getMessage(), matches);
         }
+    }
+
+    private ApplicationEntity checkAE(String aet, ApplicationEntity ae) {
+        if (ae == null || !ae.isInstalled())
+            throw new WebApplicationException(errResponse(
+                    "No such Application Entity: " + aet,
+                    Response.Status.NOT_FOUND));
+        return ae;
+    }
+
+    private Response errResponse(String errorMessage, Response.Status status) {
+        return Response.status(status).entity("{\"errorMessage\":\"" + errorMessage + "\"}").build();
     }
 
     private Response success(int status, String errorComment, List<Attributes> matches) {
@@ -248,9 +259,7 @@ public class RejectRS {
     }
 
     private Object entity(int status, String error, int rejected, int failed) {
-        return new StreamingOutput() {
-            @Override
-            public void write(OutputStream out) throws IOException {
+        return (StreamingOutput) out -> {
                 JsonGenerator gen = Json.createGenerator(out);
                 JsonWriter writer = new JsonWriter(gen);
                 gen.writeStartObject();
@@ -260,17 +269,7 @@ public class RejectRS {
                 writer.writeNotDef("failed", failed, 0);
                 gen.writeEnd();
                 gen.flush();
-            }
         };
-    }
-
-    private ApplicationEntity getApplicationEntity() {
-        ApplicationEntity ae = device.getApplicationEntity(aet, true);
-        if (ae == null || !ae.isInstalled())
-            throw new WebApplicationException(
-                    "No such Application Entity: " + aet,
-                    Response.Status.SERVICE_UNAVAILABLE);
-        return ae;
     }
 
 }

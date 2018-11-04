@@ -28,14 +28,14 @@
       "title": "Association Initiator",
       "description": "True if the Network AE can initiate associations.",
       "type": "boolean",
-      "default": false,
+      "default": true,
       "order":3
     },
     "dicomAssociationAcceptor": {
       "title": "Association Acceptor",
       "description": "True if the Network AE can accept associations.",
       "type": "boolean",
-      "default": false,
+      "default": true,
       "order":4
     },
     "dicomDescription": {
@@ -78,7 +78,8 @@
       "order":9,
       "items": {
         "type": "string"
-      }
+      },
+      "format": "dcmCharset"
     },
     "dicomInstalled": {
       "title": "installed",
@@ -88,7 +89,7 @@
     },
     "dicomTransferCapability": {
       "title": "Transfer Capabilities",
-      "description": "transfer capabilities provided by the application entity",
+      "description": "Transfer capabilities provided by the application entity",
       "type": "array",
       "order":11,
       "titleKey":"{cn}",

@@ -40,15 +40,23 @@
 
 package org.dcm4chee.arc.qmgt.impl;
 
+import com.mysema.commons.lang.CloseableIterator;
+import com.querydsl.core.types.OrderSpecifier;
+import com.querydsl.core.types.Predicate;
+import com.querydsl.jpa.hibernate.HibernateQuery;
+import com.querydsl.jpa.hibernate.HibernateUpdateClause;
 import org.dcm4che3.net.Device;
 import org.dcm4chee.arc.conf.ArchiveDeviceExtension;
 import org.dcm4chee.arc.conf.QueueDescriptor;
-import org.dcm4chee.arc.entity.ExportTask;
-import org.dcm4chee.arc.entity.QueueMessage;
+import org.dcm4chee.arc.entity.*;
+import org.dcm4chee.arc.event.QueueMessageEvent;
 import org.dcm4chee.arc.qmgt.IllegalTaskStateException;
 import org.dcm4chee.arc.qmgt.MessageCanceled;
 import org.dcm4chee.arc.qmgt.Outcome;
-import org.dcm4chee.arc.qmgt.QueueManager;
+import org.dcm4chee.arc.qmgt.QueueMessageQuery;
+import org.dcm4chee.arc.qmgt.QueueSizeLimitExceededException;
+import org.hibernate.Session;
+import org.hibernate.StatelessSession;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -57,25 +65,23 @@ import javax.ejb.TransactionAttribute;
 import javax.ejb.TransactionAttributeType;
 import javax.enterprise.event.Event;
 import javax.inject.Inject;
-import javax.jms.JMSContext;
-import javax.jms.ObjectMessage;
-import javax.jms.Queue;
+import javax.jms.*;
 import javax.naming.InitialContext;
 import javax.naming.NamingException;
 import javax.persistence.EntityManager;
 import javax.persistence.NoResultException;
 import javax.persistence.PersistenceContext;
-import javax.persistence.TypedQuery;
 import java.io.Serializable;
 import java.util.Date;
 import java.util.List;
 
 /**
  * @author Gunter Zeilinger <gunterze@gmail.com>
+ * @author Vrinda Nayak <vrinda.nayak@j4care.com>
  * @since Sep 2015
  */
 @Stateless
-public class QueueManagerEJB implements QueueManager {
+public class QueueManagerEJB {
 
     private static final Logger LOG = LoggerFactory.getLogger(QueueManagerEJB.class);
 
@@ -91,39 +97,55 @@ public class QueueManagerEJB implements QueueManager {
     @Inject
     private Event<MessageCanceled> messageCanceledEvent;
 
-    @Override
     @TransactionAttribute(TransactionAttributeType.NOT_SUPPORTED)
     public ObjectMessage createObjectMessage(Serializable object) {
         return jmsCtx.createObjectMessage(object);
     }
 
-    @Override
-    public QueueMessage scheduleMessage(String queueName, ObjectMessage msg) {
-        sendMessage(descriptorOf(queueName), msg, 0L);
-        QueueMessage entity = new QueueMessage(queueName, msg);
+    public QueueMessage scheduleMessage(String queueName, ObjectMessage msg, int priority, String batchID)
+            throws QueueSizeLimitExceededException {
+        QueueDescriptor queueDescriptor = descriptorOf(queueName);
+        int maxQueueSize = queueDescriptor.getMaxQueueSize();
+        if (maxQueueSize > 0 && maxQueueSize < countScheduledMessagesOnThisDevice(queueName))
+            throw new QueueSizeLimitExceededException(queueDescriptor);
+
+        sendMessage(queueDescriptor, msg, 0L, priority);
+        QueueMessage entity = new QueueMessage(device.getDeviceName(), queueName, msg);
+        entity.setBatchID(batchID);
         em.persist(entity);
         LOG.info("Schedule Task[id={}] at Queue {}", entity.getMessageID(), entity.getQueueName());
         return entity;
     }
 
-    @Override
-    public QueueMessage onProcessingStart(String msgId) {
-        QueueMessage entity = findQueueMessage(msgId);
-        if (entity == null || !entity.getStatus().equals(QueueMessage.Status.SCHEDULED)) {
-            if (entity == null)
-                LOG.info("Suppress processing of Task[id={}]", msgId);
-            else
-                LOG.info("Suppress processing of Task[id={}] at Queue {} with Status: {}",
-                        msgId, entity.getQueueName(), entity.getStatus());
-            return null;
-        }
-        entity.setProcessingStartTime(new Date());
-        entity.setStatus(QueueMessage.Status.IN_PROCESS);
-        LOG.info("Start processing Task[id={}] from Queue {}", entity.getMessageID(), entity.getQueueName());
-        return entity;
+    public long countScheduledMessagesOnThisDevice(String queueName) {
+        return em.createNamedQuery(QueueMessage.COUNT_BY_DEVICE_AND_QUEUE_NAME_AND_STATUS, Long.class)
+                .setParameter(1, device.getDeviceName())
+                .setParameter(2, queueName)
+                .setParameter(3, QueueMessage.Status.SCHEDULED).getSingleResult();
     }
 
-    @Override
+    @TransactionAttribute(TransactionAttributeType.REQUIRES_NEW)
+    public QueueMessage onProcessingStart(String msgId) {
+        QueueMessage entity = findQueueMessage(msgId);
+        if (entity == null) {
+            LOG.info("Suppress processing of already deleted Task[id={}]", msgId);
+        } else switch (entity.getStatus()) {
+            case IN_PROCESS:
+            case SCHEDULED:
+                LOG.info("Start processing Task[id={}] from Queue {} with Status: {}",
+                        entity.getMessageID(), entity.getQueueName(), entity.getStatus());
+                entity.setProcessingStartTime(new Date());
+                entity.setStatus(QueueMessage.Status.IN_PROCESS);
+                setUpdateTime(entity);
+                return entity;
+            default:
+                LOG.info("Suppress processing of Task[id={}] from Queue {} with Status: {}",
+                        msgId, entity.getQueueName(), entity.getStatus());
+        }
+        return null;
+    }
+
+    @TransactionAttribute(TransactionAttributeType.REQUIRES_NEW)
     public QueueMessage onProcessingSuccessful(String msgId, Outcome outcome) {
         QueueMessage entity = findQueueMessage(msgId);
         if (entity == null) {
@@ -134,30 +156,28 @@ public class QueueManagerEJB implements QueueManager {
         String queueName = entity.getQueueName();
         entity.setProcessingEndTime(new Date());
         entity.setOutcomeMessage(outcome.getDescription());
-        if (status == QueueMessage.Status.COMPLETED) {
-            LOG.info("Finished processing of Task[id={}] at Queue {}", msgId, queueName);
-            entity.setStatus(status);
+        entity.setStatus(status);
+        setUpdateTime(entity);
+        if (status == QueueMessage.Status.COMPLETED
+                || status == QueueMessage.Status.WARNING && !descriptorOf(queueName).isRetryOnWarning()) {
+            LOG.info("Finished processing of Task[id={}] at Queue {} with Status {}", msgId, queueName, status);
             return entity;
         }
-        if (status == QueueMessage.Status.FAILED || status == QueueMessage.Status.WARNING) {
-            QueueDescriptor descriptor = descriptorOf(queueName);
-            long delay = status == QueueMessage.Status.FAILED || descriptor.isRetryOnWarning()
-                    ? descriptor.getRetryDelayInSeconds(entity.incrementNumberOfFailures())
-                    : -1L;
-            if (delay >= 0) {
-                LOG.info("Failed processing of Task[id={}] at Queue {} with Status {} - retry",
-                        msgId, queueName, status);
-                entity.setStatus(QueueMessage.Status.SCHEDULED);
-                rescheduleMessage(entity, descriptor, delay * 1000L);
-                return entity;
-            }
+        QueueDescriptor descriptor = descriptorOf(queueName);
+        long delay = descriptor.getRetryDelayInSeconds(entity.incrementNumberOfFailures());
+        if (delay >= 0) {
+            LOG.info("Failed processing of Task[id={}] at Queue {} with Status {} - retry",
+                    msgId, queueName, status);
+            entity.setStatus(QueueMessage.Status.SCHEDULED);
+            rescheduleTask(entity, descriptor, delay * 1000L);
+            return entity;
         }
         LOG.warn("Failed processing of Task[id={}] at Queue {} with Status {}", msgId, queueName, status);
         entity.setStatus(status);
         return entity;
     }
 
-    @Override
+    @TransactionAttribute(TransactionAttributeType.REQUIRES_NEW)
     public QueueMessage onProcessingFailed(String msgId, Throwable e) {
         QueueMessage entity = findQueueMessage(msgId);
         if (entity == null) {
@@ -172,18 +192,21 @@ public class QueueManagerEJB implements QueueManager {
         if (delay < 0) {
             LOG.warn("Failed processing of Task[id={}] at Queue {}:\n", msgId, entity.getQueueName(), e);
             entity.setStatus(QueueMessage.Status.FAILED);
+            setUpdateTime(entity);
         } else {
             LOG.info("Failed processing of Task[id={}] at Queue {} - retry:\n", msgId, entity.getQueueName(), e);
-            rescheduleMessage(entity, descriptor, delay * 1000L);
+            rescheduleTask(entity, descriptor, delay * 1000L);
         }
         return entity;
     }
 
-    @Override
-    public boolean cancelProcessing(String msgId) throws IllegalTaskStateException {
+    public boolean cancelTask(String msgId, QueueMessageEvent queueEvent) throws IllegalTaskStateException {
         QueueMessage entity = findQueueMessage(msgId);
         if (entity == null)
             return false;
+
+        if (queueEvent != null)
+            queueEvent.setQueueMsg(entity);
 
         switch (entity.getStatus()) {
             case COMPLETED:
@@ -193,118 +216,282 @@ public class QueueManagerEJB implements QueueManager {
                 throw new IllegalTaskStateException(
                         "Cannot cancel Task[id=" + msgId + "] with Status: " + entity.getStatus());
         }
-
-        entity.setStatus(QueueMessage.Status.CANCELED);
-        if (entity.getExportTask() != null)
-            entity.getExportTask().setUpdatedTime();
-        LOG.info("Cancel processing of Task[id={}] at Queue {}", msgId, entity.getQueueName());
-        messageCanceledEvent.fire(new MessageCanceled(msgId));
+        cancelTask(entity);
         return true;
     }
 
-    @Override
-    public boolean rescheduleMessage(String msgId, String queueName) throws IllegalTaskStateException {
+    private void cancelTask(QueueMessage entity) {
+        entity.setStatus(QueueMessage.Status.CANCELED);
+        setUpdateTime(entity);
+        LOG.info("Cancel processing of Task[id={}] at Queue {}", entity.getMessageID(), entity.getQueueName());
+        messageCanceledEvent.fire(new MessageCanceled(entity.getMessageID()));
+    }
+
+    private void setUpdateTime(QueueMessage entity) {
+        if (entity.getExportTask() != null)
+            entity.getExportTask().setUpdatedTime();
+        else if (entity.getRetrieveTask() != null)
+            entity.getRetrieveTask().setUpdatedTime();
+        else if (entity.getDiffTask() != null)
+            entity.getDiffTask().setUpdatedTime();
+        else if (entity.getStorageVerificationTask() != null)
+            entity.getStorageVerificationTask().setUpdatedTime();
+    }
+
+    public long cancelTasks(Predicate matchQueueMessage) {
+        Date now = new Date();
+        HibernateQuery<Long> queueMessageQuery = new HibernateQuery<Long>(em.unwrap(Session.class))
+                .select(QQueueMessage.queueMessage.pk)
+                .from(QQueueMessage.queueMessage)
+                .where(matchQueueMessage);
+        updateExportTaskUpdatedTime(queueMessageQuery, now);
+        updateRetrieveTaskUpdatedTime(queueMessageQuery, now);
+        updateDiffTaskUpdatedTime(queueMessageQuery, now);
+        updateStgVerTaskUpdatedTime(queueMessageQuery, now);
+        return updateStatus(queueMessageQuery, QueueMessage.Status.CANCELED, now);
+    }
+
+    private void updateExportTaskUpdatedTime(HibernateQuery<Long> queueMessageQuery, Date now) {
+        new HibernateUpdateClause(em.unwrap(Session.class), QExportTask.exportTask)
+                .set(QExportTask.exportTask.updatedTime, now)
+                .where(QExportTask.exportTask.queueMessage.pk.in(queueMessageQuery))
+                .execute();
+    }
+
+    private void updateRetrieveTaskUpdatedTime(HibernateQuery<Long> queueMessageQuery, Date now) {
+        new HibernateUpdateClause(em.unwrap(Session.class), QRetrieveTask.retrieveTask)
+                .set(QRetrieveTask.retrieveTask.updatedTime, now)
+                .where(QRetrieveTask.retrieveTask.queueMessage.pk.in(queueMessageQuery))
+                .execute();
+    }
+
+    private void updateDiffTaskUpdatedTime(HibernateQuery<Long> queueMessageQuery, Date now) {
+        new HibernateUpdateClause(em.unwrap(Session.class), QDiffTask.diffTask)
+                .set(QDiffTask.diffTask.updatedTime, now)
+                .where(QDiffTask.diffTask.queueMessage.pk.in(queueMessageQuery))
+                .execute();
+    }
+
+    private void updateStgVerTaskUpdatedTime(HibernateQuery<Long> queueMessageQuery, Date now) {
+        new HibernateUpdateClause(em.unwrap(Session.class), QStorageVerificationTask.storageVerificationTask)
+                .set(QStorageVerificationTask.storageVerificationTask.updatedTime, now)
+                .where(QStorageVerificationTask.storageVerificationTask.queueMessage.pk.in(queueMessageQuery))
+                .execute();
+    }
+
+    private long updateStatus(HibernateQuery<Long> queueMessageQuery, QueueMessage.Status status, Date now) {
+        return new HibernateUpdateClause(em.unwrap(Session.class), QQueueMessage.queueMessage)
+                .set(QQueueMessage.queueMessage.status, status)
+                .set(QQueueMessage.queueMessage.updatedTime, now)
+                .where(QQueueMessage.queueMessage.pk.in(queueMessageQuery))
+                .execute();
+    }
+
+    public long cancelExportTasks(Predicate matchQueueMessage, Predicate matchExportTask) {
+        Date now = new Date();
+        HibernateQuery<Long> queueMessageQuery = new HibernateQuery<Long>(em.unwrap(Session.class))
+                .select(QExportTask.exportTask.queueMessage.pk)
+                .from(QExportTask.exportTask)
+                .join(QExportTask.exportTask.queueMessage, QQueueMessage.queueMessage)
+                .on(matchQueueMessage)
+                .where(matchExportTask);
+        updateExportTaskUpdatedTime(queueMessageQuery, now);
+        return updateStatus(queueMessageQuery, QueueMessage.Status.CANCELED, now);
+    }
+
+    public List<String> getExportTasksReferencedQueueMsgIDs(Predicate matchQueueMessage, Predicate matchExportTask) {
+        return new HibernateQuery<String>(em.unwrap(Session.class))
+                .select(QExportTask.exportTask.queueMessage.messageID)
+                .from(QExportTask.exportTask)
+                .join(QExportTask.exportTask.queueMessage, QQueueMessage.queueMessage)
+                .on(matchQueueMessage)
+                .where(matchExportTask)
+                .fetch();
+    }
+
+    public long cancelRetrieveTasks(Predicate matchQueueMessage, Predicate matchRetrieveTask) {
+        Date now = new Date();
+        HibernateQuery<Long> queueMessageQuery = new HibernateQuery<Long>(em.unwrap(Session.class))
+                .select(QRetrieveTask.retrieveTask.queueMessage.pk)
+                .from(QRetrieveTask.retrieveTask)
+                .join(QRetrieveTask.retrieveTask.queueMessage, QQueueMessage.queueMessage)
+                .on(matchQueueMessage)
+                .where(matchRetrieveTask);
+        updateRetrieveTaskUpdatedTime(queueMessageQuery, now);
+        return updateStatus(queueMessageQuery, QueueMessage.Status.CANCELED, now);
+    }
+
+    public long cancelDiffTasks(Predicate matchQueueMessage, Predicate matchDiffTask) {
+        Date now = new Date();
+        HibernateQuery<Long> queueMessageQuery = new HibernateQuery<Long>(em.unwrap(Session.class))
+                .select(QDiffTask.diffTask.queueMessage.pk)
+                .from(QDiffTask.diffTask)
+                .join(QDiffTask.diffTask.queueMessage, QQueueMessage.queueMessage)
+                .on(matchQueueMessage)
+                .where(matchDiffTask);
+        updateDiffTaskUpdatedTime(queueMessageQuery, now);
+        return updateStatus(queueMessageQuery, QueueMessage.Status.CANCELED, now);
+    }
+
+    public long cancelStgVerTasks(Predicate matchQueueMessage, Predicate matchStgVerTask) {
+        Date now = new Date();
+        HibernateQuery<Long> queueMessageQuery = new HibernateQuery<Long>(em.unwrap(Session.class))
+                .select(QStorageVerificationTask.storageVerificationTask.queueMessage.pk)
+                .from(QStorageVerificationTask.storageVerificationTask)
+                .join(QStorageVerificationTask.storageVerificationTask.queueMessage, QQueueMessage.queueMessage)
+                .on(matchQueueMessage)
+                .where(matchStgVerTask);
+        updateStgVerTaskUpdatedTime(queueMessageQuery, now);
+        return updateStatus(queueMessageQuery, QueueMessage.Status.CANCELED, now);
+    }
+
+    public List<String> getRetrieveTasksReferencedQueueMsgIDs(Predicate matchQueueMessage, Predicate matchRetrieveTask) {
+        return new HibernateQuery<String>(em.unwrap(Session.class))
+                .select(QRetrieveTask.retrieveTask.queueMessage.messageID)
+                .from(QRetrieveTask.retrieveTask)
+                .join(QRetrieveTask.retrieveTask.queueMessage, QQueueMessage.queueMessage)
+                .on(matchQueueMessage)
+                .where(matchRetrieveTask)
+                .fetch();
+    }
+
+    public List<String> getDiffTasksReferencedQueueMsgIDs(Predicate matchQueueMessage, Predicate matchDiffTask) {
+        return new HibernateQuery<String>(em.unwrap(Session.class))
+                .select(QDiffTask.diffTask.queueMessage.messageID)
+                .from(QDiffTask.diffTask)
+                .join(QDiffTask.diffTask.queueMessage, QQueueMessage.queueMessage)
+                .on(matchQueueMessage)
+                .where(matchDiffTask)
+                .fetch();
+    }
+
+    public List<String> getStgVerTasksReferencedQueueMsgIDs(Predicate matchQueueMessage, Predicate matchStgVerTask) {
+        return new HibernateQuery<String>(em.unwrap(Session.class))
+                .select(QStorageVerificationTask.storageVerificationTask.queueMessage.messageID)
+                .from(QStorageVerificationTask.storageVerificationTask)
+                .join(QStorageVerificationTask.storageVerificationTask.queueMessage, QQueueMessage.queueMessage)
+                .on(matchQueueMessage)
+                .where(matchStgVerTask)
+                .fetch();
+    }
+
+    public String findDeviceNameByMsgId(String msgId) {
+        try {
+            return em.createNamedQuery(QueueMessage.FIND_DEVICE_BY_MSG_ID, String.class)
+                    .setParameter(1, msgId)
+                    .getSingleResult();
+        } catch (NoResultException e) {
+            return null;
+        }
+    }
+
+    public void rescheduleTask(String msgId, String queueName, QueueMessageEvent queueEvent) {
         QueueMessage entity = findQueueMessage(msgId);
         if (entity == null)
-            return false;
+            return;
+
+        if (queueEvent != null)
+            queueEvent.setQueueMsg(entity);
 
         switch (entity.getStatus()) {
             case SCHEDULED:
             case IN_PROCESS:
-                throw new IllegalTaskStateException(
-                        "Cannot reschedule Task[id=" + msgId + "] with Status: " + entity.getStatus());
+                cancelTask(entity);
         }
         if (queueName != null)
             entity.setQueueName(queueName);
         entity.setNumberOfFailures(0);
         entity.setErrorMessage(null);
         entity.setOutcomeMessage(null);
-        rescheduleMessage(entity, descriptorOf(entity.getQueueName()), 0L);
-        return true;
+        entity.updateExporterIDInMessageProperties();
+        rescheduleTask(entity, descriptorOf(entity.getQueueName()), 0L);
     }
 
-    private void rescheduleMessage(QueueMessage entity, QueueDescriptor descriptor, long delay) {
-        ObjectMessage msg = entity.initProperties(createObjectMessage(entity.getMessageBody()));
-        sendMessage(descriptor, msg, delay);
-        entity.reschedule(msg, new Date(System.currentTimeMillis() + delay));
-        if (entity.getExportTask() != null)
-            entity.getExportTask().setUpdatedTime();
-        LOG.info("Reschedule Task[id={}] at Queue {}", entity.getMessageID(), entity.getQueueName());
+    private void rescheduleTask(QueueMessage entity, QueueDescriptor descriptor, long delay) {
+        try {
+            ObjectMessage msg = entity.initProperties(createObjectMessage(entity.getMessageBody()));
+            sendMessage(descriptor, msg, delay, entity.getPriority());
+            entity.setMessageID(msg.getJMSMessageID());
+            entity.setScheduledTime(new Date(System.currentTimeMillis() + delay));
+            entity.setStatus(QueueMessage.Status.SCHEDULED);
+            entity.setDeviceName(device.getDeviceName());
+            setUpdateTime(entity);
+            LOG.info("Reschedule Task[id={}] at Queue {}", entity.getMessageID(), entity.getQueueName());
+        } catch (JMSException e) {
+            throw toJMSRuntimeException(e);
+        }
     }
 
-    @Override
-    public boolean deleteMessage(String msgId) {
+    private JMSRuntimeException toJMSRuntimeException(JMSException e) {
+        return new JMSRuntimeException(e.getMessage(), e.getErrorCode(), e.getCause());
+    }
+
+    public boolean deleteTask(String msgId, QueueMessageEvent queueEvent) {
         QueueMessage entity = findQueueMessage(msgId);
         if (entity == null)
             return false;
 
-        if (entity.getExportTask() != null)
-            em.remove(entity.getExportTask());
-        else
-            em.remove(entity);
-        LOG.info("Delete Task[id={}] from Queue {}", entity.getMessageID(), entity.getQueueName());
+        if (queueEvent != null)
+            queueEvent.setQueueMsg(entity);
+        deleteTask(entity);
         return true;
     }
 
-    @Override
-    public int deleteMessages(String queueName, QueueMessage.Status status, Date updatedBefore) {
-        if (status != null) {
-            if (updatedBefore != null) {
-                em.createNamedQuery(ExportTask.DELETE_BY_QUEUE_NAME_AND_STATUS_AND_UPDATED_BEFORE)
-                        .setParameter(1, queueName)
-                        .setParameter(2, status)
-                        .setParameter(3, updatedBefore)
-                        .executeUpdate();
-                return em.createNamedQuery(QueueMessage.DELETE_BY_QUEUE_NAME_AND_STATUS_AND_UPDATED_BEFORE)
-                        .setParameter(1, queueName)
-                        .setParameter(2, status)
-                        .setParameter(3, updatedBefore)
-                        .executeUpdate();
+    private void deleteTask(QueueMessage entity) {
+        if (entity.getStatus() == QueueMessage.Status.IN_PROCESS)
+            messageCanceledEvent.fire(new MessageCanceled(entity.getMessageID()));
+
+        if (entity.getExportTask() != null)
+            em.remove(entity.getExportTask());
+        else if (entity.getRetrieveTask() != null)
+            em.remove(entity.getRetrieveTask());
+        else if (entity.getDiffTask() != null)
+            em.remove(entity.getDiffTask());
+        else if (entity.getStorageVerificationTask() != null)
+            em.remove(entity.getStorageVerificationTask());
+        else
+            em.remove(entity);
+        LOG.info("Delete Task[id={}] from Queue {}", entity.getMessageID(), entity.getQueueName());
+    }
+
+    public int deleteTasks(Predicate matchQueueMessage, int deleteTaskFetchSize) {
+        int count = 0;
+        try (CloseableIterator<QueueMessage> iterate = createQuery(matchQueueMessage).limit(deleteTaskFetchSize).iterate()) {
+            while (iterate.hasNext()) {
+                deleteTask(iterate.next());
+                count++;
             }
-            em.createNamedQuery(ExportTask.DELETE_BY_QUEUE_NAME_AND_STATUS)
-                    .setParameter(1, queueName)
-                    .setParameter(2, status)
-                    .executeUpdate();
-            return em.createNamedQuery(QueueMessage.DELETE_BY_QUEUE_NAME_AND_STATUS)
-                    .setParameter(1, queueName)
-                    .setParameter(2, status)
-                    .executeUpdate();
         }
-        if (updatedBefore != null) {
-            em.createNamedQuery(ExportTask.DELETE_BY_QUEUE_NAME_AND_UPDATED_BEFORE)
-                    .setParameter(1, queueName)
-                    .setParameter(2, updatedBefore)
-                    .executeUpdate();
-            return em.createNamedQuery(QueueMessage.DELETE_BY_QUEUE_NAME_AND_UPDATED_BEFORE)
-                    .setParameter(1, queueName)
-                    .setParameter(2, updatedBefore)
-                    .executeUpdate();
-        }
-        em.createNamedQuery(ExportTask.DELETE_BY_QUEUE_NAME)
-                .setParameter(1, queueName)
-                .executeUpdate();
-        return em.createNamedQuery(QueueMessage.DELETE_BY_QUEUE_NAME)
-                .setParameter(1, queueName)
-                .executeUpdate();
+        return count;
     }
 
-    @Override
-    public List<QueueMessage> search(String queueName, QueueMessage.Status status, int offset, int limit) {
-        TypedQuery<QueueMessage> query = status != null
-                ? em.createNamedQuery(QueueMessage.FIND_BY_QUEUE_NAME_AND_STATUS, QueueMessage.class)
-                    .setParameter(1, queueName)
-                    .setParameter(2, status)
-                : em.createNamedQuery(QueueMessage.FIND_BY_QUEUE_NAME, QueueMessage.class)
-                    .setParameter(1, queueName);
-        if (offset > 0)
-            query.setFirstResult(offset);
+    public long countTasks(Predicate matchQueueMessage) {
+        return createQuery(matchQueueMessage).fetchCount();
+    }
+
+    private HibernateQuery<QueueMessage> createQuery(Predicate matchQueueMessage) {
+        return new HibernateQuery<QueueMessage>(em.unwrap(Session.class))
+                .from(QQueueMessage.queueMessage)
+                .where(matchQueueMessage);
+    }
+
+    public List<String> getQueueMsgIDs(Predicate matchQueueMessage, int limit) {
+        HibernateQuery<String> queueMsgIDsQuery = createQuery(matchQueueMessage)
+                .select(QQueueMessage.queueMessage.messageID);
         if (limit > 0)
-            query.setMaxResults(limit);
-        return query.getResultList();
+            queueMsgIDsQuery.limit(limit);
+        return queueMsgIDsQuery.fetch();
     }
 
-    private void sendMessage(QueueDescriptor desc, ObjectMessage msg, long delay) {
-        jmsCtx.createProducer().setDeliveryDelay(delay).send(lookup(desc.getJndiName()), msg);
+    public List<String> listDistinctDeviceNames(Predicate matchQueueMessage) {
+        return createQuery(matchQueueMessage)
+                .select(QQueueMessage.queueMessage.deviceName)
+                .distinct()
+                .fetch();
+        }
+
+    private void sendMessage(QueueDescriptor desc, ObjectMessage msg, long delay, int priority) {
+        jmsCtx.createProducer().setDeliveryDelay(delay).setPriority(priority).send(lookup(desc.getJndiName()), msg);
     }
 
     private Queue lookup(String jndiName) {
@@ -316,7 +503,7 @@ public class QueueManagerEJB implements QueueManager {
     }
 
     private QueueDescriptor descriptorOf(String queueName) {
-        return device.getDeviceExtension(ArchiveDeviceExtension.class).getQueueDescriptorNotNull(queueName);
+        return device.getDeviceExtensionNotNull(ArchiveDeviceExtension.class).getQueueDescriptorNotNull(queueName);
     }
 
     private QueueMessage findQueueMessage(String msgId) {
@@ -329,4 +516,17 @@ public class QueueManagerEJB implements QueueManager {
         }
     }
 
+    @TransactionAttribute(TransactionAttributeType.NOT_SUPPORTED)
+    public QueueMessageQuery listQueueMessages(Predicate matchQueueMessage, OrderSpecifier<Date> order, int offset, int limit) {
+        return new QueueMessageQueryImpl(
+                openStatelessSession(), queryFetchSize(), matchQueueMessage, order, offset, limit);
+    }
+
+    private StatelessSession openStatelessSession() {
+        return em.unwrap(Session.class).getSessionFactory().openStatelessSession();
+    }
+
+    private int queryFetchSize() {
+        return device.getDeviceExtensionNotNull(ArchiveDeviceExtension.class).getQueryFetchSize();
+    }
 }

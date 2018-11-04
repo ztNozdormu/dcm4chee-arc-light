@@ -44,6 +44,8 @@ import org.dcm4che3.net.Device;
 import org.dcm4chee.arc.conf.ArchiveAEExtension;
 import org.dcm4chee.arc.conf.QueryRetrieveView;
 import org.jboss.resteasy.annotations.cache.NoCache;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 import javax.enterprise.context.RequestScoped;
 import javax.inject.Inject;
@@ -55,8 +57,7 @@ import javax.ws.rs.Path;
 import javax.ws.rs.Produces;
 import javax.ws.rs.core.Context;
 import javax.ws.rs.core.StreamingOutput;
-import java.io.IOException;
-import java.io.OutputStream;
+import java.util.Comparator;
 
 /**
  * @author Gunter Zeilinger <gunterze@gmail.com>
@@ -66,6 +67,7 @@ import java.io.OutputStream;
 @Path("aets")
 @RequestScoped
 public class QueryAETs {
+    private static final Logger LOG = LoggerFactory.getLogger(QueryAETs.class);
 
     @Inject
     private Device device;
@@ -76,17 +78,15 @@ public class QueryAETs {
     @GET
     @NoCache
     @Produces("application/json")
-    public StreamingOutput query() throws Exception {
-        return new StreamingOutput() {
-            @Override
-            public void write(OutputStream out) throws IOException {
+    public StreamingOutput query() {
+        LOG.info("Process GET {} from {}@{}", request.getRequestURI(), request.getRemoteUser(), request.getRemoteHost());
+        return out -> {
                 JsonGenerator gen = Json.createGenerator(out);
                 gen.writeStartArray();
-                for (ApplicationEntity ae : device.getApplicationEntities())
+                for (ApplicationEntity ae : sortedApplicationEntities())
                     writeTo(ae, gen);
                 gen.writeEnd();
                 gen.flush();
-            }
         };
     }
 
@@ -96,6 +96,7 @@ public class QueryAETs {
         gen.writeStartObject();
         gen.write("dicomAETitle", ae.getAETitle());
         writer.writeNotNullOrDef("dicomDescription", ae.getDescription(), null);
+        writer.writeNotEmpty("dcmOtherAETitle", ae.getOtherAETitles());
         if (arcAE != null) {
             QueryRetrieveView queryRetrieveView = arcAE.getQueryRetrieveView();
             writer.writeNotDef("dcmHideNotRejectedInstances",
@@ -105,7 +106,15 @@ public class QueryAETs {
             writer.writeNotNullOrDef("dcmInvokeImageDisplayStudyURL",
                     arcAE.invokeImageDisplayStudyURL(), null);
             writer.writeNotEmpty("dcmAcceptedUserRole", arcAE.getAcceptedUserRoles());
+            writer.writeNotNullOrDef("dcmAllowDeletePatient", arcAE.allowDeletePatient(), null);
+            writer.writeNotNullOrDef("dcmAllowDeleteStudyPermanently", arcAE.allowDeleteStudy(), null);
         }
         gen.writeEnd();
+    }
+
+    private ApplicationEntity[] sortedApplicationEntities() {
+        return device.getApplicationEntities().stream()
+                .sorted(Comparator.comparing(ApplicationEntity::getAETitle))
+                .toArray(ApplicationEntity[]::new);
     }
 }

@@ -17,7 +17,7 @@
  *
  * The Initial Developer of the Original Code is
  * J4Care.
- * Portions created by the Initial Developer are Copyright (C) 2015
+ * Portions created by the Initial Developer are Copyright (C) 2015-2017
  * the Initial Developer. All Rights Reserved.
  *
  * Contributor(s):
@@ -40,22 +40,23 @@
 
 package org.dcm4chee.arc.patient.impl;
 
+import org.dcm4che3.audit.AuditMessages;
 import org.dcm4che3.data.Attributes;
 import org.dcm4che3.data.IDWithIssuer;
-import org.dcm4che3.hl7.HL7Segment;
-import org.dcm4che3.net.ApplicationEntity;
 import org.dcm4che3.net.Association;
 import org.dcm4che3.net.Device;
 import org.dcm4che3.net.hl7.HL7Application;
+import org.dcm4che3.net.hl7.UnparsedHL7Message;
 import org.dcm4che3.soundex.FuzzyStr;
+import org.dcm4che3.util.ReverseDNS;
 import org.dcm4chee.arc.conf.ArchiveDeviceExtension;
 import org.dcm4chee.arc.conf.ArchiveHL7ApplicationExtension;
 import org.dcm4chee.arc.conf.AttributeFilter;
 import org.dcm4chee.arc.conf.Entity;
 import org.dcm4chee.arc.entity.Patient;
 import org.dcm4chee.arc.patient.PatientMgtContext;
+import org.dcm4chee.arc.qmgt.HttpServletRequestInfo;
 
-import javax.servlet.http.HttpServletRequest;
 import java.net.Socket;
 
 /**
@@ -67,28 +68,25 @@ public class PatientMgtContextImpl implements PatientMgtContext {
 
     private final AttributeFilter attributeFilter;
     private final FuzzyStr fuzzyStr;
-    private HttpServletRequest httpRequest;
     private HL7Application hl7app;
     private Association as;
     private Socket socket;
-    private HL7Segment msh;
+    private UnparsedHL7Message msg;
     private IDWithIssuer patientID;
     private Attributes attributes;
     private IDWithIssuer previousPatientID;
     private Attributes previousAttributes;
     private Attributes.UpdatePolicy attributeUpdatePolicy = Attributes.UpdatePolicy.OVERWRITE;
-    private String eventActionCode;
+    private String eventActionCode = AuditMessages.EventActionCode.Read;
     private Exception exception;
     private Patient patient;
+    private HttpServletRequestInfo httpServletRequestInfo;
+    private Patient.VerificationStatus patientVerificationStatus = Patient.VerificationStatus.UNVERIFIED;
 
     PatientMgtContextImpl(Device device) {
         ArchiveDeviceExtension arcDev = device.getDeviceExtension(ArchiveDeviceExtension.class);
         this.attributeFilter = arcDev.getAttributeFilter(Entity.Patient);
         this.fuzzyStr = arcDev.getFuzzyStr();
-    }
-
-    void setHttpRequest(HttpServletRequest httpRequest) {
-        this.httpRequest = httpRequest;
     }
 
     void setHL7Application(HL7Application hl7app) {
@@ -99,10 +97,6 @@ public class PatientMgtContextImpl implements PatientMgtContext {
         this.socket = socket;
     }
 
-    void setMSH(HL7Segment msh) {
-        this.msh = msh;
-    }
-
     void setAssociation(Association as) {
         this.as = as;
         this.socket = as.getSocket();
@@ -110,10 +104,13 @@ public class PatientMgtContextImpl implements PatientMgtContext {
 
     @Override
     public String toString() {
-        return as != null ? as.toString()
-                : httpRequest != null ? httpRequest.getRemoteAddr()
-                : socket != null ? socket.toString()
-                : "PatientMgtContext";
+        return as != null
+                ? as.toString()
+                : httpServletRequestInfo != null
+                    ? httpServletRequestInfo.requesterHost
+                    : socket != null
+                        ? socket.toString()
+                        : "PatientMgtContext";
     }
 
     @Override
@@ -132,18 +129,21 @@ public class PatientMgtContextImpl implements PatientMgtContext {
     }
 
     @Override
-    public HttpServletRequest getHttpRequest() {
-        return httpRequest;
+    public UnparsedHL7Message getUnparsedHL7Message() {
+        return msg;
     }
 
     @Override
-    public HL7Segment getHL7MessageHeader() {
-        return msh;
+    public void setUnparsedHL7Message(UnparsedHL7Message msg) {
+        this.msg = msg;
     }
 
     @Override
     public String getRemoteHostName() {
-        return httpRequest != null ? httpRequest.getRemoteHost() : socket.getInetAddress().getHostName();
+        return httpServletRequestInfo != null
+                ? httpServletRequestInfo.requesterHost
+                : socket != null
+                    ? ReverseDNS.hostNameOf(socket.getInetAddress()) : null;
     }
 
     @Override
@@ -153,7 +153,7 @@ public class PatientMgtContextImpl implements PatientMgtContext {
 
         ArchiveHL7ApplicationExtension arcHL7App =
                 hl7app.getHL7ApplicationExtension(ArchiveHL7ApplicationExtension.class);
-        return arcHL7App != null && arcHL7App.isHl7NoPatientCreateMessageType(msh.getMessageType());
+        return arcHL7App != null && arcHL7App.isHl7NoPatientCreateMessageType(msg.msh().getMessageType());
     }
 
     @Override
@@ -231,5 +231,25 @@ public class PatientMgtContextImpl implements PatientMgtContext {
     @Override
     public void setPatient(Patient patient) {
         this.patient = patient;
+    }
+
+    @Override
+    public HttpServletRequestInfo getHttpServletRequestInfo() {
+        return httpServletRequestInfo;
+    }
+
+    @Override
+    public void setHttpServletRequestInfo(HttpServletRequestInfo httpServletRequestInfo) {
+        this.httpServletRequestInfo = httpServletRequestInfo;
+    }
+
+    @Override
+    public Patient.VerificationStatus getPatientVerificationStatus() {
+        return patientVerificationStatus;
+    }
+
+    @Override
+    public void setPatientVerificationStatus(Patient.VerificationStatus patientVerificationStatus) {
+        this.patientVerificationStatus = patientVerificationStatus;
     }
 }

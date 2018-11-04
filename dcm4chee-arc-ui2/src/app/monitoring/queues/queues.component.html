@@ -7,24 +7,31 @@
                     <div class="row">
                         <label for="queue" class="col-md-6 text-right control-label">Queue:</label>
                         <div class="col-md-6">
-                            <select id="queue" [(ngModel)]="queueName" class="col-md-12">
-                                <!-- <option ng-repeat="queue in queues" title="{{queue.description}}">{{queue.name}}</option> -->
-                                <option *ngFor="let queue of queues" title="{{queue.name}}" value="{{queue.name}}">{{queue.description}}</option>
-                            </select>
+                            <mat-select id="queue" [(ngModel)]="queueName" class="col-md-12" placeholder="Queue Name">
+                                <mat-option *ngFor="let queue of queues" title="{{queue.name}}" value="{{queue.name}}">{{queue.description}}</mat-option>
+                            </mat-select>
                         </div>
                     </div>
                     <div class="row">
-                        <label for="status" class="col-md-6 text-right control-label">Status:</label>
                         <div class="col-md-6">
-                            <select id="status" [(ngModel)]="status" class="col-md-12">
-                                <option>*</option>
-                                <option>SCHEDULED</option>
-                                <option>IN PROCESS</option>
-                                <option>COMPLETED</option>
-                                <option>WARNING</option>
-                                <option>FAILED</option>
-                                <option>CANCELED</option>
-                            </select>
+                            <mat-select id="sort" [(ngModel)]="orderby" class="col-md-12" placeholder="Sort">
+                                <mat-option>*</mat-option>
+                                <mat-option value="createdTime">Sort by creation time (ASC)</mat-option>
+                                <mat-option value="-createdTime">Sort by creation time (DESC)</mat-option>
+                                <mat-option value="updatedTime">Sort by updated time (ASC)</mat-option>
+                                <mat-option value="-updatedTime">Sort by updated time (DESC)</mat-option>
+                            </mat-select>
+                        </div>
+                        <div class="col-md-6">
+                            <mat-select id="status" [(ngModel)]="status" (change)="statusChange()" class="col-md-12" placeholder="Status">
+                                <mat-option>*</mat-option>
+                                <mat-option value="SCHEDULED">SCHEDULED</mat-option>
+                                <mat-option value="IN PROCESS">IN PROCESS</mat-option>
+                                <mat-option value="COMPLETED">COMPLETED</mat-option>
+                                <mat-option value="WARNING">WARNING</mat-option>
+                                <mat-option value="FAILED">FAILED</mat-option>
+                                <mat-option value="CANCELED">CANCELED</mat-option>
+                            </mat-select>
                         </div>
                     </div>
                     <div class="row">
@@ -37,22 +44,70 @@
                 <div class="col-md-3 block-2-1">
                     <div class="row">
                         <div class="col-md-6">
-                            <button class="btn btn-danger col-md-12" (click)="flushBefore()">Flush before:</button>
+                            <input type="text" [(ngModel)]="batchID" class="col-md-12" placeholder="Batch ID"/>
+                        </div>
+                        <div class="col-md-6" *ngIf="devices">
+<!--                            <select [(ngModel)]="dicomDeviceName" class="col-md-12">
+                                <option value="">*</option>
+                                <option *ngFor="let device of devices" value="{{device.dicomDeviceName}}">{{device.dicomDeviceName}}</option>
+                            </select >-->
+                            <mat-select [(ngModel)]="dicomDeviceName" class="col-md-12" placeholder="Device Name">
+                                <mat-option value="">*</mat-option>
+                                <mat-option *ngFor="let device of devices" value="{{device.dicomDeviceName}}">{{device.dicomDeviceName}}</mat-option>
+                            </mat-select>
+                        </div>
+                        <div class="col-md-6" *ngIf="!devices">
+                            <input type="text" [(ngModel)]="dicomDeviceName" class="col-md-12"/>
+                        </div>
+                    </div>
+                    <div class="row">
+                        <div class="col-md-6">
+                            <!--<button class="btn btn-danger col-md-12" (click)="flushBefore()">Flush before:</button>-->
+                            <range-picker [model]="createdTime" (modelChange)="createdTime = $event" mode="range" placeholder="Created" dateFormat="yymmdd"></range-picker>
                         </div>
                         <div class="col-md-6">
                             <!--<input id="before" type="date" class="col-md-12" [(ngModel)]="before"/>-->
-                            <p-calendar  dataType="string" [(ngModel)]="before" dateFormat="yy-mm-dd" monthNavigator="true" yearNavigator="true" yearRange="1800:2100" placeholder="Flush before this date"></p-calendar>
+                            <!--<p-calendar  dataType="string" [(ngModel)]="before" dateFormat="yy-mm-dd" monthNavigator="true" yearNavigator="true" yearRange="1800:2100" placeholder="Flush before this date"></p-calendar>-->
+                            <range-picker [model]="updatedTime" (modelChange)="updatedTime = $event" mode="range" placeholder="Updated" dateFormat="yymmdd"></range-picker>
                         </div>
                     </div>
-                    <div class="row"></div>
                     <div class="row">
                         <div class="col-md-6">
-
+                            <button class="btn btn-default submit col-md-12" (click)="getCount()" title="Get count">
+                                <span class="glyphicon glyphicon-refresh"></span>
+                                COUNT {{count}}
+                            </button>
                         </div>
                         <div class="col-md-6">
-                            <button class="btn btn-default submit col-md-12" (click)="search(0)" title="Refresh">
+                            <button class="btn btn-default submit col-md-12" (click)="getCounts()" title="Refresh">
                                 <span class="glyphicon glyphicon-refresh"></span>
                                 SUBMIT
+                            </button>
+                        </div>
+                    </div>
+                </div>
+                <div class="filter">
+                    <div class="filter_block auto_reloader">
+                        <table>
+                            <tr *ngFor="let status of Object.keys(statusValues)" [ngClass]="{'gray':statusValues[status]?.count == '0','red':statusValues[status]?.count=='!'}">
+                                <td>{{status}}:</td>
+                                <td *ngIf="!statusValues[status]?.loader">{{statusValues[status]?.count}}</td>
+                                <td *ngIf="statusValues[status]?.loader"><i class="fa fa-circle-o-notch fa-spin dashboard_loader"></i></td>
+                            </tr>
+                        </table>
+                        <div class="option_block">
+                            <div class="interval_block">
+                                <label>Interval:</label>
+                                <input type="text" placeholder="Interval" [(ngModel)]="interval">
+                                <span>s</span>
+                            </div>
+                            <button class="btn-default submit" (click)="toggleAutoRefresh()">
+                                <div class="spinnter_container">
+                                    <span *ngIf="!timer.started" class="glyphicon glyphicon-refresh"></span>
+                                    <mat-progress-spinner *ngIf="timer.started" mode="indeterminate" [diameter]="20" ></mat-progress-spinner>
+                                </div>
+                                <span *ngIf="!timer.started">{{timer.startText}}</span>
+                                <span *ngIf="timer.started">{{timer.stopText}}</span>
                             </button>
                         </div>
                     </div>
@@ -76,24 +131,48 @@
             </div>
             </div>
         <!--</div>-->
+        <div class="main_filter_block" [permission]="{id:'action-monitoring->queues-all_action',param:'visible'}">
+            <div class="morefunctionblock">
+                <mat-select [(ngModel)]="allAction" class="w45percent" placeholder="All actions" (change)="allActionChanged($event)" floatPlaceholder="never">
+                    <mat-option value="{{actions.value}}" *ngFor="let actions of allActionsActive">{{actions.label}}</mat-option>
+                </mat-select>
+            </div>
+        </div>
         <table class="table table-bordered table-condensed" *ngIf="_.size(matches) > 0">
             <thead>
             <tr>
-                <th colspan="2">
-                    <button class="btn btn-link btn-xs"
-                            [disabled]="!hasNewer(matches)"
-                            (click)="search(newerOffset(matches))"
-                            title="Newer">
-                        <span class="glyphicon glyphicon-menu-left"></span>
-                    </button>
-                    <button class="btn btn-link btn-xs"
-                            [disabled]="!hasOlder(matches)"
-                            (click)="search(olderOffset(matches))"
-                            title="Older">
-                        <span class="glyphicon glyphicon-menu-right"></span>
-                    </button>
+                <th>
+                    <div class="arrow_block">
+                        <button class="btn btn-link btn-xs"
+                                [disabled]="!hasNewer(matches)"
+                                (click)="search(newerOffset(matches))"
+                                title="Newer">
+                            <span class="glyphicon glyphicon-menu-left"></span>
+                        </button>
+                        <button class="btn btn-link btn-xs"
+                                [disabled]="!hasOlder(matches)"
+                                (click)="search(olderOffset(matches))"
+                                title="Older">
+                            <span class="glyphicon glyphicon-menu-right"></span>
+                        </button>
+                    </div>
+                </th>
+                <th  (mouseenter)="tableMousEnter()" (mouseleave)="tableMousLeave()">
+                    <div class="action_block">
+                        <input type="checkbox" (change)="checkAll($event)">
+                        <a [permission]="{id:'action-monitoring->queues-single_action',param:'visible'}" class="text-white" (click)="$event.preventDefault();executeAll('cancel')" href="" title="Cancel selected">
+                            <span class="glyphicon glyphicon-ban-circle"></span>
+                        </a>
+                        <a [permission]="{id:'action-monitoring->queues-single_action',param:'visible'}" class="text-white" (click)="$event.preventDefault();executeAll('reschedule')" href="" title="Reschedule selected">
+                            <span class="glyphicon glyphicon-repeat"></span>
+                        </a>
+                        <a [permission]="{id:'action-monitoring->queues-single_action',param:'visible'}" class="text-white" (click)="$event.preventDefault();executeAll('delete')" href="" title="Delete selected">
+                            <span class="glyphicon glyphicon-remove-circle"></span>
+                        </a>
+                    </div>
                 </th>
                 <th>Queue</th>
+                <th>Study UID</th>
                 <th>Status</th>
                 <th>Failures</th>
                 <th>Created</th>
@@ -107,21 +186,23 @@
             <ng-container *ngFor="let match of matches">
                 <tr>
                     <td [attr.rowspan]="(match.showProperties ? 2 : 1)" [innerHtml]="match.offset+1+'.'"></td>
-                    <td>
+                    <td  (mouseenter)="tableMousEnter()" (mouseleave)="tableMousLeave()">
+                        <input [permission]="{id:'action-monitoring->queues-single_action',param:'visible'}" type="checkbox" [(ngModel)]="match.checked">
                         <a (click)="$event.preventDefault();match.showProperties = !match.showProperties" href="" title="Show Properties">
                             <span class="glyphicon glyphicon-list"></span>
                         </a>
-                        <a *ngIf="isRole('admin')" (click)="$event.preventDefault();cancel(match)" href="" title="Cancel">
+                        <a [permission]="{id:'action-monitoring->queues-single_action',param:'visible'}" *ngIf="((match.properties.status && match.properties.status === 'SCHEDULED') || (match.properties.status && match.properties.status === 'IN PROCESS'))"  (click)="$event.preventDefault();cancel(match)" href="" title="Cancel">
                             <span class="glyphicon glyphicon-ban-circle"></span>
                         </a>
-                        <a *ngIf="isRole('admin')" (click)="$event.preventDefault();reschedule(match)" href="" title="Reschedule">
+                        <a [permission]="{id:'action-monitoring->queues-single_action',param:'visible'}" *ngIf="((match.properties.status && match.properties.status != 'SCHEDULED') && (match.properties.status && match.properties.status != 'IN PROCESS'))" (click)="$event.preventDefault();reschedule(match)" href="" title="Reschedule">
                             <span class="glyphicon glyphicon-repeat"></span>
                         </a>
-                        <a *ngIf="isRole('admin')" (click)="$event.preventDefault();delete(match)" href="" title="Delete">
+                        <a [permission]="{id:'action-monitoring->queues-single_action',param:'visible'}" (click)="$event.preventDefault();delete(match)" href="" title="Delete">
                             <span class="glyphicon glyphicon-remove-circle"></span>
                         </a>
                     </td>
                     <td [innerHtml]="match.properties.queue"></td>
+                    <td [innerHtml]="match.properties.StudyInstanceUID"></td>
                     <td [innerHtml]="match.properties.status" title="{{match.properties.outcomeMessage}}"></td>
                     <td [innerHtml]="match.properties.failures" title="{{match.properties.errorMessage}}"></td>
                     <td [innerHtml]="match.properties.createdTime | date:'yyyy-MM-dd HH:mm:ss'"></td>

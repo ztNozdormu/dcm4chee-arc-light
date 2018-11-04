@@ -38,26 +38,24 @@
 
 package org.dcm4chee.arc.conf.rs;
 
-import org.dcm4che3.conf.json.JsonConfiguration;
 import org.dcm4che3.conf.json.JsonWriter;
 import org.dcm4che3.net.Device;
 import org.dcm4chee.arc.conf.ArchiveDeviceExtension;
 import org.dcm4chee.arc.conf.AttributeSet;
 import org.jboss.resteasy.annotations.cache.NoCache;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 import javax.enterprise.context.RequestScoped;
 import javax.inject.Inject;
 import javax.json.Json;
 import javax.json.stream.JsonGenerator;
+import javax.servlet.http.HttpServletRequest;
 import javax.ws.rs.*;
+import javax.ws.rs.core.Context;
 import javax.ws.rs.core.Response;
 import javax.ws.rs.core.StreamingOutput;
-import java.io.IOException;
-import java.io.OutputStream;
-import java.util.ArrayList;
-import java.util.Collections;
-import java.util.List;
-import java.util.Map;
+import java.util.*;
 
 /**
  * @author Vrinda Nayak <vrinda.nayak@j4care.com>
@@ -66,26 +64,27 @@ import java.util.Map;
 @Path("attribute-set")
 @RequestScoped
 public class QueryAttributeSets {
+    private static final Logger LOG = LoggerFactory.getLogger(QueryAttributeSets.class);
 
     @Inject
     private Device device;
 
-    @Inject
-    private JsonConfiguration jsonConf;
+    @Context
+    private HttpServletRequest request;
 
     @GET
     @NoCache
     @Path("/{type}")
     @Produces("application/json")
     public StreamingOutput listAttributeSets(@PathParam("type") String type) {
-        final AttributeSet.Type attrSetType = attrSetTypeOf(type);
-        return new StreamingOutput() {
-            @Override
-            public void write(OutputStream out) throws IOException {
+        LOG.info("Process GET {} from {}@{}", request.getRequestURI(), request.getRemoteUser(), request.getRemoteHost());
+        ArchiveDeviceExtension arcDev = device.getDeviceExtensionNotNull(ArchiveDeviceExtension.class);
+        try {
+            final AttributeSet.Type attrSetType = AttributeSet.Type.valueOf(type);
+            return out -> {
                 JsonGenerator gen = Json.createGenerator(out);
-                ArchiveDeviceExtension arcDev = device.getDeviceExtensionNotNull(ArchiveDeviceExtension.class);
                 gen.writeStartArray();
-                for (AttributeSet attrSet : toInstalledSortedAttrSet(arcDev.getAttributeSet(attrSetType))) {
+                for (AttributeSet attrSet : sortedAttributeSets(arcDev.getAttributeSet(attrSetType))) {
                     JsonWriter writer = new JsonWriter(gen);
                     gen.writeStartObject();
                     writer.writeNotNullOrDef("type", attrSet.getType().name(), null);
@@ -99,24 +98,18 @@ public class QueryAttributeSets {
                 }
                 gen.writeEnd();
                 gen.flush();
-            }
-        };
-    }
-
-    private AttributeSet.Type attrSetTypeOf(String type) {
-        try {
-            return AttributeSet.Type.valueOf(type);
-        } finally {
-            throw new WebApplicationException(Response.Status.NOT_FOUND);
+            };
+        } catch (IllegalArgumentException e) {
+            throw new WebApplicationException(
+                    Response.status(Response.Status.NOT_FOUND)
+                            .entity("Attribute Set of type : " + type + " not found.").build());
         }
     }
 
-    private List<AttributeSet> toInstalledSortedAttrSet(Map<String, AttributeSet> attrSets) {
-        List<AttributeSet> list = new ArrayList<>(attrSets.size());
-        for (AttributeSet attrSet : attrSets.values())
-            if (attrSet.isInstalled())
-                list.add(attrSet);
-        Collections.sort(list);
-        return list;
+    private AttributeSet[] sortedAttributeSets(Map<String, AttributeSet> attrSets) {
+        return attrSets.values().stream()
+                            .filter(AttributeSet::isInstalled)
+                            .sorted(Comparator.comparing(AttributeSet::getID))
+                            .toArray(AttributeSet[]::new);
     }
 }

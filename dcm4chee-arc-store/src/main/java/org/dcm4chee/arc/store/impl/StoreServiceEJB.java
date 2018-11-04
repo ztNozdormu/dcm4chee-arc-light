@@ -55,6 +55,7 @@ import org.dcm4chee.arc.StorePermission;
 import org.dcm4chee.arc.StorePermissionCache;
 import org.dcm4chee.arc.code.CodeCache;
 import org.dcm4chee.arc.conf.*;
+import org.dcm4chee.arc.conf.Entity;
 import org.dcm4chee.arc.entity.*;
 import org.dcm4chee.arc.id.IDService;
 import org.dcm4chee.arc.issuer.IssuerService;
@@ -62,6 +63,7 @@ import org.dcm4chee.arc.patient.PatientMgtContext;
 import org.dcm4chee.arc.patient.PatientService;
 import org.dcm4chee.arc.storage.Storage;
 import org.dcm4chee.arc.storage.WriteContext;
+import org.dcm4chee.arc.store.InstanceLocations;
 import org.dcm4chee.arc.store.StoreContext;
 import org.dcm4chee.arc.store.StoreService;
 import org.dcm4chee.arc.store.StoreSession;
@@ -71,10 +73,7 @@ import org.slf4j.LoggerFactory;
 import javax.ejb.Stateless;
 import javax.inject.Inject;
 import javax.json.Json;
-import javax.persistence.EntityManager;
-import javax.persistence.NoResultException;
-import javax.persistence.PersistenceContext;
-import javax.persistence.TypedQuery;
+import javax.persistence.*;
 import javax.servlet.http.HttpServletRequest;
 import javax.ws.rs.client.ClientBuilder;
 import javax.ws.rs.client.WebTarget;
@@ -98,7 +97,7 @@ import java.util.zip.ZipInputStream;
  */
 @Stateless
 public class StoreServiceEJB {
-    private static final Logger LOG = LoggerFactory.getLogger(StoreServiceImpl.class);
+    private static final Logger LOG = LoggerFactory.getLogger(StoreServiceEJB.class);
     private static final String IGNORE = "{}: Ignore received Instance[studyUID={},seriesUID={},objectUID={}]";
     private static final String IGNORE_FROM_DIFFERENT_SOURCE = IGNORE + " from different source";
     private static final String IGNORE_PREVIOUS_REJECTED = IGNORE + " previous rejected by {}";
@@ -129,7 +128,7 @@ public class StoreServiceEJB {
         StoreSession session = ctx.getStoreSession();
         ArchiveAEExtension arcAE = session.getArchiveAEExtension();
         ArchiveDeviceExtension arcDev = arcAE.getArchiveDeviceExtension();
-        restoreInstances(session, findSeries(ctx), ctx.getStudyInstanceUID());
+        restoreInstances(session, findSeries(ctx), ctx.getStudyInstanceUID(), null, null);
         Instance prevInstance = findPreviousInstance(ctx);
         if (prevInstance != null) {
             Collection<Location> locations = prevInstance.getLocations();
@@ -137,7 +136,8 @@ public class StoreServiceEJB {
             LOG.info("{}: Found previous received {}", session, prevInstance);
             Series prevSeries = prevInstance.getSeries();
             Study prevStudy = prevSeries.getStudy();
-            if (session.getCallingAET().equals(prevInstance.getExternalRetrieveAET())) {
+            String callingAET = session.getCallingAET();
+            if (callingAET != null && callingAET.equals(prevInstance.getExternalRetrieveAET())) {
                 if (containsDicomFile(locations)) {
                     logInfo(IGNORE, ctx);
                     return result;
@@ -145,13 +145,20 @@ public class StoreServiceEJB {
                 prevStudy.addStorageID(session.getObjectStorageID());
                 prevStudy.updateAccessTime(arcDev.getMaxAccessTimeStaleness());
                 createLocation(ctx, prevInstance, result, Location.ObjectType.DICOM_FILE);
+                prevSeries.resetSize();
+                prevStudy.resetSize();
                 result.setStoredInstance(prevInstance);
                 return result;
             }
             if (prevInstance.getSopClassUID().equals(UID.KeyObjectSelectionDocumentStorage)
-                    && getRejectionNote(arcDev, prevInstance.getConceptNameCode()) != null)
+                    && getRejectionNote(arcDev, prevInstance.getConceptNameCode()) != null) {
+                if (containsWithEqualDigest(locations, ctx.getWriteContext(Location.ObjectType.DICOM_FILE).getDigest())) {
+                    logInfo(IGNORE_WITH_EQUAL_DIGEST, ctx);
+                    return result;
+                }
                 throw new DicomServiceException(StoreService.DUPLICATE_REJECTION_NOTE,
                         MessageFormat.format(StoreService.DUPLICATE_REJECTION_NOTE_MSG, prevInstance.getSopInstanceUID()));
+            }
             RejectionNote rjNote = getRejectionNote(arcDev, prevInstance.getRejectionNoteCode());
             if (rjNote != null) {
                 RejectionNote.AcceptPreviousRejectedInstance accept = rjNote.getAcceptPreviousRejectedInstance();
@@ -201,20 +208,14 @@ public class StoreServiceEJB {
             rjNote = arcDev.getRejectionNote(conceptNameCode.getCode());
             if (rjNote != null) {
                 result.setRejectionNote(rjNote);
-                AllowRejectionForDataRetentionPolicyExpired policy =
-                        arcAE.allowRejectionForDataRetentionPolicyExpired();
-                if (rjNote.getRejectionNoteType() == RejectionNote.Type.DATA_RETENTION_POLICY_EXPIRED
-                        && policy == AllowRejectionForDataRetentionPolicyExpired.NEVER) {
-                    throw new DicomServiceException(StoreService.REJECTION_FOR_RETENTION_POLICY_EXPIRED_NOT_AUTHORIZED,
-                            StoreService.REJECTION_FOR_RETENTION_POLICY_EXPIRED_NOT_AUTHORIZED_MSG);
-                }
-                rejectInstances(ctx, rjNote, conceptNameCode, policy);
+                rejectInstances(ctx, rjNote, conceptNameCode, arcAE);
                 if (rjNote.isRevokeRejection())
                     return result;
             }
         }
         Instance instance = createInstance(ctx, conceptNameCode, result);
-        if (ctx.getLocations().isEmpty())
+        boolean createLocations = ctx.getLocations().isEmpty();
+        if (createLocations)
             createLocations(ctx, instance, result);
         else
             copyLocations(ctx, instance, result);
@@ -222,21 +223,45 @@ public class StoreServiceEJB {
         result.setStoredInstance(instance);
         deleteQueryAttributes(instance);
         Series series = instance.getSeries();
+        series.getStudy().resetSize();
         series.scheduleMetadataUpdate(arcAE.seriesMetadataDelay());
+        series.scheduleStorageVerification(arcAE.storageVerificationInitialDelay());
         if(rjNote == null) {
             updateSeriesRejectionState(ctx, series);
-            if (series.getRejectionState() == RejectionState.NONE) {
+            if (createLocations && series.getRejectionState() == RejectionState.NONE) {
                 series.scheduleInstancePurge(arcAE.purgeInstanceRecordsDelay());
             }
             Study study = series.getStudy();
             study.setExternalRetrieveAET("*");
             study.updateAccessTime(arcDev.getMaxAccessTimeStaleness());
+            Patient patient = study.getPatient();
+            if (isPatientVerificationStale(patient, arcDev.getPatientVerificationMaxStaleness())) {
+                patient.setVerificationStatus(Patient.VerificationStatus.UNVERIFIED);
+                LOG.info("Schedule verification of {}", patient);
+            }
         }
         return result;
     }
 
-    public void restoreInstances(StoreSession session, String studyUID, String seriesUID) throws DicomServiceException {
-        List<Series> resultList = (seriesUID == null
+    private static boolean isPatientVerificationStale(Patient patient, Duration maxStaleness) {
+        if (maxStaleness != null)
+            switch (patient.getVerificationStatus()) {
+                case VERIFIED:
+                case NOT_FOUND:
+                    return isBefore(patient.getVerificationTime(), maxStaleness);
+                case VERIFICATION_FAILED:
+                    return true;
+            }
+        return false;
+    }
+
+    private static boolean isBefore(Date time, Duration duration) {
+        return time.getTime() + duration.getSeconds() * 1000L < System.currentTimeMillis();
+    }
+
+    public List<Instance> restoreInstances(StoreSession session, String studyUID, String seriesUID, Duration duration)
+            throws DicomServiceException {
+        List<Series> seriesList = (seriesUID == null
                 ? em.createNamedQuery(Series.FIND_SERIES_OF_STUDY_BY_INSTANCE_PURGE_STATE, Series.class)
                 .setParameter(1, studyUID)
                 .setParameter(2, Series.InstancePurgeState.PURGED)
@@ -245,15 +270,20 @@ public class StoreServiceEJB {
                 .setParameter(2, seriesUID)
                 .setParameter(3, Series.InstancePurgeState.PURGED))
                 .getResultList();
-        for (Series series : resultList) {
-            restoreInstances(session, series, studyUID);
+        List<Instance> instList = new ArrayList<>();
+        for (Series series : seriesList) {
+            restoreInstances(session, series, studyUID, duration, instList);
         }
+        return instList;
     }
 
-    private void restoreInstances(StoreSession session, Series series, String studyUID) throws DicomServiceException {
+    private void restoreInstances(StoreSession session, Series series, String studyUID, Duration duration,
+                                  List <Instance> instList)
+            throws DicomServiceException {
         if (series == null || series.getInstancePurgeState() == Series.InstancePurgeState.NO)
             return;
 
+        LOG.info("Restore Instance records of Series[pk={}]", series.getPk());
         Metadata metadata = series.getMetadata();
         try ( ZipInputStream zip = session.getStoreService()
                 .openZipInputStream(session, metadata.getStorageID(), metadata.getStoragePath(), studyUID)) {
@@ -261,33 +291,51 @@ public class StoreServiceEJB {
             while ((entry = zip.getNextEntry()) != null) {
                 JSONReader jsonReader = new JSONReader(Json.createParser(new InputStreamReader(zip, "UTF-8")));
                 jsonReader.setSkipBulkDataURI(true);
-                restoreInstance(session, series, jsonReader.readDataset(null));
+                Instance inst = restoreInstance(session, series, jsonReader.readDataset(null));
+                if (instList != null)
+                    instList.add(inst);
             }
         } catch (IOException e) {
+            LOG.warn("Failed to restore Instance records of Series[pk={}]", series.getPk(), e);
             throw new DicomServiceException(Status.ProcessingFailure, e);
         }
         series.setInstancePurgeState(Series.InstancePurgeState.NO);
+        series.scheduleInstancePurge(duration);
     }
 
-    private void restoreInstance(StoreSession session, Series series, Attributes attrs) {
+    private Instance restoreInstance(StoreSession session, Series series, Attributes attrs) {
         Instance inst = createInstance(session, series, findOrCreateCode(attrs, Tag.ConceptNameCodeSequence), attrs,
                 attrs.getStrings(Tag.RetrieveAETitle), Availability.valueOf(attrs.getString(Tag.InstanceAvailability)));
+        restoreLocation(session, inst, attrs);
+        Sequence otherStorageSeq = attrs.getSequence(ArchiveTag.PrivateCreator, ArchiveTag.OtherStorageSequence);
+        if (otherStorageSeq != null) {
+            for (Attributes otherStorageItem : otherStorageSeq) {
+                restoreLocation(session, inst, otherStorageItem);
+            }
+        }
+        return inst;
+    }
+
+    private void restoreLocation(StoreSession session, Instance inst, Attributes attrs) {
         Location location = new Location.Builder()
                 .storageID(attrs.getString(ArchiveTag.PrivateCreator, ArchiveTag.StorageID))
                 .storagePath(StringUtils.concat(attrs.getStrings(ArchiveTag.PrivateCreator, ArchiveTag.StoragePath), '/'))
                 .transferSyntaxUID(attrs.getString(ArchiveTag.PrivateCreator, ArchiveTag.StorageTransferSyntaxUID))
                 .digest(attrs.getString(ArchiveTag.PrivateCreator, ArchiveTag.StorageObjectDigest))
                 .size(attrs.getInt(ArchiveTag.PrivateCreator, ArchiveTag.StorageObjectSize, -1))
+                .status(attrs.getString(ArchiveTag.PrivateCreator, ArchiveTag.StorageObjectStatus))
                 .build();
         location.setInstance(inst);
+        inst.getLocations().add(location);
         em.persist(location);
+        LOG.info("{}: Create {}", session, location);
     }
 
     private void rejectInstances(StoreContext ctx, RejectionNote rjNote, CodeEntity rejectionCode,
-                                 AllowRejectionForDataRetentionPolicyExpired policy)
+                                 ArchiveAEExtension arcAE)
             throws DicomServiceException {
         StoreSession session = ctx.getStoreSession();
-        Duration seriesMetadataDelay = session.getArchiveAEExtension().seriesMetadataDelay();
+        Duration seriesMetadataDelay = arcAE.seriesMetadataDelay();
         for (Attributes studyRef : ctx.getAttributes().getSequence(Tag.CurrentRequestedProcedureEvidenceSequence)) {
             String studyUID = studyRef.getString(Tag.StudyInstanceUID);
             Series series = null;
@@ -298,16 +346,17 @@ public class StoreServiceEJB {
                 if (series == null)
                     throw new DicomServiceException(StoreService.REJECTION_FAILED_NO_SUCH_INSTANCE,
                             MessageFormat.format(StoreService.REJECTION_FAILED_NO_SUCH_SERIES_MSG, seriesUID));
-                restoreInstances(session, series, studyUID);
+
+                if (rjNote.getRejectionNoteType() == RejectionNote.Type.DATA_RETENTION_POLICY_EXPIRED)
+                    checkExpirationDate(series, arcAE.allowRejectionForDataRetentionPolicyExpired());
+
+                restoreInstances(session, series, studyUID, null, null);
                 for (Attributes sopRef : seriesRef.getSequence(Tag.ReferencedSOPSequence)) {
                     String classUID = sopRef.getString(Tag.ReferencedSOPClassUID);
                     String objectUID = sopRef.getString(Tag.ReferencedSOPInstanceUID);
                     inst = rejectInstance(session, series, objectUID, classUID, rjNote, rejectionCode);
                 }
                 if (inst != null) {
-                    if (rjNote.getRejectionNoteType() == RejectionNote.Type.DATA_RETENTION_POLICY_EXPIRED
-                            && policy == AllowRejectionForDataRetentionPolicyExpired.STUDY_RETENTION_POLICY)
-                        checkExpirationDate(series);
                     RejectionState rejectionState = rjNote.isRevokeRejection()
                             ? hasRejectedInstances(series) ? RejectionState.PARTIAL : RejectionState.NONE
                             : hasNotRejectedInstances(series) ? RejectionState.PARTIAL : RejectionState.COMPLETE;
@@ -342,17 +391,32 @@ public class StoreServiceEJB {
         }
     }
 
-    private void checkExpirationDate(Series series)
+    private void checkExpirationDate(Series series, AllowRejectionForDataRetentionPolicyExpired policy)
             throws DicomServiceException {
+        switch (policy) {
+            case NEVER:
+                throw new DicomServiceException(StoreService.REJECTION_FOR_RETENTION_POLICY_EXPIRED_NOT_ALLOWED,
+                    StoreService.REJECTION_FOR_RETENTION_POLICY_EXPIRED_NOT_ALLOWED_MSG);
+            case ONLY_EXPIRED:
+                if (!isExpired(series, false))
+                    throw new DicomServiceException(StoreService.RETENTION_PERIOD_OF_STUDY_NOT_YET_EXPIRED,
+                            StoreService.RETENTION_PERIOD_OF_STUDY_NOT_YET_EXPIRED_MSG);
+                break;
+            case EXPIRED_UNSET:
+                if (!isExpired(series, true))
+                    throw new DicomServiceException(StoreService.RETENTION_PERIOD_OF_STUDY_NOT_YET_EXPIRED,
+                            StoreService.RETENTION_PERIOD_OF_STUDY_NOT_YET_EXPIRED_MSG);
+                break;
+        }
+    }
+
+    private static boolean isExpired(Series series, boolean matchUnset) {
         LocalDate studyExpirationDate = series.getStudy().getExpirationDate();
         if (studyExpirationDate == null)
-            return;
+            return matchUnset;
 
         LocalDate seriesExpirationDate = series.getExpirationDate();
-        if ((seriesExpirationDate != null ? seriesExpirationDate : studyExpirationDate).isAfter(LocalDate.now())) {
-            throw new DicomServiceException(StoreService.RETENTION_PERIOD_OF_STUDY_NOT_YET_EXPIRED,
-                    StoreService.RETENTION_PERIOD_OF_STUDY_NOT_YET_EXPIRED_MSG);
-        }
+        return (seriesExpirationDate != null ? seriesExpirationDate : studyExpirationDate).isBefore(LocalDate.now());
     }
 
     private boolean hasRejectedInstances(Series series) {
@@ -461,10 +525,21 @@ public class StoreServiceEJB {
         }
         for (UIDMap uidMap : uidMaps.values())
             removeOrphaned(uidMap);
-        locations.clear();
         Series series = instance.getSeries();
         Study study = series.getStudy();
+        series.resetSize();
+        study.resetSize();
         em.remove(instance);
+        String newStorageID = ctx.getStoreSession().getObjectStorageID();
+        if (replaceLocationOnDifferentStorage(locations, newStorageID)) {
+            List<String> storageIDs = queryStorageIDsOfStudy(study);
+            if (storageIDs.isEmpty())
+                // to avoid additional update statement for adding it later
+                study.setStorageIDs(newStorageID);
+            else
+                study.setStorageIDs(storageIDs.toArray(StringUtils.EMPTY_STRING));
+        }
+        locations.clear();
         em.flush(); // to avoid ERROR: duplicate key value violates unique constraint on re-insert
         boolean sameStudy = ctx.getStudyInstanceUID().equals(study.getStudyInstanceUID());
         boolean sameSeries = sameStudy && ctx.getSeriesInstanceUID().equals(series.getSeriesInstanceUID());
@@ -475,6 +550,18 @@ public class StoreServiceEJB {
             else
                 series.scheduleMetadataUpdate(ctx.getStoreSession().getArchiveAEExtension().seriesMetadataDelay());
         }
+    }
+
+    private static boolean replaceLocationOnDifferentStorage(Collection<Location> locations, String storageID) {
+        return locations.stream().anyMatch(
+                l -> Location.isDicomFile(l) && !l.getStorageID().equals(storageID));
+    }
+
+    private List<String> queryStorageIDsOfStudy(Study study) {
+        return em.createNamedQuery(Location.STORAGE_IDS_BY_STUDY_PK_AND_OBJECT_TYPE, String.class)
+                .setParameter(1, study.getPk())
+                .setParameter(2, Location.ObjectType.DICOM_FILE)
+                .getResultList();
     }
 
     private void deleteStudyIfEmpty(Study study, StoreContext ctx) {
@@ -551,7 +638,7 @@ public class StoreServiceEJB {
                 : httpRequest != null
                 ? patientService.createPatientMgtContextWEB(httpRequest)
                 : patientService.createPatientMgtContextHL7(
-                        session.getLocalHL7Application(), session.getSocket(), session.getHL7MessageHeader());
+                        session.getLocalHL7Application(), session.getSocket(), session.getUnparsedHL7Message());
         patMgtCtx.setAttributes(ctx.getAttributes());
         if (series == null) {
             Study study = findStudy(ctx, result);
@@ -638,13 +725,13 @@ public class StoreServiceEJB {
 
     private Patient updatePatient(StoreContext ctx, Patient pat) {
         StoreSession session = ctx.getStoreSession();
-        ArchiveAEExtension arcAE = session.getArchiveAEExtension();
-        ArchiveDeviceExtension arcDev = arcAE.getArchiveDeviceExtension();
-        AttributeFilter filter = arcDev.getAttributeFilter(Entity.Patient);
-        Attributes.UpdatePolicy updatePolicy = filter.getAttributeUpdatePolicy();
+        Attributes.UpdatePolicy updatePolicy = session.getPatientUpdatePolicy();
         if (updatePolicy == null)
             return pat;
 
+        ArchiveAEExtension arcAE = session.getArchiveAEExtension();
+        ArchiveDeviceExtension arcDev = arcAE.getArchiveDeviceExtension();
+        AttributeFilter filter = arcDev.getAttributeFilter(Entity.Patient);
         Attributes attrs = pat.getAttributes();
         UpdateInfo updateInfo = new UpdateInfo(attrs);
         if (!attrs.updateSelected(updatePolicy, ctx.getAttributes(), null, filter.getSelection()))
@@ -661,7 +748,7 @@ public class StoreServiceEJB {
                 if (issuerEntity == null)
                     patientID.setIssuer(issuerService.mergeOrCreate(issuer));
                 else
-                    issuerEntity.getIssuer().merge(issuer);
+                    issuerEntity.merge(issuer);
             }
         }
         pat.setAttributes(attrs, filter, arcDev.getFuzzyStr());
@@ -743,6 +830,15 @@ public class StoreServiceEJB {
             mwlItems.add(AttributesBlob.decodeAttributes(bytes, null));
         }
         return mwlItems;
+    }
+
+    public void replaceLocation(StoreContext ctx, InstanceLocations inst) {
+        Instance instance = new Instance();
+        instance.setPk(inst.getInstancePk());
+        createLocation(ctx, instance, Location.ObjectType.DICOM_FILE);
+        for (Location location : inst.getLocations()) {
+            removeOrMarkToDelete(em.find(Location.class, location.getPk()));
+        }
     }
 
     private static class UpdateInfo {
@@ -1030,8 +1126,17 @@ public class StoreServiceEJB {
     private Series createSeries(StoreContext ctx, Study study, UpdateDBResult result) {
         Series series = new Series();
         setSeriesAttributes(ctx, series);
+        series.setSopClassUID(ctx.getSopClassUID());
+        series.setTransferSyntaxUID(ctx.getStoreTranferSyntax());
         series.setStudy(study);
         series.setInstancePurgeState(Series.InstancePurgeState.NO);
+        ArchiveCompressionRule compressionRule = ctx.getCompressionRule();
+        if (compressionRule != null && compressionRule.getDelay() != null) {
+            series.setCompressionTime(
+                    new Date(System.currentTimeMillis() + compressionRule.getDelay().getSeconds() * 1000L));
+            series.setCompressionTransferSyntaxUID(compressionRule.getTransferSyntax());
+            series.setCompressionImageWriteParams(compressionRule.getImageWriteParams());
+        }
         if (result.getRejectionNote() == null) {
             if (markOldStudiesAsIncomplete(ctx, study)) {
                 series.setCompleteness(Completeness.UNKNOWN);
@@ -1065,13 +1170,27 @@ public class StoreServiceEJB {
             return;
 
         Study study = series.getStudy();
-        LocalDate expirationDate = LocalDate.now().plus(retentionPolicy.getRetentionPeriod());
+        LocalDate expirationDate = retentionStartDate(ctx.getAttributes(), retentionPolicy)
+                .plus(retentionPolicy.getRetentionPeriod());
         LocalDate studyExpirationDate = study.getExpirationDate();
         if (studyExpirationDate == null || studyExpirationDate.compareTo(expirationDate) < 0)
             study.setExpirationDate(expirationDate);
 
         if (retentionPolicy.isExpireSeriesIndividually())
             series.setExpirationDate(expirationDate);
+    }
+
+    private LocalDate retentionStartDate(Attributes attrs, StudyRetentionPolicy retentionPolicy) {
+        String s;
+        if (retentionPolicy.isStartRetentionPeriodOnStudyDate()
+                && (s = attrs.getString(Tag.StudyDate)) != null) {
+            try {
+                return LocalDate.parse(s, DateTimeFormatter.BASIC_ISO_DATE);
+            } catch (Exception e) {
+                LOG.warn("Failed parsing study date to get retention start date." + e.getMessage());
+            }
+        }
+        return LocalDate.now();
     }
 
     private void setSeriesAttributes(StoreContext ctx, Series series) {
@@ -1113,6 +1232,15 @@ public class StoreServiceEJB {
         if (writeContext == null)
             return;
 
+        result.getLocations().add(createLocation(ctx, instance, objectType));
+        if (objectType == Location.ObjectType.DICOM_FILE)
+            instance.getSeries().getStudy()
+                    .addStorageID(ctx.getStoreSession().getObjectStorageID());
+        result.getWriteContexts().add(writeContext);
+    }
+
+    private Location createLocation(StoreContext ctx, Instance instance, Location.ObjectType objectType) {
+        WriteContext writeContext = ctx.getWriteContext(objectType);
         Storage storage = writeContext.getStorage();
         StorageDescriptor descriptor = storage.getStorageDescriptor();
         Location location = new Location.Builder()
@@ -1125,10 +1253,8 @@ public class StoreServiceEJB {
                 .build();
         location.setInstance(instance);
         em.persist(location);
-        result.getLocations().add(location);
-        result.getWriteContexts().add(writeContext);
-        if (objectType == Location.ObjectType.DICOM_FILE)
-            instance.getSeries().getStudy().addStorageID(descriptor.getStorageID());
+        LOG.info("{}: Create {}", ctx.getStoreSession(), location);
+        return location;
     }
 
     private void copyLocations(StoreContext ctx, Instance instance, UpdateDBResult result) {
@@ -1136,13 +1262,13 @@ public class StoreServiceEJB {
         Map<Long, UIDMap> uidMapCache = session.getUIDMapCache();
         Map<String, String> uidMap = session.getUIDMap();
         for (Location prevLocation : ctx.getLocations()) {
-            result.getLocations().add(copyLocation(prevLocation, instance, uidMap, uidMapCache));
+            result.getLocations().add(copyLocation(session, prevLocation, instance, uidMap, uidMapCache));
             if (prevLocation.getObjectType() == Location.ObjectType.DICOM_FILE)
                 instance.getSeries().getStudy().addStorageID(prevLocation.getStorageID());
         }
     }
 
-    private Location copyLocation(
+    private Location copyLocation(StoreSession session,
             Location prevLocation, Instance instance, Map<String, String> uidMap, Map<Long, UIDMap> uidMapCache) {
         if (prevLocation.getMultiReference() == null) {
             prevLocation = em.find(Location.class, prevLocation.getPk());
@@ -1152,7 +1278,41 @@ public class StoreServiceEJB {
         newLocation.setUidMap(createUIDMap(uidMap, prevLocation.getUidMap(), uidMapCache));
         newLocation.setInstance(instance);
         em.persist(newLocation);
+        LOG.info("{}: Create {}", session, newLocation);
         return newLocation;
+    }
+
+    public void addLocation(StoreSession session, Long instancePk, Location location) {
+        Instance instance = em.find(Instance.class, instancePk);
+        location.setInstance(instance);
+        instance.getLocations().add(location);
+        em.persist(location);
+        LOG.info("{}: Create {}", session, location);
+    }
+
+    public void addStorageID(String studyIUID, String storageID) {
+        Tuple tuple = em.createNamedQuery(Study.STORAGE_IDS_BY_STUDY_UID, Tuple.class)
+                .setParameter(1, studyIUID)
+                .getSingleResult();
+        Long studyPk = tuple.get(0, Long.class);
+        String prevStorageIDs = tuple.get(1, String.class);
+        String newStorageIDs = Study.addStorageID(prevStorageIDs, storageID);
+        if (!newStorageIDs.equals(prevStorageIDs)) {
+            em.createNamedQuery(Study.SET_STORAGE_IDS)
+                    .setParameter(1, studyPk)
+                    .setParameter(2, newStorageIDs)
+                    .executeUpdate();
+            LOG.info("Associate Study[uid={}] with Storage[id:{}]", studyIUID, storageID);
+        }
+    }
+
+    public void scheduleMetadataUpdate(String studyIUID, String seriesIUID) {
+        if (em.createNamedQuery(Series.SCHEDULE_METADATA_UPDATE_FOR_SERIES_UID)
+                .setParameter(1, studyIUID)
+                .setParameter(2, seriesIUID)
+                .executeUpdate() > 0) {
+            LOG.info("Schedule update of metadata of Series[uid={}] of Study[uid={}]", seriesIUID, studyIUID);
+        }
     }
 
     private UIDMap createUIDMap(Map<String, String> uidMap, UIDMap prevUIDMap, Map<Long, UIDMap> uidMapCache) {
@@ -1234,8 +1394,8 @@ public class StoreServiceEJB {
     }
 
     private IssuerEntity findOrCreateIssuer(Attributes attrs, int tag) {
-        Attributes item = attrs.getNestedDataset(tag);
-        return item != null && !item.isEmpty() ? issuerService.mergeOrCreate(new Issuer(item)) : null;
+        Issuer issuer = Issuer.valueOf(attrs.getNestedDataset(tag));
+        return issuer != null ? issuerService.mergeOrCreate(issuer) : null;
     }
 
     private CodeEntity findOrCreateCode(Attributes attrs, int seqTag) {
